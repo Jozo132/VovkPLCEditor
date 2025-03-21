@@ -1,0 +1,3 @@
+[submodule "lib/VovkPLCRuntime"]
+	path = lib/VovkPLCRuntime
+	url = https://github.com/Jozo132/VovkPLCRuntime
