@@ -195,7 +195,7 @@ export default class WindowManager {
         this.device = device
     }
 
-    /** @param { { name: string, key: string }[] } options */
+    /** @param { { name: string, key: string, disabled?: string }[] } options */
     setDeviceOptions = (options) => {
         if (!options) throw new Error('Options not provided')
         if (!Array.isArray(options)) throw new Error('Options must be an array')
@@ -205,9 +205,19 @@ export default class WindowManager {
         if (!device_select_element) throw new Error('Device select element not found')
         device_select_element.innerHTML = ''
         options.forEach(option => {
+            const { name, key, disabled } = option
             const opt = document.createElement('option')
-            opt.value = option.key
-            opt.innerText = option.name
+            opt.value = key
+            opt.innerText = name
+            const isDisabled = !!disabled
+            if (isDisabled) {
+                opt.setAttribute('disabled', 'disabled')
+                opt.setAttribute('title', disabled)
+            }
+            // @ts-ignore
+            opt.disabled = isDisabled
+            // @ts-ignore
+            opt.classList.add('device-option')
             device_select_element.appendChild(opt)
         }) // @ts-ignore
         // Set active device to first option

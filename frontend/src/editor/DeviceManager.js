@@ -4,6 +4,9 @@
 import { initializeConnection, disconnectConnection, ConnectionOptions } from "../connection/index.js"
 import { PLCEditor } from "../utils/types.js"
 
+// @ts-ignore
+const serial_support = typeof navigator !== 'undefined' && navigator.serial && navigator.serial.getPorts && navigator.serial.requestPort
+
 export default class DeviceManager {
   error = ''
   #editor
@@ -15,10 +18,10 @@ export default class DeviceManager {
     this.deviceInfo = null
   }
 
-  /** @type { { name: string, key: string }[] } */
+  /** @type { { name: string, key: string, disabled?: string }[] } */
   devices = [
     { name: 'Simulation', key: 'simulation' },
-    { name: 'Serial Port', key: 'serial' },
+    { name: 'Serial Port', key: 'serial', disabled: 'serial' in navigator ? '' : 'Serial not supported' },
     // { name: 'REST', key: 'rest' },
   ]
 
