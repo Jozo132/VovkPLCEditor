@@ -1,0 +1,13 @@
+{
+  "name": "vovkplceditor",
+  "version": "0.1.0",
+  "scripts": {
+    "start": "ts-node ./backend/main.ts",
+    "build": "node ./build.js"
+  },
+  "keywords": [],
+  "author": "J.Vovk <jozo132@gmail.com>",
+  "license": "GPL-3.0",
+  "type": "module",
+  "description": ""
+}
