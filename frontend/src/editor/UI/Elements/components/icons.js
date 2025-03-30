@@ -1,7 +1,7 @@
 // @ts-check
 "use strict"
 
-import { ImageRenderer } from "./tools.js"
+import { ImageRenderer } from "../../../../utils/tools.js"
 
 // Simple 12x12 folder icon in yellow color, with the ear sticking out on the top left in dark yellow
 //
