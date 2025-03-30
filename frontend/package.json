@@ -1,0 +1,16 @@
+{
+    "name": "frontend",
+    "version": "0.1.0",
+    "description": "",
+    "main": "src/main.js",
+    "scripts": {
+        "start": "echo server running on http://localhost:4000/ && webpack-dev-server --mode development",
+        "build": "webpack --mode production"
+    },
+    "keywords": [],
+    "author": "J.Vovk <jozo132@gmail.com>",
+    "license": "GPL-3.0",
+    "devDependencies": {
+        "esbuild": "^0.25.1"
+    }
+}
