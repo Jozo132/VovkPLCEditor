@@ -6,12 +6,12 @@ import { PLC_Project, PLC_ProjectItem } from "../utils/types.js"
 
 await importCSS('./editor/Editor.css')
 
-import Menu from "./ContextMenu.js"
-import PLCRuntimeWasm from "../wasm/VovkPLC.js"
+import VovkPLC from "../wasm/VovkPLC.js"
 import DeviceManager from "./DeviceManager.js"
 import WindowManager from "./UI/WindowManager.js"
 import ProjectManager from "./ProjectManager.js"
 import LanguageManager from "./LanguageManager.js"
+import ContextManager from "./ContextManager.js"
 import Actions from './Actions.js'
 import { ConnectionOptions } from "../connection/index.js"
 
@@ -24,7 +24,7 @@ export class VovkPLCEditor {
 
     /** @type {number[]} */
     memory = new Array(100).fill(0)
-    runtime = new PLCRuntimeWasm()
+    runtime = new VovkPLC()
     runtime_ready = false
 
     /** @type {Object | null} */
@@ -73,52 +73,14 @@ export class VovkPLCEditor {
             this.runtime_ready = true
         })
 
-
         this.device_manager = new DeviceManager(this)
         this.window_manager = new WindowManager(this)
         this.project_manager = new ProjectManager(this)
-        this.workspace_context_menu = new Menu(this)
         this.language_manager = new LanguageManager(this)
-
-        this.window_manager.requestConnect = async (device) => {
-            /** @type { ConnectionOptions | null } */
-            let options = null
-            if (device === 'simulation') {
-                options = {
-                    target: 'simulation'
-                }
-            }
-            if (device === 'serial') {
-                options = {
-                    target: 'serial',
-                    baudrate: 115200
-                }
-            }
-            if (!options) {
-                console.error('No connection options provided')
-                return false
-            }
-            const connection = await this.device_manager.connect(options)
-            const connected = connection && !this.device_manager.error
-            return !!connected
-        }
-
-        this.workspace_context_menu.addListener({
-            target: workspace,
-            onOpen: () => [
-                { type: 'item', name: 'edit', label: 'Edit' },
-                { type: 'item', name: 'delete', label: 'Delete' },
-                { type: 'separator' },
-                { type: 'item', name: 'copy', label: 'Copy' },
-                { type: 'item', name: 'paste', label: 'Paste' },
-            ],
-            onClose: selected => {
-                console.log(`Workspace selected: ${selected}`)
-            },
-        })
+        this.context_manager = new ContextManager(this)
 
         // On ESC remove all selections
-        window.addEventListener('keydown', (event) => {
+        workspace.addEventListener('keydown', (event) => {
             const esc = event.key === 'Escape'
             const ctrl = event.ctrlKey
             const shift = event.shiftKey

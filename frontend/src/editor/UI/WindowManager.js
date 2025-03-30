@@ -3,6 +3,7 @@
 
 import { PLCEditor } from "../../utils/types.js"
 import { ElementSynthesis } from "../../utils/tools.js"
+import { ConnectionOptions } from "../../connection/index.js"
 
 
 
@@ -16,17 +17,12 @@ export default class WindowManager {
     /** @type {'simulation' | 'device'} */
     active_device = 'simulation'
 
-
-
     workspace_body
 
     #editor
     /** @param {PLCEditor} editor */
     constructor(editor) {
         this.#editor = editor
-
-        /** @type { (device: string) => Promise<boolean> } */
-        this.requestConnect = async (device) => false
         const workspace = this.#editor.workspace
 
 
@@ -185,6 +181,31 @@ export default class WindowManager {
             }
             this.active_mode = mode
         })
+    }
+
+
+    /** @type { (device: string) => Promise<boolean> } */
+    requestConnect = async (device) => {
+        /** @type { ConnectionOptions | null } */
+        let options = null
+        if (device === 'simulation') {
+            options = {
+                target: 'simulation'
+            }
+        }
+        if (device === 'serial') {
+            options = {
+                target: 'serial',
+                baudrate: 115200
+            }
+        }
+        if (!options) {
+            console.error('No connection options provided')
+            return false
+        }
+        const connection = await this.#editor.device_manager.connect(options)
+        const connected = connection && !this.#editor.device_manager.error
+        return !!connected
     }
 
     setMode = (mode) => {

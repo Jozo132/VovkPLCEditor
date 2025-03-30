@@ -114,6 +114,21 @@ export default class Menu {
     this.#drawList()
     this.menu.classList.add('hidden')
 
+
+    this.addListener({
+      target: editor.workspace,
+      onOpen: () => [
+        { type: 'item', name: 'edit', label: 'Edit' },
+        { type: 'item', name: 'delete', label: 'Delete' },
+        { type: 'separator' },
+        { type: 'item', name: 'copy', label: 'Copy' },
+        { type: 'item', name: 'paste', label: 'Paste' },
+      ],
+      onClose: selected => {
+        console.log(`Workspace selected: ${selected}`)
+      },
+    })
+
     window.addEventListener(`contextmenu`, this.#handle_click_event)
     window.addEventListener('click', this.#handle_click_event)
   }
