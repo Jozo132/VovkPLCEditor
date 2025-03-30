@@ -1,6 +1,7 @@
 // @ts-check
 "use strict"
 
+import { PLCEditor } from "../utils/types.js";
 import SimulationConnection from "./SimulationConnection.js";
 import RestConnection from "./RestConnection.js";
 import SerialConnection from "./SerialConnection.js";
@@ -18,14 +19,14 @@ export let ConnectionOptions
 
 /**
  * Initialize the connection
- * @type { (options: ConnectionOptions) => Promise<ConnectionBase> }
+ * @type { (editor: PLCEditor, options: ConnectionOptions) => Promise<ConnectionBase> }
  */
-export async function initializeConnection(options) {
+export async function initializeConnection(editor, options) {
     const { target } = options;
     /** @type { ConnectionBase | null } */
     let connection
     if (target === "simulation") {
-        connection = new SimulationConnection();
+        connection = new SimulationConnection(editor);
     } else if (target === "rest") {
         const { host } = options;
         if (!host) throw new Error("REST host URL is required");
