@@ -19,9 +19,9 @@ export let ConnectionOptions
 
 /**
  * Initialize the connection
- * @type { (editor: PLCEditor, options: ConnectionOptions) => Promise<ConnectionBase> }
+ * @type { (options: ConnectionOptions, editor: PLCEditor) => Promise<ConnectionBase> }
  */
-export async function initializeConnection(editor, options) {
+export async function initializeConnection(options, editor) {
     const { target } = options;
     /** @type { ConnectionBase | null } */
     let connection

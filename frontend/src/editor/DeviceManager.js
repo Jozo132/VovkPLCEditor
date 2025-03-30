@@ -22,6 +22,32 @@ export default class DeviceManager {
     // { name: 'REST', key: 'rest' },
   ]
 
+  initialize = () => {
+    const editor = this.#editor
+    editor.window_manager.requestConnect = async (device) => {
+      /** @type { ConnectionOptions | null } */
+      let options = null
+      if (device === 'simulation') {
+        options = {
+          target: 'simulation'
+        }
+      }
+      if (device === 'serial') {
+        options = {
+          target: 'serial',
+          baudrate: 115200
+        }
+      }
+      if (!options) {
+        console.error('No connection options provided')
+        return false
+      }
+      const connection = await editor.device_manager.connect(options)
+      const connected = connection && !editor.device_manager.error
+      return !!connected
+    }
+  }
+
   #setError(err) {
     if (err) {
       this.error = err.message || err.toString() || "Unknown error"
@@ -45,7 +71,7 @@ export default class DeviceManager {
       await this.disconnect()
       this.options = options || this.options
       if (!this.options) throw new Error("Connection options required")
-      this.connection = await initializeConnection(this.#editor, this.options)
+      this.connection = await initializeConnection(this.options, this.#editor)
       try {
         this.deviceInfo = await this.connection.getInfo(true)
         if (this.options && this.options.debug) {
@@ -134,7 +160,7 @@ export default class DeviceManager {
 
 
 
-  destroy(){
+  destroy() {
     if (this.connection) {
       this.connection.disconnect()
       this.connection = null

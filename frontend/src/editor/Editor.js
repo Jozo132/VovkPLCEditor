@@ -21,7 +21,6 @@ export class VovkPLCEditor {
     /** @type {PLC_Project} */ project
     /** @type {HTMLElement} */ workspace
 
-    /** @type {number[]} */
     memory = new Array(100).fill(0)
     runtime = new VovkPLC()
     runtime_ready = false
@@ -72,29 +71,14 @@ export class VovkPLCEditor {
             this.runtime_ready = true
         })
 
-        this.device_manager = new DeviceManager(this)
         this.window_manager = new WindowManager(this)
+        this.device_manager = new DeviceManager(this)
         this.project_manager = new ProjectManager(this)
         this.language_manager = new LanguageManager(this)
         this.context_manager = new ContextManager(this)
 
-        // On ESC remove all selections
-        workspace.addEventListener('keydown', (event) => {
-            const esc = event.key === 'Escape'
-            const ctrl = event.ctrlKey
-            const shift = event.shiftKey
-            const alt = event.altKey
-            const del = event.key === 'Delete'
-            const x = event.key.toLocaleLowerCase() === 'x'
-            const c = event.key.toLocaleLowerCase() === 'c'
-            const v = event.key.toLocaleLowerCase() === 'v'
-            const a = event.key.toLocaleLowerCase() === 'a'
-            // if (esc) this.deselectAll()
-            // if (ctrl && c) this.copySelection()
-            // if (ctrl && x) this.cutSelection()
-            // if (ctrl && v) this.pasteSelection()
-            // if (del) this.deleteSelection()
-        })
+        this.window_manager.initialize()
+        this.device_manager.initialize()
     }
 
     /** @param {PLC_Project} project */

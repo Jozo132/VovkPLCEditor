@@ -1,5 +1,4 @@
 import ConnectionBase from "./ConnectionBase.js";
-import VovkPLC from "../wasm/VovkPLC.js"; // adjust path as needed
 import { PLCEditor } from "../utils/types.js";
 
 export default class SimulationConnection extends ConnectionBase {
@@ -7,12 +6,10 @@ export default class SimulationConnection extends ConnectionBase {
 
     /**
      * @param { PLCEditor } editor - The PLC editor instance
-     * @param { string } [wasmPath] - Optional path to the WASM file
      */
-    constructor(editor, wasmPath = "/wasm/VovkPLC.wasm") {
+    constructor(editor) {
         super();
-        if (editor) this.plc = editor.runtime; // Use the inherited runtime from the editor
-        else this.plc = new VovkPLC(wasmPath);
+        this.plc = editor.runtime; // Use the inherited runtime from the editor
     }
 
     async connect() {

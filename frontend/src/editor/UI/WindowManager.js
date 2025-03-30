@@ -19,16 +19,18 @@ export default class WindowManager {
 
     workspace_body
 
+    /** @type { (device: string) => Promise<boolean> } */
+    requestConnect = async (device) => false
+
     #editor
     /** @param {PLCEditor} editor */
     constructor(editor) {
         this.#editor = editor
         const workspace = this.#editor.workspace
 
-
         this.workspace_body = ElementSynthesis(/*HTML*/`
             <div class="plc-workspace-header">
-                <p>VovkPLC Editor - Preview</p>
+                <p>VovkPLC Editor</p>
             </div>
             <div class="plc-workspace-body">
                 <div class="plc-navigation no-select resizable" style="width: 220px">
@@ -121,8 +123,6 @@ export default class WindowManager {
             }
         })
 
-        this.setDeviceOptions(this.#editor.device_manager.devices)
-
         const device_info = workspace.querySelector('.plc-device-info')
         if (!device_info) throw new Error('Device info element not found')
 
@@ -183,31 +183,6 @@ export default class WindowManager {
         })
     }
 
-
-    /** @type { (device: string) => Promise<boolean> } */
-    requestConnect = async (device) => {
-        /** @type { ConnectionOptions | null } */
-        let options = null
-        if (device === 'simulation') {
-            options = {
-                target: 'simulation'
-            }
-        }
-        if (device === 'serial') {
-            options = {
-                target: 'serial',
-                baudrate: 115200
-            }
-        }
-        if (!options) {
-            console.error('No connection options provided')
-            return false
-        }
-        const connection = await this.#editor.device_manager.connect(options)
-        const connected = connection && !this.#editor.device_manager.error
-        return !!connected
-    }
-
     setMode = (mode) => {
         this.mode = mode
         const workspace = this.#editor.workspace
@@ -249,7 +224,25 @@ export default class WindowManager {
 
     initialize() {
         const workspace = this.#editor.workspace
+        this.setDeviceOptions(this.#editor.device_manager.devices)
 
 
+        // On ESC remove all selections
+        workspace.addEventListener('keydown', (event) => {
+            const esc = event.key === 'Escape'
+            const ctrl = event.ctrlKey
+            const shift = event.shiftKey
+            const alt = event.altKey
+            const del = event.key === 'Delete'
+            const x = event.key.toLocaleLowerCase() === 'x'
+            const c = event.key.toLocaleLowerCase() === 'c'
+            const v = event.key.toLocaleLowerCase() === 'v'
+            const a = event.key.toLocaleLowerCase() === 'a'
+            // if (esc) this.deselectAll()
+            // if (ctrl && c) this.copySelection()
+            // if (ctrl && x) this.cutSelection()
+            // if (ctrl && v) this.pasteSelection()
+            // if (del) this.deleteSelection()
+        })
     }
 }
