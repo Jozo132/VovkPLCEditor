@@ -15,6 +15,7 @@ ul {
 
 .items-with-context-menu {
     display: flex;
+    z-index: 11;
 }
 
 .items-with-context-menu .item {
