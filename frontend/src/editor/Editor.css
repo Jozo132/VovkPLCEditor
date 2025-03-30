@@ -1,0 +1,626 @@
+
+.hidden {
+    display: none !important;
+}
+
+
+/* Custom context menu style */
+
+ol,
+ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.items-with-context-menu {
+    display: flex;
+}
+
+.items-with-context-menu .item {
+    background: #fff;
+    width: 10em;
+    height: 1.5em;
+}
+
+.menu {
+    font-family: Arial, sans-serif;
+    background: white;
+    color: black;
+    border: #ccc solid 1px;
+    border-radius: .2em;
+    box-shadow: .3em .3em .6em #0007;
+    position: absolute;
+    user-select: none;
+    flex-direction: column;
+}
+
+.menu .item {
+    cursor: default;
+    padding: .5em 1em;
+    padding-bottom: 0px;
+    align-items: center;
+    font-size: 1.0em;
+}
+
+.menu .item:first-child {
+    border-top-left-radius: .2em;
+    border-top-right-radius: .2em;
+}
+.menu .item:last-child {
+    border-bottom-left-radius: .2em;
+    border-bottom-right-radius: .2em;
+}
+
+.menu .item:hover {
+    border-radius: .2em;
+    background: #579;
+    color: white;
+    cursor: pointer;
+}
+
+.menu .item.disabled {
+    color: #333;
+    background: #DDD;
+}
+
+.menu .item.disabled:hover {
+    color: #333;
+    cursor: default;
+}
+
+.menu hr {
+    margin: 0;
+    border: none;
+    border-top: 1px solid #ccc;
+}
+
+.thick {
+    font-family: Arial Black, Gadget, sans-serif;
+    color: #ccc;
+}
+
+.text-rotate {
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    text-align: center;
+}
+
+.no-select {
+    user-select: none;
+}
+
+/* VovkPLCEditor style */
+.plc-workspace.debug div {
+    border: 1px solid #abe;
+}
+
+.plc-workspace h1 { margin: 15px; margin-left: 7px; }
+.plc-workspace h2 { margin: 12px; margin-left: 7px; }
+.plc-workspace h3 { margin: 8px; margin-left: 7px; } 
+.plc-workspace h4 { margin: 5px; margin-left: 7px; }
+.plc-workspace p { margin: 5px; margin-left: 7px; }
+
+.plc-workspace {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0px;
+    width: 100%;
+    height: 100%;
+    background: repeating-linear-gradient( -60deg, #121212d6, #313a4a 24px,#28283e 24px, #252526 36px);
+    color: #DDD;
+    font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    justify-content: center;
+    padding: 0px;
+}
+/* .plc-workspace-header, .plc-workspace-body, .plc-workspace-footer */
+.plc-workspace-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0px;
+    width: 100%;
+    min-width: 400px;
+    background-color: #343434;
+}
+
+/* Ensure the workspace body takes full available height but doesn't push elements out */
+.plc-workspace-body {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #333B;
+}
+
+.plc-device {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0px;
+    width: 95%;
+    max-width: 180px;
+    background: #444;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    margin: 5px;
+}
+
+.plc-device-dropdown {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0px;
+    width: 55%;
+    background: #444;
+    border-right: 1px solid #ccc;
+}
+
+.plc-device-dropdown select {
+    padding: 0px;
+    width: 100%;
+    background: #444;
+    color: #DDD;
+    border: none;
+    border-right: 1px solid #ccc;
+    border-radius: 0px;
+    margin: 0px;
+}
+
+.plc-device-online {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    text-align: center;
+    align-items: center;
+    padding: 0px;
+    padding-left: 5px;
+    width: 45%;
+    background: #444;
+    color: #DDD;
+    cursor: pointer;
+}
+
+.plc-device-online.green {
+    background: #4A4;
+}
+
+.plc-device-online.orange {
+    background: #A44;
+}
+
+.plc-device-online[disabled] {
+    background: #444;
+    color: #888;
+    cursor: default;
+}
+
+
+.plc-device-info {
+    height: 22px;
+}
+
+
+/* Ensure the navigation and tools don't shrink */
+.plc-navigation, .plc-tools {
+    display: flex;
+    flex-direction: row;
+    align-items: top;
+    min-height: 200px;
+    height: 100%;
+    flex-shrink: 0; /* Prevents these from shrinking */
+    background: #2A2A2A;
+}
+
+.plc-navigation-container, .plc-tools-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    background: #444;
+}
+.plc-navigation.minimized, .plc-tools.minimized {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 20px !important;
+}
+.plc-navigation.minimized .plc-navigation-container, 
+.plc-navigation.minimized .resizer, 
+.plc-tools.minimized .plc-tools-container,
+.plc-tools.minimized .resizer
+ {
+    display: none;
+}
+
+.plc-navigation .text-rotate, .plc-tools .text-rotate {
+    display: none;
+}
+.plc-navigation.minimized .text-rotate, .plc-tools.minimized .text-rotate {
+    display: block;
+}
+
+.plc-navigation-bar, .plc-tools-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: top;
+    text-align: center;
+    padding: 0px;
+    width: 20px;
+}
+
+.plc-navigation-tree {
+    display: flex;
+    flex-direction: column;
+    align-items: left;
+    padding: 0px;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    font-size: 12px;
+}
+
+.plc-navigation-tree-folder {
+    display: flex;
+    flex-direction: column;
+    align-items: left;
+    padding: 0px;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+.plc-navigation-tree-folder.minimized { display: none; }
+
+.plc-navigation-tree-item  {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0px;
+    width: 100%;
+    /* height: 20px; */
+    cursor: pointer;
+    user-select: none;
+    background: #6789;
+}
+
+/** plc-navigation-item contains three elements, aligned to the left with 2px padding-left */
+.plc-navigation-folder,
+.plc-navigation-program {
+    display: grid;
+    grid-template-columns: 20px 20px 1fr;
+    align-items: center;
+    padding: 0px;
+    width: 100%;
+    cursor: pointer;
+}
+.plc-navigation-folder > div,
+.plc-navigation-program > div {
+    height: 20px !important;
+}
+
+
+.plc-navigation-item > .plc-navigation-children {
+    margin-left: 10px;
+}
+
+
+.plc-navigation-item.minimized > .plc-navigation-children {
+    display: none;
+}
+
+.plc-navigation-program,
+.plc-navigation-folder {
+    /* border-bottom: 1px solid #ccc; */
+    margin-bottom: 3px;
+}
+
+.plc-navigation-program > .plc-icon,
+.plc-navigation-program > .plc-title,
+.plc-navigation-folder > .plc-icon,
+.plc-navigation-folder > .plc-title {
+    background: #6783;
+}
+.plc-navigation-program:hover > .plc-icon,
+.plc-navigation-program:hover > .plc-title,
+.plc-navigation-folder:hover > .plc-icon,
+.plc-navigation-folder:hover > .plc-title {
+    background: #678F;
+}
+
+.plc-icon {
+    align-self: center;
+    text-align: center;
+    content: "center";
+    display: flex;
+    justify-content: center;
+    user-select: none;
+}
+.plc-icon img {
+    display: inline-block;
+    outline: none;
+    padding: 2px;
+}
+
+.plc-title {
+    align-self: center;
+    text-align: left;
+    padding-left: 2px;
+    user-select: none;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.minimize {
+    text-align: center;
+    cursor: pointer;
+    content: "center";
+    user-select: none;
+}
+
+.plc-void {
+    color: transparent !important;
+    background: transparent !important;
+    border: transparent !important;
+}
+
+.resizable {
+    position: relative;
+}
+.resizer {
+    position: relative;
+    background: none;
+    border: none;
+    z-index: 10;
+}
+.resizer.active , .resizer:hover {
+    background: #007ad7;
+}
+.resizer.right {
+    width: 2px;
+    height: 100%;
+    top: 0;
+    cursor: ew-resize;
+}
+.resizer.left {
+    width: 2px;
+    height: 100%;
+    top: 0;
+    cursor: ew-resize;
+}
+.resizer.top {
+    height: 2px;
+    width: 100%;
+    left: 0;
+    cursor: ns-resize;
+}
+.resizer.bottom {
+    height: 2px;
+    width: 100%;
+    left: 0;
+    cursor: ns-resize;
+}
+
+.plc-workspace .menu-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0px;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Make the inner window scrollable instead of pushing other elements */
+.plc-window, .plc-window-frame {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    min-width: 200px;
+    overflow: hidden;
+}
+.plc-window-frame {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    min-width: 200px;
+    overflow: hidden;
+    background: #444C;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    padding: 5px;
+    margin-top: 0px;
+    box-sizing: border-box;
+}
+
+.plc-window-tabs {
+    display: flex;
+    flex-direction: row;
+    align-items: bottom;
+    padding: 0px;
+    width: 100%;
+    min-height: 32px;
+}
+.plc-window-tabs .plc-tab:first-child {
+    margin-left: 8px;
+}
+.plc-tab {
+    margin: 3px 3px 0px 3px;
+    padding: 2px;
+    padding-left: 5px;
+    padding-right: 5px;
+    border-bottom: 0px;
+    cursor: pointer;
+    user-select: none;
+    background: #6789;
+}
+.plc-tab:hover {
+    background: #dedede;
+    color: black;
+}
+
+.plc-tab.active {
+    background: #ccc;
+    color: black;
+    font-weight: bold;
+}
+.plc-tab.active:hover {
+    background: #FFF;
+}
+
+/* Ensure the editor takes full space inside the window */
+.plc-editor {
+    display: flex;
+    flex-direction: column;
+    align-items: left;
+    width: 100%;
+    height: 100%;
+}
+.plc-editor-body {
+    background-color: #2A2A2A;
+}
+
+.plc-editor-body > div {
+    border-bottom: 1px solid #ccc;
+}
+.plc-editor-body > div:first-child {
+    border-top: 1px solid #ccc;
+}
+/* hide plc-editor scrollbars */
+
+.plc-window::-webkit-scrollbar { display: none; }
+.plc-window-frame::-webkit-scrollbar { display: none; }
+.plc-editor::-webkit-scrollbar { display: none; }
+
+.plc-workspace-footer {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0px;
+    width: 100%;
+    background-color: #343434;
+}
+
+.plc-editor-top {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0px;
+    width: 100%;
+}
+
+.plc-editor-header {
+    display: flex;
+    flex-direction: row;
+    align-items: left;
+    padding: 0px;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.plc-editor-body {
+    display: block;
+    flex-direction: column;
+    align-items: center;
+    padding: 0px;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: scroll;
+}
+
+/* 
+.plc-program-block {
+    padding-bottom: 5px;
+}
+*/
+
+.plc-program-block.minimized .plc-program-block-header {
+    height: 32px;
+}
+
+/** plc-program-block-header-content contains two elements, align the first to the top left and the other to the top right */
+.plc-program-block-header-content {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.plc-program-block-header-title {
+    display: flex;
+    flex-direction: row;
+    align-items: bottom;
+    text-align: left;
+    text-wrap: nowrap;
+    overflow: hidden;
+    margin: 0px;
+}
+
+.plc-program-block .plc-comment-simple { display: none; }
+.plc-program-block.minimized .plc-comment-simple { display: block; }
+
+.plc-program-block.minimized .plc-comment-detailed { display: none; }
+.plc-program-block .plc-comment-detailed { display: block; }
+
+
+.minimized .plc-program-block-container { display: none; }
+
+.plc-program-block-container {
+    background: #444;
+}
+
+.plc-program-block-header-content .menu-button {
+    margin: 3px;
+}
+
+.plc-program-block-header-buttons {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    margin: 0px;
+}
+.plc-program-block-header-buttons .menu-button {
+    margin-left: 0px;
+}
+
+.plc-workspace canvas {
+    margin-left: 5px
+}
+
+/* Custom scrollbar style for all scrollable children of .plc-workspace */
+.plc-workspace *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.plc-workspace *::-webkit-scrollbar-track {
+    background: #FFF2;
+}
+.plc-workspace *::-webkit-scrollbar-thumb {
+    background: #8883;
+    border-radius: 1px;
+}
+
+.plc-workspace *::-webkit-scrollbar-track:hover {
+    background: #FFF5;
+}
+.plc-workspace *::-webkit-scrollbar-thumb:hover {
+    background: #CCC;
+}
