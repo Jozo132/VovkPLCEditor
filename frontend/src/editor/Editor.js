@@ -2,7 +2,7 @@
 "use strict"
 
 import { importCSS } from "../utils/tools.js"
-import { PLC_Project, PLC_ProjectItem } from "../utils/types.js"
+import { PLC_Folder, PLC_Program, PLC_Project, PLC_ProjectItem } from "../utils/types.js"
 
 await importCSS('./editor/Editor.css')
 
@@ -13,6 +13,7 @@ import ProjectManager from "./ProjectManager.js"
 import LanguageManager from "./LanguageManager.js"
 import ContextManager from "./ContextManager.js"
 import Actions from './Actions.js'
+import EditorUI from "./UI/Elements/EditorUI.js"
 
 
 Actions.initialize() // Enable global actions for all instances of VovkPLCEditor
@@ -79,11 +80,147 @@ export class VovkPLCEditor {
 
         this.window_manager.initialize()
         this.device_manager.initialize()
+
+        if (initial_program) {
+            this.open(initial_program)
+        }
     }
 
     /** @param {PLC_Project} project */
     open(project) {
-        this.project_manager.load(project)
+        this.project = project
+        this.prepareProject(project)
+        this.window_manager.open(project)
+        // this.draw()
+    }
+
+
+    /** @type { (folder: PLC_Folder) => PLC_Program | null } */
+    searchForProgramInFolder = (folder) => { // @ts-ignore
+        for (let i = 0; i < folder.children.length; i++) {
+            const child = folder.children[i]
+            let program
+            if (child.type === 'folder') program = this.searchForProgramInFolder(child)
+            else if (child.type === 'program') program = this.searchForProgram(child) // @ts-ignore
+            else throw new Error(`Invalid child type: ${child.type}`)
+            if (program) return program
+        }
+        return null
+    }
+    /** @type { (program: PLC_Program) => PLC_Program | null } */
+    searchForProgram = (program) => {
+        const editor = this
+        if (!program.id) throw new Error('Program ID not found')
+        // console.log(`Comparing if ${program.id} is equal to ${editor.active_tab}`)
+        if (program.id === editor.active_tab) return program
+        return null
+    }
+
+    /** @type { (id: string | null) => PLC_Program | null } */
+    findProgram = (id) => {
+        const editor = this
+        if (!editor) throw new Error('Editor not found')
+        if (!editor.project) return null
+        if (!editor.project.project) return null
+        const project = editor.project.project
+        for (let i = 0; i < project.length; i++) {
+            const folder = project[i]
+            let program
+            if (folder.type === 'folder') program = this.searchForProgramInFolder(folder)
+            else if (folder.type === 'program') program = this.searchForProgram(folder) // @ts-ignore
+            else throw new Error(`Invalid folder type: ${folder.type}`)
+            if (id && program && program.id === id) return program
+            if (program && id === null) {
+                console.log(`Loading the first program found`, program)
+                return program
+            }
+        }
+        return null
+    }
+
+    /** @param { string | null } id */
+    openProgram(id) {
+        if (!id) throw new Error('Program ID not found')
+        if (this.active_program) {
+            this.active_program.host?.hide()
+        }
+        this.active_tab = id
+        this.active_program = this.findProgram(id)
+        if (!this.active_program) throw new Error(`Program not found: ${id}`)
+        // activateTab(this, id)
+        if (!this.active_program.host) {
+            const host = new EditorUI(this, id)
+            this.active_program.host = host
+
+            host.div.setAttribute('id', id)
+            this.context_manager.addListener({
+                target: host.div,
+                onOpen: (event) => {
+                    console.log(`Program "#${id}" context menu open`)
+                    return [
+                        { type: 'item', name: 'edit', label: 'Edit' },
+                        { type: 'item', name: 'delete', label: 'Delete' },
+                        { type: 'separator' },
+                        { type: 'item', name: 'copy', label: 'Copy' },
+                        { type: 'item', name: 'paste', label: 'Paste' },
+                    ]
+                },
+                onClose: (selected) => {
+                    console.log(`Program selected: ${selected}`)
+                }
+            })
+        }
+        this.active_program.host.program = this.active_program
+        this.active_tab = id
+        this.active_program.host.reloadProgram()
+        this.active_program.host.show()
+        const frame = this.active_program.host.frame
+        if (!frame) throw new Error('Frame not found')
+        const frame_width = frame.clientWidth
+        if (frame_width <= 500) {
+            // minimize navigation
+            const navigation = this.workspace.querySelector('.plc-navigation')
+            if (!navigation) throw new Error('Navigation not found')
+            navigation.classList.add('minimized')
+            const minimize = navigation.querySelector('.plc-navigation-bar .menu-button')
+            if (!minimize) throw new Error('Minimize button not found')
+            minimize.innerHTML = '+'
+        }
+        // this.draw()
+    }
+
+    /** @param { PLC_Project } project */
+    prepareProject(project) {
+        /** @type { (folder: PLC_Folder) => void } */
+        const checkFolder = (folder) => {
+            folder.id = this.generateID(folder.id)
+            /** @type { (program: PLC_Program) => void } */
+            folder.children.forEach(child => {
+                if (child.type === 'folder') return checkFolder(child)
+                if (child.type === 'program') return checkProgram(child) // @ts-ignore
+                throw new Error(`Invalid child type: ${child.type}`)
+            })
+        }
+        /** @param { PLC_Program } program */
+        const checkProgram = (program) => {
+            program.id = this.generateID(program.id)
+            if (program.id === this.window_manager.active_tab) {
+                program.blocks.forEach(block => {
+                    block.id = this.generateID(block.id)
+                    block.blocks.forEach(ladder => {
+                        ladder.id = this.generateID(ladder.id)
+                    })
+                    block.connections.forEach(con => {
+                        con.id = this.generateID(con.id)
+                    })
+                })
+            }
+        }
+        project.project.forEach(child => {
+            if (child.type === 'folder') return checkFolder(child)
+            if (child.type === 'program') return checkProgram(child) // @ts-ignore
+            throw new Error(`Invalid child type: ${child.type}`)
+        })
     }
 
     generateID(id = '') {

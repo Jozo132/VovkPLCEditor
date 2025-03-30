@@ -25,6 +25,7 @@ export default class ProjectManager {
   }
 
   /** Create a new empty project structure */
+  /** @returns {PLC_Project} */
   createEmptyProject() {
     return {
       offsets: {

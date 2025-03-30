@@ -257,11 +257,13 @@ ul {
     display: flex;
     flex-direction: column;
     align-items: left;
-    padding: 0px;
-    width: 100%;
+    padding: 2px;
+    width: calc(100% - 4px);
+    min-height: 300px;
     overflow-x: hidden;
     overflow-y: auto;
     font-size: 12px;
+    background: #333B;
 }
 
 .plc-navigation-tree-folder {

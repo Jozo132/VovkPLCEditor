@@ -1,22 +1,21 @@
 // @ts-check
 "use strict"
 
+import { PLCEditor } from "../../../utils/types.js";
+
 export default class TabManager {
-    /**
-     * @param {HTMLElement} editorContainer
-     */
-    constructor(editorContainer) {
-        this.editorContainer = editorContainer;
+    #editor
+    /** @param {PLCEditor} editor */
+    constructor(editor) {
+        this.#editor = editor
         this.tabs = new Map(); // filePath → { tabEl, editorEl }
         this.active = null;
 
-        this._tabBar = document.createElement("div");
-        this._tabBar.className = "tab-bar";
-        this.editorContainer.appendChild(this._tabBar);
+        this._tabBar = editor.workspace.querySelector(".plc-window-tabs");
+        if (!this._tabBar) throw new Error("Tab bar not found")
 
-        this._editorHost = document.createElement("div");
-        this._editorHost.className = "editor-host";
-        this.editorContainer.appendChild(this._editorHost);
+        this._editorHost = editor.workspace.querySelector(".plc-window-frame");
+        if (!this._editorHost) throw new Error("Editor host not found")
     }
 
     /** @type { (filePath: string, content: string) => void } */

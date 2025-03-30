@@ -1,6 +1,8 @@
 // @ts-check
 "use strict"
 
+import EditorUI from '../editor/UI/Elements/EditorUI.js'
+
 /** @typedef { import('../editor/Editor.js').VovkPLCEditor } PLCEditor * @type { PLCEditor } */
 export let PLCEditor
 
@@ -30,7 +32,7 @@ export let PLC_Symbol
 /** @typedef { import('../languages/index.js').PLC_ProgramBlock } PLC_ProgramBlock * @type { PLC_ProgramBlock } */
 export let PLC_ProgramBlock
 
-/** @typedef {{ id?: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], editor?: PLCEditor, tab?: Element }} PLC_Program * @type { PLC_Program } */
+/** @typedef {{ id?: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], host?: EditorUI, tab?: Element }} PLC_Program * @type { PLC_Program } */
 export let PLC_Program
 
 /** @typedef {{ id?: string, type: 'folder', name: string, comment: string, children: PLC_ProjectItem[] }} PLC_Folder * @type { PLC_Folder } */
