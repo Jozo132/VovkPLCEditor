@@ -1,8 +1,9 @@
 // @ts-check
 "use strict"
 
-import { ElementSynthesis, folder_icon, program_icon } from "../../../utils/tools.js"
 import { PLC_Folder, PLC_Program, PLC_ProjectItem, PLCEditor } from "../../../utils/types.js"
+import { ElementSynthesis } from "../../../utils/tools.js"
+import { folder_icon, program_icon } from "../../../utils/icons.js"
 
 
 export default class NavigationTreeManager {
