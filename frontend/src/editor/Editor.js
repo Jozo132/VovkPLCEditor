@@ -1,7 +1,7 @@
 // @ts-check
 "use strict"
 
-import { ElementSynthesis, importCSS } from "../utils/tools.js"
+import { importCSS } from "../utils/tools.js"
 import { PLC_Project, PLC_ProjectItem } from "../utils/types.js"
 
 await importCSS('./editor/Editor.css')
@@ -13,7 +13,6 @@ import ProjectManager from "./ProjectManager.js"
 import LanguageManager from "./LanguageManager.js"
 import ContextManager from "./ContextManager.js"
 import Actions from './Actions.js'
-import { ConnectionOptions } from "../connection/index.js"
 
 
 Actions.initialize() // Enable global actions for all instances of VovkPLCEditor
