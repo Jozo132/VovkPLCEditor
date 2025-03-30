@@ -2,9 +2,9 @@
 "use strict"
 
 import { PLCEditor } from "../utils/types.js";
-import SimulationConnection from "./SimulationConnection.js";
-import RestConnection from "./RestConnection.js";
-import SerialConnection from "./SerialConnection.js";
+import SimulationConnection from "./drivers/SimulationConnection.js";
+import RestConnection from "./drivers/RestConnection.js";
+import SerialConnection from "./drivers/SerialConnection.js";
 
 /** @typedef { SimulationConnection | RestConnection | SerialConnection } ConnectionBase * @type { ConnectionBase } */
 export let ConnectionBase

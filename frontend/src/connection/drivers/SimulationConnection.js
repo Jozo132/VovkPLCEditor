@@ -1,5 +1,5 @@
-import ConnectionBase from "./ConnectionBase.js";
-import { PLCEditor } from "../utils/types.js";
+import ConnectionBase from "../ConnectionBase.js";
+import { PLCEditor } from "../../utils/types.js";
 
 export default class SimulationConnection extends ConnectionBase {
     deviceInfo = null

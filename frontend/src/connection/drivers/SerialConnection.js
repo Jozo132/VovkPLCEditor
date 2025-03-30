@@ -1,9 +1,9 @@
 // @ts-check
 "use strict"
 
-import ConnectionBase from "./ConnectionBase.js";
-import Serial from "./serial.js";
-import VovkPLC from "../wasm/VovkPLC.js";
+import ConnectionBase from "../ConnectionBase.js";
+import Serial from "./tools/serial.js";
+import VovkPLC from "../../wasm/VovkPLC.js";
 
 export default class SerialConnection extends ConnectionBase {
     constructor(baudrate = 115200, debug = false) {
