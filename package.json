@@ -2,7 +2,7 @@
   "name": "vovkplceditor",
   "version": "0.1.0",
   "scripts": {
-    "start": "ts-node ./backend/main.ts",
+    "start": "node --experimental-strip-types ./backend/main.ts",
     "build": "node ./build.js"
   },
   "keywords": [],
