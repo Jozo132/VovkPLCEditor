@@ -29,9 +29,6 @@ export class VovkPLCEditor {
     /** @type {Object | null} */
     initial_program = null
 
-    /** @type {PLC_ProjectItem[]} */
-    navigation_tree = []
-
     /** @type {String[]} */
     reserved_ids = []
 
@@ -58,9 +55,12 @@ export class VovkPLCEditor {
         },
     }
 
-    /** @param {{ workspace?: HTMLElement | string | null, debug_css?: boolean, initial_program?: string | Object }} options */
-    constructor({ workspace, debug_css, initial_program }) {
+    /** @param {{ workspace?: HTMLElement | string | null, debug_css?: boolean, debug_context?: boolean, debug_hover?: boolean, initial_program?: string | Object }} options */
+    constructor({ workspace, debug_css, debug_context, debug_hover, initial_program }) {
         this.initial_program = initial_program || null
+        this.debug_css = !!debug_css
+        this.debug_context = !!debug_context
+        this.debug_hover = !!debug_hover
         if (typeof workspace === 'string') workspace = document.getElementById(workspace)
         if (!workspace) throw new Error('Container not found')
 
@@ -80,17 +80,20 @@ export class VovkPLCEditor {
 
         this.window_manager.initialize()
         this.device_manager.initialize()
+        this.project_manager.initialize()
+        this.context_manager.initialize()
+        this.language_manager.initialize()
 
         if (initial_program) {
-            this.open(initial_program)
+            this.openProject(initial_program)
         }
     }
 
     /** @param {PLC_Project} project */
-    open(project) {
+    openProject(project) {
         this.project = project
-        this.prepareProject(project)
-        this.window_manager.open(project)
+        this._prepareProject(project)
+        this.window_manager.openProject(project)
         // this.draw()
     }
 
@@ -139,7 +142,7 @@ export class VovkPLCEditor {
     }
 
     /** @param { string | null } id */
-    openProgram(id) {
+    _openProgram(id) {
         if (!id) throw new Error('Program ID not found')
         if (this.active_program) {
             this.active_program.host?.hide()
@@ -190,10 +193,10 @@ export class VovkPLCEditor {
     }
 
     /** @param { PLC_Project } project */
-    prepareProject(project) {
+    _prepareProject(project) {
         /** @type { (folder: PLC_Folder) => void } */
         const checkFolder = (folder) => {
-            folder.id = this.generateID(folder.id)
+            folder.id = this._generateID(folder.id)
             /** @type { (program: PLC_Program) => void } */
             folder.children.forEach(child => {
                 if (child.type === 'folder') return checkFolder(child)
@@ -203,15 +206,15 @@ export class VovkPLCEditor {
         }
         /** @param { PLC_Program } program */
         const checkProgram = (program) => {
-            program.id = this.generateID(program.id)
+            program.id = this._generateID(program.id)
             if (program.id === this.window_manager.active_tab) {
                 program.blocks.forEach(block => {
-                    block.id = this.generateID(block.id)
+                    block.id = this._generateID(block.id)
                     block.blocks.forEach(ladder => {
-                        ladder.id = this.generateID(ladder.id)
+                        ladder.id = this._generateID(ladder.id)
                     })
                     block.connections.forEach(con => {
-                        con.id = this.generateID(con.id)
+                        con.id = this._generateID(con.id)
                     })
                 })
             }
@@ -223,7 +226,7 @@ export class VovkPLCEditor {
         })
     }
 
-    generateID(id = '') {
+    _generateID(id = '') {
         if (id && !this.reserved_ids.includes(id)) {
             this.reserved_ids.push(id)
             return id
@@ -236,7 +239,7 @@ export class VovkPLCEditor {
             new_id += characters.charAt(Math.floor(Math.random() * characters.length))
         }
         while (this.reserved_ids.includes(new_id)) {
-            new_id = this.generateID()
+            new_id = this._generateID()
         }
         this.reserved_ids.push(new_id)
         return new_id

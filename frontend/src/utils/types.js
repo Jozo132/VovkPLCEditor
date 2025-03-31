@@ -7,6 +7,12 @@ import EditorUI from '../editor/UI/Elements/EditorUI.js'
 export let PLCEditor
 
 
+/** @typedef { import('../editor/ContextManager.js').MenuElement } MenuElement * @type { MenuElement } */
+export let MenuElement
+
+/** @typedef { import('../editor/ContextManager.js').MenuListener } MenuListener * @type { MenuListener } */
+export let MenuListener
+
 /** @typedef { 'locked' | 'unlocked' | 'editing' | 'live'  | 'editing_live' } PLC_ContextState * @type { PLC_ContextState } */
 export let PLC_ContextState
 

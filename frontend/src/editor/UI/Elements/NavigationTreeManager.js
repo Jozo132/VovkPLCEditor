@@ -1,7 +1,7 @@
 // @ts-check
 "use strict"
 
-import { PLC_Folder, PLC_Program, PLC_ProjectItem, PLCEditor } from "../../../utils/types.js"
+import { MenuElement, PLC_Folder, PLC_Program, PLC_ProjectItem, PLCEditor } from "../../../utils/types.js"
 import { ElementSynthesis } from "../../../utils/tools.js"
 import { folder_icon, program_icon } from "./components/icons.js"
 
@@ -18,7 +18,74 @@ export default class NavigationTreeManager {
         const container = workspace.querySelector('.plc-navigation-tree')
         if (!container) throw new Error('Navigation tree container not found')
         container.innerHTML = ''
+    }
 
+
+    initialize() {
+        const editor = this.#editor
+
+        /** @type { MenuElement[] } */
+        const ctx_edit_folder = [
+            { type: 'item', name: 'add', label: 'Add item' },
+            { type: 'separator' },
+            { type: 'item', name: 'delete', label: 'Delete' },
+            { type: 'item', name: 'rename', label: 'Rename' },
+        ]
+        /** @type { MenuElement[] } */
+        const ctx_edit_program = [
+            { type: 'item', name: 'cut', label: 'Cut' },
+            { type: 'item', name: 'copy', label: 'Copy' },
+            { type: 'item', name: 'paste', label: 'Paste' },
+            { type: 'separator' },
+            { type: 'item', name: 'delete', label: 'Delete' },
+            { type: 'item', name: 'rename', label: 'Rename' },
+        ]
+
+        /** @type { MenuElement[] } */
+        const ctx_online_folder = [
+            { type: 'item', name: 'add', label: 'Add item', disabled: true },
+            { type: 'separator' },
+            { type: 'item', name: 'delete', label: 'Delete', disabled: true },
+            { type: 'item', name: 'rename', label: 'Rename', disabled: true },
+        ]
+        /** @type { MenuElement[] } */
+        const ctx_online_program = [
+            { type: 'item', name: 'cut', label: 'Cut', disabled: true },
+            { type: 'item', name: 'copy', label: 'Copy' },
+            { type: 'item', name: 'paste', label: 'Paste', disabled: true },
+            { type: 'separator' },
+            { type: 'item', name: 'delete', label: 'Delete', disabled: true },
+            { type: 'item', name: 'rename', label: 'Rename', disabled: true },
+        ]
+
+        /** @type { (event: any, element: any) => MenuElement[] } */
+        const on_context_open_navigation_tree = (event, element) => {
+            const connected = editor.device_manager.connected
+            const classes = element.classList
+            const className = classes[0] // Get the first class name
+            if (className === 'plc-navigation-folder') {
+                return connected ? ctx_online_folder : ctx_edit_folder
+            }
+            if (className === 'plc-navigation-program') {
+                return connected ? ctx_online_program : ctx_edit_program
+            }
+            throw new Error(`Invalid class name: ${className}`)
+        }
+
+        const on_context_close_navigation_tree = (selected, event, element) => {
+            editor.window_manager.tree_manager.onContextMenu(selected, event, element)
+        }
+
+        editor.context_manager.addListener({
+            className: 'plc-navigation-folder',
+            onOpen: on_context_open_navigation_tree,
+            onClose: on_context_close_navigation_tree,
+        })
+        editor.context_manager.addListener({
+            className: 'plc-navigation-program',
+            onOpen: on_context_open_navigation_tree,
+            onClose: on_context_close_navigation_tree,
+        })
     }
 
     /** @param { PLC_ProjectItem } item */
@@ -76,14 +143,15 @@ export default class NavigationTreeManager {
         return div
     }
 
+    onContextMenu = (selected, event, element) => {
+        console.log(`Navigation tree selected: ${selected}, element:`, element, `event:`, event)
+    }
 
     draw_navigation_tree = () => {
         const editor = this.#editor
         // [ + ] [icon] [title]   < ------ folder
         //       [icon] [title]   < ------ item
-        const program = editor.project.project
-        editor.navigation_tree = program
-        const navigation = editor.navigation_tree
+        const navigation = editor.project.project
         const container = editor.workspace.querySelector('.plc-navigation-tree')
         if (!container) throw new Error('Navigation tree container not found')
         container.innerHTML = ''
@@ -94,43 +162,5 @@ export default class NavigationTreeManager {
         })
 
         editor.initial_program = null // Prevent opening the initial program again on redraw
-    }
-
-    update_navigation_tree = () => {
-        const editor = this.#editor
-        // Check for differences between the navigation tree and the project tree and redraw if any differences are found, keeping the minimized state of the folders if they are still present
-        const project = editor.project.project
-        const navigation = editor.navigation_tree
-        let difference = false
-        const checkFolder = (folder, nav_folder) => {
-            for (let i = 0; i < folder.children.length; i++) {
-                const child = folder.children[i]
-                let nav_child = nav_folder.children.find(c => c.id === child.id)
-                if (!nav_child) {
-                    difference = true
-                    break
-                }
-                if (child.type === 'folder') {
-                    checkFolder(child, nav_child)
-                    if (difference) break
-                }
-            }
-        }
-        for (let i = 0; i < project.length; i++) {
-            const folder = project[i]
-            const nav_folder = navigation.find(f => f.id === folder.id)
-            if (!nav_folder) {
-                difference = true
-                break
-            }
-            if (folder.type === 'folder') {
-                checkFolder(folder, nav_folder)
-                if (difference) break
-            }
-        }
-        if (difference) {
-            editor.navigation_tree = project
-            this.draw_navigation_tree()
-        }
     }
 }

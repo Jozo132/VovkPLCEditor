@@ -30,6 +30,30 @@ export const ElementSynthesis = (html_code) => {
     return Array.from(doc.body.children)
 }
 
+/** @type { (event: any, stop_class?: string) => string[] } */
+export const getEventPath = (event, stop_class) => {
+    // Trace the event path from the PLCEditor root to the target element
+    // Step 1: recursively trace parentElement until div with class "plc-workspace" is found
+    // Step 2: reverse the Element array
+    //     [<div class="plc-workspace">, <div class="plc-workspace-body">, <div class="plc-window">, <div class="plc-window-frame">]
+    // Step 3: map each element to its first class name
+    //     ["plc-workspace", "plc-workspace-body", "plc-window", "plc-window-frame"]
+    // Step 4: return the array of class names
+    const path = []
+    let target = event.target
+    while (target) {
+        path.push(target)
+        if (stop_class && target.classList.contains(stop_class)) break
+        target = target.parentElement
+    }
+    path.reverse()
+    const classNames = path.map(element => {
+        const classes = Array.from(element.classList)
+        return classes.length > 0 ? classes[0] : element.tagName.toLowerCase()
+    })
+    return classNames
+}
+
 export class ImageRenderer {
     canvas = document.createElement('canvas')
     constructor() { }

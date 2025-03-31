@@ -2,7 +2,7 @@
 "use strict"
 
 import { PLC_Project, PLCEditor } from "../../utils/types.js"
-import { ElementSynthesis } from "../../utils/tools.js"
+import { ElementSynthesis, getEventPath } from "../../utils/tools.js"
 import NavigationTreeManager from "./Elements/NavigationTreeManager.js"
 import TabManager from "./Elements/TabManager.js"
 import EditorUI from "./Elements/EditorUI.js"
@@ -253,6 +253,8 @@ export default class WindowManager {
 
         const workspace = this.#editor.workspace
 
+        this.tree_manager.initialize()
+
         // On ESC remove all selections
         workspace.addEventListener('keydown', (event) => {
             const esc = event.key === 'Escape'
@@ -270,10 +272,37 @@ export default class WindowManager {
             // if (ctrl && v) this.pasteSelection()
             // if (del) this.deleteSelection()
         })
+
+        workspace.addEventListener('mousemove', this.onMouseMove)
+    }
+
+    onMouseMove = (event) => {
+        this.#on_debug_hover(event)
+    }
+
+    #on_debug_hover = (event) => {
+        if (this.#editor.debug_hover) {
+            this.footer = this.footer || this.#editor.workspace.querySelector('.plc-workspace-footer p')
+            const footer = this.footer
+            if (!footer) throw new Error('Footer not found')
+            const path = getEventPath(event, 'plc-workspace')
+            if (!path || !path.length) { // @ts-ignore
+                footer.innerText = ''
+                return
+            }
+            const root = path.shift()
+            if (!root) throw new Error('Root not found')
+            let trimmed = path.length > 3
+            while (path.length > 3) path.shift()
+            if (trimmed) path.unshift('...')
+            path.unshift(root)
+            const path_string = path.join(' > ') // @ts-ignore
+            footer.innerText = path_string
+        }
     }
 
     /** @param { PLC_Project } project */
-    open(project) {
+    openProject(project) {
         this.project = project
         this.tree_manager.draw_navigation_tree()
         // this.tab_manager.draw_tabs()

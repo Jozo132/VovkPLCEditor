@@ -27,6 +27,10 @@ export default class LanguageManager {
     defaultLanguages.forEach(module => this.register(module)) // Register default languages
   }
 
+  initialize() {
+    // TODO: Finish this
+  }
+  
   /**
    * Render a program block (via its registered renderer)
    * @param {CanvasRenderingContext2D} ctx

@@ -13,6 +13,10 @@ export default class ProjectManager {
     this.#editor = editor
   }
 
+  initialize() {
+    // TODO: Finish this
+  }
+
   /** Load a project and initialize editor state */
   /** @param {PLC_Project} project */
   load(project) {

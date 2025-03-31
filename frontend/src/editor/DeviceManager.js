@@ -6,6 +6,7 @@ import { PLCEditor } from "../utils/types.js"
 
 export default class DeviceManager {
   error = ''
+  connected = false
   #editor
   /** @param {PLCEditor} editor */
   constructor(editor) {
@@ -44,7 +45,8 @@ export default class DeviceManager {
       }
       const connection = await editor.device_manager.connect(options)
       const connected = connection && !editor.device_manager.error
-      return !!connected
+      this.connected = !!connected
+      return this.connected
     }
   }
 
@@ -71,6 +73,7 @@ export default class DeviceManager {
       await this.disconnect()
       this.options = options || this.options
       if (!this.options) throw new Error("Connection options required")
+      this.connected = true
       this.connection = await initializeConnection(this.options, this.#editor)
       try {
         this.deviceInfo = await this.connection.getInfo(true)
@@ -79,10 +82,12 @@ export default class DeviceManager {
         }
         this.error = ''
       } catch (err) {
+        this.connected = false
         console.error("Failed to get device info:", err)
         this.#setError(err)
       }
     } catch (err) {
+      this.connected = false
       const no_port_selected = err && err.message && err.message.includes('No port selected by the user')
       if (!no_port_selected) {
         console.error("Failed to connect to device:", err)
@@ -98,6 +103,7 @@ export default class DeviceManager {
   async disconnect() {
     await disconnectConnection(this.connection)
     this.connection = null
+    this.connected = false
     this.deviceInfo = null
   }
 

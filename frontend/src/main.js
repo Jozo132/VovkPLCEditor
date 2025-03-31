@@ -10,8 +10,12 @@ const root = document.getElementById("PLCEditor")
 
 const editor = new VovkPLCEditor({
     workspace: root,
-    initial_program: plc_project
+    debug_css: false,
+    debug_context: false,
+    debug_hover: false
 })
+
+editor.openProject(plc_project)
 
 // const editor2 = new VovkPLCEditor({
 //     workspace: root2,
