@@ -26,7 +26,10 @@ export default class NavigationTreeManager {
 
         /** @type { MenuElement[] } */
         const ctx_edit_folder = [
-            { type: 'item', name: 'add', label: 'Add item' },
+            { type: 'submenu', name: 'add', label: 'Add item', items: [
+                { type: 'item', name: 'add_program', label: 'Program' },
+                { type: 'item', name: 'add_folder', label: 'Folder' },
+            ] },
             { type: 'separator' },
             { type: 'item', name: 'delete', label: 'Delete' },
             { type: 'item', name: 'rename', label: 'Rename' },
