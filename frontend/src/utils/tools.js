@@ -21,7 +21,7 @@ export const importCSS = async (href) => {
 
 
 /** @type { (html_code: string) => Element[] }  */
-export const ElementSynthesis = (html_code) => {
+export const ElementSynthesisMany = (html_code) => {
     if (typeof html_code !== 'string') throw new Error(`Invalid HTML code: ${html_code}`)
     html_code = html_code.split('\n').map(line => line.trim()).filter(Boolean).join('')
     if (!html_code) return []
@@ -29,6 +29,10 @@ export const ElementSynthesis = (html_code) => {
     const doc = parser.parseFromString(html_code, 'text/html')
     return Array.from(doc.body.children)
 }
+
+
+/** @type { (html_code: string) => Element }  */
+export const ElementSynthesis = (html_code) => ElementSynthesisMany(html_code)[0]
 
 /** @type { (event: any, stop_class?: string) => string[] } */
 export const getEventPath = (event, stop_class) => {

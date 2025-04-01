@@ -1,7 +1,7 @@
 // @ts-check
 "use strict"
 
-import { ElementSynthesis } from "../../../utils/tools.js"
+import { ElementSynthesisMany } from "../../../utils/tools.js"
 import { PLC_Program, PLCEditor } from "../../../utils/types.js"
 
 export default class EditorUI {
@@ -29,7 +29,7 @@ export default class EditorUI {
         this.frame = master.workspace.querySelector('.plc-window-frame')
         if (!this.frame) throw new Error('Frame not found')
         this.frame.appendChild(div)
-        const content = ElementSynthesis(/*HTML*/`
+        const content = ElementSynthesisMany(/*HTML*/`
             <div class="plc-editor-top">
                 <div class="plc-editor-header"></div>
             </div>

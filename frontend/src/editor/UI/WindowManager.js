@@ -2,7 +2,7 @@
 "use strict"
 
 import { PLC_Project, PLCEditor } from "../../utils/types.js"
-import { ElementSynthesis, getEventPath } from "../../utils/tools.js"
+import { ElementSynthesisMany, getEventPath } from "../../utils/tools.js"
 import NavigationTreeManager from "./Elements/NavigationTreeManager.js"
 import TabManager from "./Elements/TabManager.js"
 import EditorUI from "./Elements/EditorUI.js"
@@ -27,7 +27,7 @@ export default class WindowManager {
         const workspace = this.#editor.workspace
         this.workspace = workspace
 
-        this.workspace_body = ElementSynthesis(/*HTML*/`
+        this.workspace_body = ElementSynthesisMany(/*HTML*/`
             <div class="plc-workspace-header">
                 <p>VovkPLC Editor</p>
             </div>

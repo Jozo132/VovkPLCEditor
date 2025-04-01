@@ -76,7 +76,7 @@ export default class NavigationTreeManager {
         }
 
         const on_context_close_navigation_tree = (selected, event, element) => {
-            editor.window_manager.tree_manager.onContextMenu(selected, event, element)
+            editor.window_manager.tree_manager.#onContextMenu(selected, event, element)
         }
 
         editor.context_manager.addListener({
@@ -92,13 +92,13 @@ export default class NavigationTreeManager {
     }
 
     /** @param { PLC_ProjectItem } item */
-    draw_structure = (item) => {
-        if (item.type === 'folder') return this.draw_folder(item)
-        if (item.type === 'program') return this.draw_item(item) // @ts-ignore
-        if (item.type === 'item') return this.draw_item(item)
+    #draw_structure = (item) => {
+        if (item.type === 'folder') return this.#draw_folder(item)
+        if (item.type === 'program') return this.#draw_item(item) // @ts-ignore
+        if (item.type === 'item') return this.#draw_item(item)
     }
     /** @param { PLC_Folder } folder */
-    draw_folder = (folder) => {
+    #draw_folder = (folder) => {
         const minimized = false
         const div = ElementSynthesis(/*HTML*/`
             <div class="plc-navigation-item ${minimized ? 'minimized' : ''}">
@@ -109,7 +109,7 @@ export default class NavigationTreeManager {
                 </div>
                 <div class="plc-navigation-children"></div>
             </div>
-        `)[0]
+        `)
         const children = div.querySelector('.plc-navigation-children'); if (!children) throw new Error('Children not found')
         const minimize = div.querySelector('.minimize'); if (!minimize) throw new Error('Minimize button not found')
         const navigation_folder = div.querySelector('.plc-navigation-folder'); if (!navigation_folder) throw new Error('Navigation folder not found')
@@ -118,14 +118,14 @@ export default class NavigationTreeManager {
             minimize.innerText = div.classList.contains('minimized') ? '+' : '-'
         })
         folder.children.forEach(child => {
-            const div = this.draw_structure(child)
+            const div = this.#draw_structure(child)
             if (!div) throw new Error('Div not found')
             children.appendChild(div)
         })
         return div
     }
     /** @param { PLC_Program } program */
-    draw_item = (program) => {
+    #draw_item = (program) => {
         const div = ElementSynthesis(/*HTML*/`
             <div class="plc-navigation-item">
                 <div class="plc-navigation-program">
@@ -134,7 +134,7 @@ export default class NavigationTreeManager {
                     <div class="plc-title">${program.name}</div>
                 </div>
             </div>
-        `)[0]
+        `)
         div.addEventListener('click', () => {
             if (!program.id) throw new Error('Program ID not found')
             this.#editor.window_manager.openProgram(program.id)
@@ -146,7 +146,7 @@ export default class NavigationTreeManager {
         return div
     }
 
-    onContextMenu = (selected, event, element) => {
+    #onContextMenu = (selected, event, element) => {
         console.log(`Navigation tree selected: ${selected}, element:`, element, `event:`, event)
     }
 
@@ -159,7 +159,7 @@ export default class NavigationTreeManager {
         if (!container) throw new Error('Navigation tree container not found')
         container.innerHTML = ''
         navigation.forEach(item => {
-            const div = this.draw_structure(item)
+            const div = this.#draw_structure(item)
             if (!div) throw new Error('Div not found')
             container.appendChild(div)
         })
