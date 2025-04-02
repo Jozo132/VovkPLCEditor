@@ -49,6 +49,9 @@ const sortTree = (a, b) => {
  * @typedef { PLC_FolderChild_Folder | PLC_FolderChild_Program } PLC_FolderChild
  */
 class PLC_Folder {
+    type = 'folder'
+    path = ''
+    div
     name
     /** @type { PLC_FolderChild[] } */
     children = []
@@ -202,8 +205,8 @@ export default class NavigationTreeManager {
             throw new Error(`Invalid class name: ${className}`)
         }
 
-        const on_context_close_navigation_tree = (selected, event, element) => {
-            editor.window_manager.tree_manager.#onContextMenu(selected, event, element)
+        const on_context_close_navigation_tree = (action, event, element) => {
+            editor.window_manager.tree_manager.#onContextMenu(action, event, element)
         }
 
         editor.context_manager.addListener({
@@ -216,6 +219,28 @@ export default class NavigationTreeManager {
             onOpen: on_context_open_navigation_tree,
             onClose: on_context_close_navigation_tree,
         })
+
+
+
+        /** @type { MenuElement[] } */
+        const ctx_edit_empty = [
+            { type: 'item', name: 'add_folder', label: 'Add Folder' },
+        ]
+
+        const on_context_open_empty = (event, element) => {
+            const connected = editor.device_manager.connected
+            return connected ? [] : ctx_edit_empty
+        }
+        const on_context_close_empty = (action, event, element) => {
+            editor.window_manager.tree_manager.#onContextMenu(action, event, element)
+        }
+        editor.context_manager.addListener({
+            target: this.#container,
+            className: 'plc-navigation-tree',
+            onOpen: on_context_open_empty,
+            onClose: on_context_close_empty,
+        })
+
     }
 
     /** @param { PLC_ProjectItem } item */
@@ -242,6 +267,10 @@ export default class NavigationTreeManager {
             const parent = folder
             folder = this.#folders.find(f => f.path === walker)
             if (!folder) {
+                this.#editor.project.folders = this.#editor.project.folders || []
+                if (!this.#editor.project.folders.includes(walker)) {
+                    this.#editor.project.folders.push(walker)
+                }
                 folder = new PLC_Folder(walker)
                 this.#folders.push(folder)
                 /** @type { PLC_FolderChild } */
@@ -268,8 +297,57 @@ export default class NavigationTreeManager {
         return div
     }
 
-    #onContextMenu = (selected, event, element) => {
-        console.log(`Navigation tree selected: ${selected}, element:`, element, `event:`, event)
+    #onContextMenu = (action, event, element) => {
+        const classes = element.classList
+        const className = classes[0] // Get the first class name
+        // console.log(`Navigation tree selected [${className}]: ${selected}, element:`, element, `event:`, event)
+        const matches = [
+            'plc-navigation-folder',
+            'plc-navigation-program',
+            'plc-navigation-tree',
+        ]
+        const isMatch = matches.some(match => className === match)
+        if (!isMatch) return console.error('Element does not match any of the expected classes', classes, matches, element)
+        const is_navigation = className === 'plc-navigation-tree'
+        if (is_navigation) {
+            console.log('Empty navigation tree clicked')
+            console.log(`Action ${action} on empty navigation tree`)
+            return
+        }
+        const container = element.parentElement
+        let found = false
+        let item = null
+        // console.log('Folders', this.#folders)
+        for (const folder of this.#folders) {
+            // selected -> 'delete' | 'rename' | 'add_program' | 'add_folder' | ...
+            if (folder.div === container) {
+                found = true
+                item = folder
+                break
+            }
+            folder.children.forEach(child => {
+                if (child.div === container) {
+                    found = true
+                    item = child
+                }
+            })
+        }
+        if (!found) {
+            for (const item of this.#root) {
+                if (item.div === container) {
+                    found = true
+                    break
+                }
+            }
+        }
+        if (!found) return console.error('Item not found in folders or root')
+        if (!item) throw new Error('Item not found')
+        const type = item.type
+        console.log(`Action ${action} on ${type}`, item)
+        if (action === 'delete') {
+            if (type === 'item') this.deleteFile(item.path)
+            if (type === 'folder') this.deleteFolder(item.path)
+        }
     }
 
     draw_navigation_tree = () => {
@@ -317,5 +395,32 @@ export default class NavigationTreeManager {
 
         console.log(root)
         editor.initial_program = null // Prevent opening the initial program again on redraw
+    }
+
+
+
+    /** @param { string } path */
+    deleteFile = (path, was_recursive = false) => {
+        path = sanitizePath(path)
+        console.log('Deleting file', path)
+        const segments = path.split('/')
+        const name = segments.pop()
+        const folder_path = segments.join('/')
+        this.#recursivelyCreateFolder(folder_path)
+        this.#editor.project.files = this.#editor.project.files.filter(f => !(sanitizePath(f.path) === folder_path && f.name === name))
+        if (!was_recursive) this.draw_navigation_tree()
+    }
+
+    /** @param { string } path */
+    deleteFolder = (path, was_recursive = false) => {
+        path = sanitizePath(path)
+        console.log('Deleting folder', path)
+        const files = this.#editor.project.files.filter(f => sanitizePath(f.path).startsWith(path))
+        if (files.length) files.forEach(file => this.deleteFile(file.path + '/' + file.name, true))
+        const subfolders = this.#folders.filter(f => f.path.startsWith(path) && f.path !== path)
+        subfolders.forEach(folder => this.deleteFolder(folder.path, true))
+        this.#folders = this.#folders.filter(f => f.path !== path)
+        this.#editor.project.folders = (this.#editor.project.folders || []).filter(f => f !== path)
+        if (!was_recursive) this.draw_navigation_tree()
     }
 }
