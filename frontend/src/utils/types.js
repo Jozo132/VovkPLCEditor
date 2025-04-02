@@ -38,13 +38,10 @@ export let PLC_Symbol
 /** @typedef { import('../languages/index.js').PLC_ProgramBlock } PLC_ProgramBlock * @type { PLC_ProgramBlock } */
 export let PLC_ProgramBlock
 
-/** @typedef {{ id?: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], host?: EditorUI, tab?: Element }} PLC_Program * @type { PLC_Program } */
+/** @typedef {{ id?: string, path: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], host?: EditorUI, tab?: Element }} PLC_Program * @type { PLC_Program } */
 export let PLC_Program
 
-/** @typedef {{ id?: string, type: 'folder', name: string, comment: string, children: PLC_ProjectItem[] }} PLC_Folder * @type { PLC_Folder } */
-export let PLC_Folder
-
-/** @typedef { PLC_Folder | PLC_Program } PLC_ProjectItem * @type { PLC_ProjectItem } */
+/** @typedef { PLC_Program } PLC_ProjectItem * @type { PLC_ProjectItem } */
 export let PLC_ProjectItem
 
 
@@ -58,7 +55,8 @@ export let PLC_ProjectItem
 *         system: { offset: number, size: number }
 *     }
 *     symbols: PLC_Symbol[]
-*     project: PLC_ProjectItem[]
+*     folders?: string[]
+*     files: PLC_ProjectItem[]
 * }} PLC_Project * @type { PLC_Project }
 **/
 export let PLC_Project

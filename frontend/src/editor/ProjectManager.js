@@ -40,7 +40,8 @@ export default class ProjectManager {
         system: { offset: 64, size: 16 }
       },
       symbols: [],
-      project: []
+      folders: [],
+      files: []
     }
   }
 } 

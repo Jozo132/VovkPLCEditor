@@ -29,7 +29,7 @@ Object.assign(window, { editor, plc_project })
 // const PLCEditor = new VovkPLCEditor({
 //     workspace: 'PLCEditor',
 //     // debug_css: true,
-//     initial_program: 'Main'
+//     initial_program: 'main'
 // })
 
 // editor.open(plc_project)

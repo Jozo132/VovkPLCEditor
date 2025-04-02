@@ -2,7 +2,7 @@
 "use strict"
 
 import { importCSS } from "../utils/tools.js"
-import { PLC_Folder, PLC_Program, PLC_Project, PLC_ProjectItem } from "../utils/types.js"
+import { PLC_Program, PLC_Project } from "../utils/types.js"
 
 await importCSS('./editor/Editor.css')
 
@@ -97,19 +97,6 @@ export class VovkPLCEditor {
         // this.draw()
     }
 
-
-    /** @type { (folder: PLC_Folder) => PLC_Program | null } */
-    searchForProgramInFolder = (folder) => { // @ts-ignore
-        for (let i = 0; i < folder.children.length; i++) {
-            const child = folder.children[i]
-            let program
-            if (child.type === 'folder') program = this.searchForProgramInFolder(child)
-            else if (child.type === 'program') program = this.searchForProgram(child) // @ts-ignore
-            else throw new Error(`Invalid child type: ${child.type}`)
-            if (program) return program
-        }
-        return null
-    }
     /** @type { (program: PLC_Program) => PLC_Program | null } */
     searchForProgram = (program) => {
         const editor = this
@@ -124,14 +111,13 @@ export class VovkPLCEditor {
         const editor = this
         if (!editor) throw new Error('Editor not found')
         if (!editor.project) return null
-        if (!editor.project.project) return null
-        const project = editor.project.project
-        for (let i = 0; i < project.length; i++) {
-            const folder = project[i]
+        if (!editor.project.files) return null
+        const files = editor.project.files
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i]
             let program
-            if (folder.type === 'folder') program = this.searchForProgramInFolder(folder)
-            else if (folder.type === 'program') program = this.searchForProgram(folder) // @ts-ignore
-            else throw new Error(`Invalid folder type: ${folder.type}`)
+            if (file.type === 'program') program = this.searchForProgram(file)
+            else throw new Error(`Invalid folder type: ${file.type}`)
             if (id && program && program.id === id) return program
             if (program && id === null) {
                 console.log(`Loading the first program found`, program)
@@ -194,16 +180,6 @@ export class VovkPLCEditor {
 
     /** @param { PLC_Project } project */
     _prepareProject(project) {
-        /** @type { (folder: PLC_Folder) => void } */
-        const checkFolder = (folder) => {
-            folder.id = this._generateID(folder.id)
-            /** @type { (program: PLC_Program) => void } */
-            folder.children.forEach(child => {
-                if (child.type === 'folder') return checkFolder(child)
-                if (child.type === 'program') return checkProgram(child) // @ts-ignore
-                throw new Error(`Invalid child type: ${child.type}`)
-            })
-        }
         /** @param { PLC_Program } program */
         const checkProgram = (program) => {
             program.id = this._generateID(program.id)
@@ -219,9 +195,8 @@ export class VovkPLCEditor {
                 })
             }
         }
-        project.project.forEach(child => {
-            if (child.type === 'folder') return checkFolder(child)
-            if (child.type === 'program') return checkProgram(child) // @ts-ignore
+        project.files.forEach(file => {
+            if (file.type === 'program') return checkProgram(file) // @ts-ignore
             throw new Error(`Invalid child type: ${child.type}`)
         })
     }

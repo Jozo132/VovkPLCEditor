@@ -1,13 +1,137 @@
 // @ts-check
 "use strict"
 
-import { MenuElement, PLC_Folder, PLC_Program, PLC_ProjectItem, PLCEditor } from "../../../utils/types.js"
+import { MenuElement, PLC_Program, PLC_ProjectItem, PLCEditor } from "../../../utils/types.js"
 import { ElementSynthesis } from "../../../utils/tools.js"
 import { folder_icon, program_icon } from "./components/icons.js"
+
+const minimized = false
+
+const folder_item_html = /*HTML*/`
+    <div class="plc-navigation-item ${minimized ? 'minimized' : ''}">
+        <div class="plc-navigation-folder">
+            <div class="minimize">${minimized ? '+' : '-'}</div>
+            <div class="plc-icon">${folder_icon}</div>
+            <div class="plc-title">empty</div>
+        </div>
+        <div class="plc-navigation-children">
+            <!-- Children will be added here dynamically -->
+        </div>
+    </div>
+`
+
+const program_item_html = /*HTML*/`
+    <div class="plc-navigation-item">
+        <div class="plc-navigation-program">
+            <div class="plc-void"></div>
+            <div class="plc-icon">${program_icon}</div>
+            <div class="plc-title">empty</div>
+        </div>
+    </div>
+`
+
+
+const sanitizePath = path => '/' + (path.replace(/\/+/g, '/').split('/').map(p => p.trim()).filter(Boolean).join('/') || '')
+const sortTree = (a, b) => {
+    if (b.type === 'item' && b.item.name === 'main') return 1
+    if (a.type === 'item' && a.item.name === 'main') return -1
+    if (a.type === 'folder' && b.type !== 'folder') return -1
+    if (a.type !== 'folder' && b.type === 'folder') return 1
+    const a_name = a.path.split('/').pop() || ''
+    const b_name = b.path.split('/').pop() || ''
+    return a_name.localeCompare(b_name)
+}
+
+/**
+ * @typedef { { path: string, div: Element } } PLC_FolderChild_Base
+ * @typedef { PLC_FolderChild_Base & { type: 'folder' } } PLC_FolderChild_Folder
+ * @typedef { PLC_FolderChild_Base & { type: 'item', item: PLC_ProjectItem } } PLC_FolderChild_Program
+ * @typedef { PLC_FolderChild_Folder | PLC_FolderChild_Program } PLC_FolderChild
+ */
+class PLC_Folder {
+    name
+    /** @type { PLC_FolderChild[] } */
+    children = []
+
+    /** @param { string } path */
+    constructor(path) {
+        path = sanitizePath(path)
+        if (!path) throw new Error('Path is empty')
+        this.path = path
+        this.name = path.split('/').pop() || ''
+        if (!this.name) throw new Error('Folder name not found')
+        this.div = ElementSynthesis(folder_item_html)
+        const minimize = this.div.querySelector('.minimize'); if (!minimize) throw new Error('Minimize button not found')
+        const header = this.div.querySelector('.plc-navigation-folder'); if (!header) throw new Error('Navigation folder not found')
+        const title = this.div.querySelector('.plc-title'); if (!title) throw new Error('Title not found')
+        const list = this.div.querySelector('.plc-navigation-children'); if (!list) throw new Error('Children not found')
+        this.minimize = minimize
+        this.header = header
+        this.title = title
+        this.list = list
+
+        this.header.addEventListener('click', this.onClick)
+
+        // Use proxy to update the folder name change dynamically
+        const proxy = new Proxy(this, {
+            set(target, prop, value) {
+                if (prop === 'name') { // @ts-ignore
+                    target.title.innerText = value
+                    return true
+                }
+                return Reflect.set(target, prop, value)
+            }
+        })
+
+        proxy.name = this.name // Update the name property to trigger the setter
+        return proxy
+    }
+
+    onClick = () => {
+        this.div.classList.toggle('minimized') // @ts-ignore
+        this.minimize.innerText = this.div.classList.contains('minimized') ? '+' : '-'
+    }
+
+    sortChildren = () => {
+        this.children.sort(sortTree)
+        this.list.innerHTML = ''
+        this.children.forEach(child => this.list.appendChild(child.div))
+    }
+
+    /** @param { PLC_FolderChild } child */
+    addChild = (child) => {
+        if (!child) throw new Error('Child not found')
+        if (this.children.some(c => c.path === child.path)) return
+        this.children.push(child)
+        this.list.appendChild(child.div)
+    }
+
+    /** @param { PLC_FolderChild } child */
+    removeChild = (child) => {
+        if (!child) throw new Error('Child not found')
+        const index = this.children.findIndex(c => c.path === child.path)
+        if (index === -1) return
+        this.children.splice(index, 1)
+        child.div.remove()
+    }
+
+    destroy() {
+        this.children.forEach(child => child.div.remove())
+        this.children = []
+        this.div.remove()
+    }
+}
 
 
 export default class NavigationTreeManager {
 
+    /** @type { PLC_FolderChild[] } */
+    #root = []
+
+    /** @type { PLC_Folder[] } */
+    #folders = []
+
+    #container
     #editor
     /** @param { PLCEditor } editor */
     constructor(editor) {
@@ -18,6 +142,7 @@ export default class NavigationTreeManager {
         const container = workspace.querySelector('.plc-navigation-tree')
         if (!container) throw new Error('Navigation tree container not found')
         container.innerHTML = ''
+        this.#container = container
     }
 
 
@@ -26,10 +151,12 @@ export default class NavigationTreeManager {
 
         /** @type { MenuElement[] } */
         const ctx_edit_folder = [
-            { type: 'submenu', name: 'add', label: 'Add item', items: [
-                { type: 'item', name: 'add_program', label: 'Program' },
-                { type: 'item', name: 'add_folder', label: 'Folder' },
-            ] },
+            {
+                type: 'submenu', name: 'add', label: 'Add item', items: [
+                    { type: 'item', name: 'add_program', label: 'Program' },
+                    { type: 'item', name: 'add_folder', label: 'Folder' },
+                ]
+            },
             { type: 'separator' },
             { type: 'item', name: 'delete', label: 'Delete' },
             { type: 'item', name: 'rename', label: 'Rename' },
@@ -93,48 +220,43 @@ export default class NavigationTreeManager {
 
     /** @param { PLC_ProjectItem } item */
     #draw_structure = (item) => {
-        if (item.type === 'folder') return this.#draw_folder(item)
-        if (item.type === 'program') return this.#draw_item(item) // @ts-ignore
+        if (item.type === 'program') return this.#draw_item(item)
         if (item.type === 'item') return this.#draw_item(item)
     }
-    /** @param { PLC_Folder } folder */
-    #draw_folder = (folder) => {
-        const minimized = false
-        const div = ElementSynthesis(/*HTML*/`
-            <div class="plc-navigation-item ${minimized ? 'minimized' : ''}">
-                <div class="plc-navigation-folder">
-                    <div class="minimize">${minimized ? '+' : '-'}</div>
-                    <div class="plc-icon">${folder_icon}</div>
-                    <div class="plc-title">${folder.name}</div>
-                </div>
-                <div class="plc-navigation-children"></div>
-            </div>
-        `)
-        const children = div.querySelector('.plc-navigation-children'); if (!children) throw new Error('Children not found')
-        const minimize = div.querySelector('.minimize'); if (!minimize) throw new Error('Minimize button not found')
-        const navigation_folder = div.querySelector('.plc-navigation-folder'); if (!navigation_folder) throw new Error('Navigation folder not found')
-        navigation_folder.addEventListener('click', () => {
-            div.classList.toggle('minimized') // @ts-ignore
-            minimize.innerText = div.classList.contains('minimized') ? '+' : '-'
-        })
-        folder.children.forEach(child => {
-            const div = this.#draw_structure(child)
-            if (!div) throw new Error('Div not found')
-            children.appendChild(div)
-        })
-        return div
+
+
+
+    /** @param { string } path */
+    #recursivelyCreateFolder = (path) => {
+        path = sanitizePath(path)
+        // Recurively add folder structures to the tree
+        // Example:
+        // "/folder1/folder2/folder3" -> ["/folder1", "/folder1/folder2", "/folder1/folder2/folder3"]
+        const tree = path.split('/').filter(Boolean)
+        let folder = this.#folders.find(f => f.path === path)
+        if (folder) return
+        let walker = ''
+        while (tree.length) {
+            const name = tree.shift() || ''
+            walker += '/' + name
+            const parent = folder
+            folder = this.#folders.find(f => f.path === walker)
+            if (!folder) {
+                folder = new PLC_Folder(walker)
+                this.#folders.push(folder)
+                /** @type { PLC_FolderChild } */
+                const child = { type: 'folder', path: walker, div: folder.div }
+                if (parent) parent.addChild(child)
+                else this.#root.push(child)
+            }
+        }
     }
+
     /** @param { PLC_Program } program */
     #draw_item = (program) => {
-        const div = ElementSynthesis(/*HTML*/`
-            <div class="plc-navigation-item">
-                <div class="plc-navigation-program">
-                    <div class="plc-void"></div>
-                    <div class="plc-icon">${program_icon}</div>
-                    <div class="plc-title">${program.name}</div>
-                </div>
-            </div>
-        `)
+        const div = ElementSynthesis(program_item_html)
+        const title = div.querySelector('.plc-title'); if (!title) throw new Error('Title not found') // @ts-ignore
+        title.innerText = program.name
         div.addEventListener('click', () => {
             if (!program.id) throw new Error('Program ID not found')
             this.#editor.window_manager.openProgram(program.id)
@@ -154,16 +276,46 @@ export default class NavigationTreeManager {
         const editor = this.#editor
         // [ + ] [icon] [title]   < ------ folder
         //       [icon] [title]   < ------ item
-        const navigation = editor.project.project
-        const container = editor.workspace.querySelector('.plc-navigation-tree')
-        if (!container) throw new Error('Navigation tree container not found')
+        const files = editor.project.files
+        const empty_folders = editor.project.folders
+        const container = this.#container
+        // Reset folder list
+        this.#folders.forEach(f => f.destroy())
+        this.#folders = []
         container.innerHTML = ''
-        navigation.forEach(item => {
-            const div = this.#draw_structure(item)
-            if (!div) throw new Error('Div not found')
-            container.appendChild(div)
+
+        this.#root = []
+        const root = this.#root
+
+        if (empty_folders && empty_folders.length)
+            empty_folders.forEach(path => {
+                path = sanitizePath(path)
+                this.#recursivelyCreateFolder(path)
+            })
+        files.forEach(file => {
+            file.path = sanitizePath(file.path)
+            this.#recursivelyCreateFolder(file.path)
         })
 
+
+        files.forEach(file => {
+            const div = this.#draw_structure(file)
+            if (!div) throw new Error('Div not found')
+            const folder = this.#folders.find(f => f.path === file.path)
+            if (folder) {
+                const full_path = folder.path + '/' + file.name
+                folder.addChild({ type: 'item', path: full_path, div, item: file })
+            } else {
+                root.push({ type: 'item', path: file.path, div, item: file })
+            }
+        })
+
+        root.sort(sortTree)
+        root.forEach(item => container.appendChild(item.div))
+
+        this.#folders.forEach(folder => folder.sortChildren())
+
+        console.log(root)
         editor.initial_program = null // Prevent opening the initial program again on redraw
     }
 }
