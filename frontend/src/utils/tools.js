@@ -19,6 +19,20 @@ export const importCSS = async (href) => {
     await styleLoadPromise
 }
 
+/** @type { (css_code: string) => Promise<void> } */
+export const importCSSCode = async (css_code) => {
+    // Import style from code
+    const style = document.createElement('style')
+    style.type = 'text/css'
+    style.textContent = css_code.split('\n').map(line => line.trim()).filter(Boolean).join('')
+    const styleLoadPromise = new Promise((resolve, reject) => {
+        style.onload = () => resolve(1);
+        style.onerror = () => reject(new Error('Failed to load stylesheet'));
+    });
+    document.head.appendChild(style)
+    await styleLoadPromise
+}
+
 
 /** @type { (html_code: string) => Element[] }  */
 export const ElementSynthesisMany = (html_code) => {
@@ -61,21 +75,27 @@ export const getEventPath = (event, stop_class) => {
 export class ImageRenderer {
     canvas = document.createElement('canvas')
     constructor() { }
-    /** @type { (options: { width: number, height: number, scale?: number, data: string }) => HTMLImageElement } */
+    /** @type { (options: { width: number, height: number, scale?: number, data: string }) => string } */
     static renderSVG(options) {
-        const canvas = document.createElement('canvas')
         const { width, height, data } = options
         const scale = options.scale || 1
+        const src = `data:image/svg+xml;base64,${btoa(`
+            <svg width="${width * scale}" height="${height * scale}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${width} ${height}">
+                ${data}
+            </svg>            
+        `.split('\n').map(line => line.trim()).filter(Boolean).join(''))}`
+        return src
+    }
+    /** @type { (options: { width: number, height: number, scale?: number, data: string }) => HTMLImageElement } */
+    static renderSVGImage(options) {
+        const canvas = document.createElement('canvas')
+        const { width, height } = options
         canvas.width = width
         canvas.height = height
         const ctx = canvas.getContext('2d')
         if (!ctx) throw new Error(`Failed to get 2D context from canvas`)
         const img = new Image()
-        img.src = `data:image/svg+xml;base64,${btoa(`
-            <svg width="${width * scale}" height="${height * scale}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${width} ${height}">
-                ${data}
-            </svg>            
-        `.split('\n').map(line => line.trim()).filter(Boolean).join(''))}`
+        img.src = ImageRenderer.renderSVG(options)
         ctx.drawImage(img, 0, 0)
         return img
     }

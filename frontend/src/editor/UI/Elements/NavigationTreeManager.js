@@ -2,16 +2,31 @@
 "use strict"
 
 import { MenuElement, PLC_Program, PLC_ProjectItem, PLCEditor } from "../../../utils/types.js"
-import { ElementSynthesis } from "../../../utils/tools.js"
-import { folder_icon, program_icon } from "./components/icons.js"
+import { ElementSynthesis, importCSSCode } from "../../../utils/tools.js"
+import { folder_icon_url, program_icon_url } from "./components/icons.js"
 
 const minimized = false
+
+await importCSSCode(/*CSS*/`
+    .plc-icon-folder {
+        background-image: ${folder_icon_url} !important;
+        background-size: 80% 80% !important;
+        background-repeat: no-repeat !important;
+        background-position: center center !important;
+    }
+    .plc-icon-gears {
+        background-image: ${program_icon_url} !important;
+        background-size: 80% 80% !important;
+        background-repeat: no-repeat !important;
+        background-position: center center !important;
+    }
+`)
 
 const folder_item_html = /*HTML*/`
     <div class="plc-navigation-item ${minimized ? 'minimized' : ''}">
         <div class="plc-navigation-folder">
             <div class="minimize">${minimized ? '+' : '-'}</div>
-            <div class="plc-icon">${folder_icon}</div>
+            <div class="plc-icon plc-icon-folder"></div>
             <div class="plc-title">empty</div>
         </div>
         <div class="plc-navigation-children">
@@ -24,7 +39,7 @@ const program_item_html = /*HTML*/`
     <div class="plc-navigation-item">
         <div class="plc-navigation-program">
             <div class="plc-void"></div>
-            <div class="plc-icon">${program_icon}</div>
+            <div class="plc-icon plc-icon-gears"></div>
             <div class="plc-title">empty</div>
         </div>
     </div>
