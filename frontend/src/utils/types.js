@@ -55,7 +55,7 @@ export let PLC_ProjectItem
 *         system: { offset: number, size: number }
 *     }
 *     symbols: PLC_Symbol[]
-*     folders?: string[]
+*     folders: string[]
 *     files: PLC_ProjectItem[]
 * }} PLC_Project * @type { PLC_Project }
 **/

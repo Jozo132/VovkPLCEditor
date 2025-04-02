@@ -355,6 +355,7 @@ export default class NavigationTreeManager {
         // [ + ] [icon] [title]   < ------ folder
         //       [icon] [title]   < ------ item
         const files = editor.project.files
+        editor.project.folders = editor.project.folders || []
         const empty_folders = editor.project.folders
         const container = this.#container
         // Reset folder list
@@ -365,11 +366,10 @@ export default class NavigationTreeManager {
         this.#root = []
         const root = this.#root
 
-        if (empty_folders && empty_folders.length)
-            empty_folders.forEach(path => {
-                path = sanitizePath(path)
-                this.#recursivelyCreateFolder(path)
-            })
+        empty_folders.forEach(path => {
+            path = sanitizePath(path)
+            this.#recursivelyCreateFolder(path)
+        })
         files.forEach(file => {
             file.path = sanitizePath(file.path)
             this.#recursivelyCreateFolder(file.path)
@@ -420,7 +420,7 @@ export default class NavigationTreeManager {
         const subfolders = this.#folders.filter(f => f.path.startsWith(path) && f.path !== path)
         subfolders.forEach(folder => this.deleteFolder(folder.path, true))
         this.#folders = this.#folders.filter(f => f.path !== path)
-        this.#editor.project.folders = (this.#editor.project.folders || []).filter(f => f !== path)
+        this.#editor.project.folders = this.#editor.project.folders.filter(f => f !== path)
         if (!was_recursive) this.draw_navigation_tree()
     }
 }
