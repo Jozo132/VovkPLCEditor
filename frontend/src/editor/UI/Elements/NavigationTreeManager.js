@@ -3,7 +3,9 @@
 
 import { MenuElement, PLC_Program, PLC_ProjectItem, PLCEditor } from "../../../utils/types.js"
 import { ElementSynthesis, CSSimporter } from "../../../utils/tools.js"
-import { folder_icon_url, program_icon_url } from "./components/icons.js"
+
+import "./components/icons.js"
+import "./components/popup.js"
 
 const minimized = false
 
