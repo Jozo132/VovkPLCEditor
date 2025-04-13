@@ -4,7 +4,6 @@
 import { CSSimporter, debug_components, ElementSynthesis, ElementSynthesisMany, toCapitalCase } from "../../../../utils/tools.js"
 
 /** 
- * 
  * @typedef {{ 
  *     text?: string,
  *     color?: string,
@@ -25,6 +24,7 @@ import { CSSimporter, debug_components, ElementSynthesis, ElementSynthesisMany, 
  *     closeOnESC?: boolean,
  *     verify?: (data: any) => boolean,
  *     confirmClose?: boolean,
+ *     confirmCloseText?: string,
  *     onOpen?: () => void,
  *     onClose?: (value?: string) => void,
  *     closeHandler?: (callback: (value?: string) => void) => void,
@@ -216,7 +216,8 @@ export class Popup {
 
         // Show modal
         // @ts-ignore
-        modal.showModal()
+        modal.showModal() // @ts-ignore
+        modal.focus()
 
         const observer = new MutationObserver(() => {
             if (!container.contains(modal)) {
@@ -238,7 +239,7 @@ export class Popup {
             if (this.options.confirmClose) {
                 const confirmed = await Popup.confirm({
                     title: 'Confirm',
-                    description: 'Are you sure you want to close this popup?',
+                    description: this.options.confirmCloseText || 'Are you sure you want to close this popup?',
                     confirm_text: 'Yes',
                     cancel_text: 'No',
                 })
@@ -285,10 +286,10 @@ export class Popup {
 
 
     /**
-     * @typedef {{ type: 'text', name: string, label?: string, value?: string, placeholder?: string }} TextInput
-     * @typedef {{ type: 'number', name: string, label?: string, value?: number }} NumberInput
-     * @typedef {{ type: 'integer', name: string, label?: string, value?: number }} IntegerInput
-     * @typedef { TextInput | NumberInput | IntegerInput } InputField
+     * @typedef {{ type: 'text', value?: string, placeholder?: string }} TextInput
+     * @typedef {{ type: 'number', value?: number }} NumberInput
+     * @typedef {{ type: 'integer', value?: number }} IntegerInput
+     * @typedef { (TextInput | NumberInput | IntegerInput) & { name: string, label?: string, onChange: (data: any) => void } } InputField
      * 
      * @typedef { PopupOptions & { inputs: InputField[] }} FormOptions
      */
@@ -319,8 +320,8 @@ export class Popup {
 
         const states = {}
 
-        inputs.forEach((input, index) => {
-            const { type, label, name, value } = input
+        inputs.forEach(input => {
+            const { type, label, name, value, onChange } = input
             if (!['text', 'number', 'integer'].includes(type)) throw new Error(`Invalid input type: ${type}`)
             if (!input.name) throw new Error(`Input name is required`)
             if (input.value && typeof input.value !== 'string' && type === 'text') throw new Error(`Invalid input value: ${input.value}`)
@@ -334,27 +335,36 @@ export class Popup {
                 <label for="${name}">${label || toCapitalCase(name)}</label>
                 <input type="${typeName}" name="${name}" value="${value || ''}" placeholder="${placeholder}">
             `)
-            states[name] = {
+            states[name] = new Proxy({
                 value: input.value || '',
-                setError: () => {
-                    input_element.classList.add('error')
-                },
-                clearError: () => {
-                    input_element.classList.remove('error')
-                },
-            }
-            const onChange = e => {
-                const value = e.target.value
-                if (type === 'number') {
-                    states[name].value = parseFloat(value)
-                } else if (type === 'integer') {
-                    states[name].value = parseInt(value, 10)
-                } else {
-                    states[name].value = value
+                setError: () => input_element.classList.add('error'),
+                clearError: () => input_element.classList.remove('error'),
+            }, {
+                set: (target, prop, value) => {
+                    if (prop === 'value_in') {
+                        target.value = value
+                    }
+                    if (prop === 'value') {
+                        target.value = value // @ts-ignore
+                        input_element.value = value
+                    }
+                    return true
                 }
+            })
+            const onInput = e => {
+                const value = e.target.value
+                // Use proxy value "value_in" to set the value in the state without triggering element value change
+                if (type === 'number') {
+                    states[name].value_in = parseFloat(value)
+                } else if (type === 'integer') {
+                    states[name].value_in = parseInt(value, 10)
+                } else {
+                    states[name].value_in = value
+                }
+                if (onChange) onChange(states)
             }
-            input_element.addEventListener('input', onChange)
-            input_element.addEventListener('change', onChange)
+            input_element.addEventListener('input', onInput)
+            input_element.addEventListener('change', onInput)
             formLabels.appendChild(label_element)
             formInputs.appendChild(input_element)
         })
