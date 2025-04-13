@@ -18,11 +18,14 @@ import { ElementSynthesisMany, importCSSCode } from "../../../../utils/tools.js"
  *     description?: string,
  *     width?: string,
  *     height?: string,
+ *     draggable?: boolean,
  *     container?: Element | HTMLElement,
  *     backdrop?: boolean,
+ *     closeOnESC?: boolean,
  *     verify?: () => boolean,
  *     onOpen?: () => void,
  *     onClose?: (value?: string) => void,
+ *     closeHandler?: (callback: (value?: string) => void) => void,
  *     content?: string | string[] | HTMLElement | HTMLElement[] | Element | Element[],
  *     buttons?: PopupEndorseButton[],
  * }} PopupOptions
@@ -50,18 +53,15 @@ await importCSSCode(/*CSS*/`
     }
     .plc-popup-window {
         position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
+        transform: translate(-100%, -100%);
         background: #fff;
         border: 1px solid #000;
         border-radius: 8px;
-        box-shadow: 0 4px 8px #FFF1;
-        width: auto;
-        max-width: 90%;
+        box-shadow: 5px 4px 8px #FFF1;
         z-index: 10000;
         font-family: Arial, sans-serif;
         padding: 4px;
+        min-width: 160px;
     }
     .plc-popup-header {
         padding: 2px;
@@ -71,6 +71,10 @@ await importCSSCode(/*CSS*/`
         display: flex;
         user-select: none;
     }
+    .plc-popup-header.draggable {
+        cursor: move;
+        user-select: none;
+    } 
     .plc-popup-body {
         padding: 4px;
     }
@@ -83,7 +87,7 @@ await importCSSCode(/*CSS*/`
         font-size: 24px;
         color: #333;
         position: absolute;
-        right: 16px;
+        right: 8px;
         align-items: center;
         background: none;
         border: none;
@@ -168,17 +172,21 @@ export class Popup {
     constructor(options) {
         options = options || {}
         if (typeof options.backdrop === 'undefined') options.backdrop = true
+        if (typeof options.draggable === 'undefined') options.draggable = true
         this.options = options
+        const closeOnESC = typeof options.closeOnESC === 'undefined' ? true : options.closeOnESC
         const [backdrop, popup] = ElementSynthesisMany(popup_template)
         this.backdrop = backdrop
         this.popup = popup
 
         // Prevent the TAB button from selecting the background
         popup.addEventListener('keydown', (e) => { // @ts-ignore
-            if (e.key === 'Tab') e.preventDefault()
+            if (e.key === 'Tab') e.preventDefault() // @ts-ignore
+            if (closeOnESC && e.key === 'Escape') this.close()
         })
         backdrop.addEventListener('keydown', (e) => { // @ts-ignore
-            if (e.key === 'Tab') e.preventDefault()
+            if (e.key === 'Tab') e.preventDefault() // @ts-ignore
+            if (closeOnESC && e.key === 'Escape') this.close()
         })
 
         const header = this.header = querySelect(popup, '.plc-popup-header')
@@ -205,6 +213,13 @@ export class Popup {
         closeButton.addEventListener('click', () => {
             this.close()
         })
+
+        // Allow the popup to be closed with code after it has been opened
+        if (options.closeHandler) {
+            options.closeHandler((value) => {
+                this.close(value)
+            })
+        }
 
         const appendContent = (content) => {
             if (Array.isArray(content)) {
@@ -248,6 +263,52 @@ export class Popup {
 
         if (options.onOpen) options.onOpen() // @ts-ignore
         this.popup.style.display = 'block'
+
+
+        if (options.draggable) {
+            const parent_width = container.clientWidth
+            const parent_height = container.clientHeight
+            const popup_width = popup.clientWidth
+            const popup_height = popup.clientHeight
+            const x = Math.floor((parent_width - popup_width) / 2)
+            const y = Math.floor((parent_height - popup_height) / 2)
+
+            // @ts-ignore
+            popup.style.left = `${x}px` // @ts-ignore
+            popup.style.top = `${y}px` // @ts-ignore
+            popup.style.display = 'block'
+
+            const drag = {
+                dragging: false,
+                x,
+                y,
+                startX: 0,
+                startY: 0,
+                start: e => {
+                    drag.dragging = true
+                    drag.startX = e.clientX * 2 - drag.x
+                    drag.startY = e.clientY - drag.y
+                },
+                stop: () => {
+                    drag.dragging = false
+                },
+                move: e => {
+                    if (drag.dragging) {
+                        drag.x = e.clientX * 2 - drag.startX
+                        drag.y = e.clientY - drag.startY // @ts-ignore
+                        popup.style.left = `${drag.x}px` // @ts-ignore
+                        popup.style.top = `${drag.y}px`
+                    }
+                }
+            }
+            header.classList.add('draggable')
+            header.addEventListener('mousedown', drag.start)
+            popup.addEventListener('mouseup', drag.stop)
+            popup.addEventListener('mousemove', drag.move)
+            backdrop.addEventListener('mousemove', drag.move)
+            backdrop.addEventListener('mouseup', drag.stop)
+        }
+
     }
 
     /** @param {string} [value] */
