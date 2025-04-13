@@ -5,6 +5,18 @@ export const generateID = () => {
     return Math.random().toString(36).substring(2, 9)
 }
 
+export const trimWhitespace = (str) => {
+    const rows_with_content = str.split('\n').filter(row => row.trim())
+    let least_amount_of_spaces = 1000
+    rows_with_content.forEach(row => {
+        const spaces = row.match(/^\s*/)[0].length
+        if (spaces < least_amount_of_spaces) least_amount_of_spaces = spaces
+    })
+    const trimmed = least_amount_of_spaces > 0 ? rows_with_content.map(row => row.slice(least_amount_of_spaces)).join('\n') : str
+    return trimmed
+}
+
+
 /** @type { (href: string) => Promise<void> } */
 export const importCSS = async (href) => {
     // Import style from path './VovkPLCEditor.css'
@@ -24,7 +36,7 @@ export const importCSSCode = async (css_code) => {
     // Import style from code
     const style = document.createElement('style')
     style.type = 'text/css'
-    style.textContent = css_code.split('\n').map(line => line.trim()).filter(Boolean).join('')
+    style.textContent = trimWhitespace(css_code)
     const styleLoadPromise = new Promise((resolve, reject) => {
         style.onload = () => resolve(1);
         style.onerror = () => reject(new Error('Failed to load stylesheet'));
