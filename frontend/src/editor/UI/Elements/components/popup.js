@@ -1,7 +1,7 @@
 // @ts-check
 "use strict"
 
-import { CSSimporter, ElementSynthesis } from "../../../../utils/tools.js"
+import { CSSimporter, debug_components, ElementSynthesis } from "../../../../utils/tools.js"
 
 /** 
  * 
@@ -243,5 +243,6 @@ export class Popup {
 
 
 
-
-Object.assign(window, { Popup })
+if (debug_components) {
+    Object.assign(window, { Popup })
+}

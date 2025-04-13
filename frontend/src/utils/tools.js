@@ -1,6 +1,8 @@
 // @ts-check
 "use strict"
 
+export const debug_components = true
+
 export const generateID = () => {
     return Math.random().toString(36).substring(2, 9)
 }
@@ -120,4 +122,19 @@ export class ImageRenderer {
         ctx.drawImage(img, 0, 0)
         return img
     }
+}
+
+if (debug_components) {
+    Object.assign(window, {
+        generateID,
+        trimWhitespace,
+        importCSS,
+        importCSSCode,
+        ElementSynthesisMany,
+        ElementSynthesis,
+        getEventPath,
+        ImageRenderer,
+        CSSimporter,
+        debug_components,
+    })
 }

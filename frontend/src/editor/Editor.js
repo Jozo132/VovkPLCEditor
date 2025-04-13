@@ -1,7 +1,7 @@
 // @ts-check
 "use strict"
 
-import { CSSimporter } from "../utils/tools.js"
+import { CSSimporter, debug_components } from "../utils/tools.js"
 import { PLC_Program, PLC_Project } from "../utils/types.js"
 
 const importCSS = CSSimporter(import.meta.url)
@@ -220,4 +220,9 @@ export class VovkPLCEditor {
         this.reserved_ids.push(new_id)
         return new_id
     }
+}
+
+
+if (debug_components) {
+    Object.assign(window, { VovkPLCEditor })
 }
