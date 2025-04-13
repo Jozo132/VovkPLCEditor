@@ -1,10 +1,11 @@
 // @ts-check
 "use strict"
 
-import { importCSS } from "../utils/tools.js"
+import { CSSimporter } from "../utils/tools.js"
 import { PLC_Program, PLC_Project } from "../utils/types.js"
 
-await importCSS('./editor/Editor.css')
+const importCSS = CSSimporter(import.meta.url)
+await importCSS('./Editor.css')
 
 import VovkPLC from "../wasm/VovkPLC.js"
 import DeviceManager from "./DeviceManager.js"

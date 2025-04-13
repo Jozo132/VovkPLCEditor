@@ -34,6 +34,15 @@ export const importCSSCode = async (css_code) => {
 }
 
 
+/** @param { string } src */
+export const CSSimporter = src => {
+    /** @param { string } path */
+    return (path) => {
+        const url = new URL(path, src).href
+        return importCSS(url)
+    }
+}
+
 /** @type { (html_code: string) => Element[] }  */
 export const ElementSynthesisMany = (html_code) => {
     if (typeof html_code !== 'string') throw new Error(`Invalid HTML code: ${html_code}`)

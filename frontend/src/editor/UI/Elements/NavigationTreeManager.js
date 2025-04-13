@@ -2,10 +2,14 @@
 "use strict"
 
 import { MenuElement, PLC_Program, PLC_ProjectItem, PLCEditor } from "../../../utils/types.js"
-import { ElementSynthesis, importCSSCode } from "../../../utils/tools.js"
+import { ElementSynthesis, importCSSCode, CSSimporter } from "../../../utils/tools.js"
 import { folder_icon_url, program_icon_url } from "./components/icons.js"
 
 const minimized = false
+
+const importCSS = CSSimporter(import.meta.url)
+
+await importCSS('./NavigationTreeManager.css')
 
 await importCSSCode(/*CSS*/`
     .plc-icon-folder {
