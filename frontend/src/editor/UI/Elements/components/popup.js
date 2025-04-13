@@ -1,7 +1,7 @@
 // @ts-check
 "use strict"
 
-import { ElementSynthesisMany, importCSSCode } from "../../../../utils/tools.js"
+import { ElementSynthesis, importCSSCode } from "../../../../utils/tools.js"
 
 /** 
  * 
@@ -41,24 +41,11 @@ const querySelect = (parent, selector) => {
 
 
 await importCSSCode(/*CSS*/`
-    /* backdrop should prevent selection in the background */
-    .plc-popup-backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.2);
-        z-index: 9999;
-    }
     .plc-popup-window {
-        position: fixed;
-        transform: translate(-100%, -100%);
         background: #fff;
         border: 1px solid #000;
         border-radius: 8px;
         box-shadow: 5px 4px 8px #FFF1;
-        z-index: 10000;
         font-family: Arial, sans-serif;
         padding: 4px;
         min-width: 160px;
@@ -141,9 +128,6 @@ await importCSSCode(/*CSS*/`
 `)
 
 const popup_template = /*HTML*/`
-    <div class="plc-popup-backdrop">
-        <!-- Backdrop, if enabled, the popup will be closed, otherwise it will prevent the popup from closing -->
-    </div>
     <dialog class="plc-popup-window">
         <div class="plc-popup-header">
             <h2 class="plc-popup-title">Popup Title</h2>
@@ -162,11 +146,10 @@ const popup_template = /*HTML*/`
 `
 
 export class Popup {
-    /** @type {Element} */ popup
+    /** @type {Element} */ modal
     /** @type {Element} */ header
     /** @type {Element} */ body
     /** @type {Element} */ footer
-    /** @type {Element} */ backdrop
 
     /** @param {PopupOptions} options */
     constructor(options) {
@@ -175,27 +158,20 @@ export class Popup {
         if (typeof options.draggable === 'undefined') options.draggable = true
         this.options = options
         const closeOnESC = typeof options.closeOnESC === 'undefined' ? true : options.closeOnESC
-        const [backdrop, popup] = ElementSynthesisMany(popup_template)
-        this.backdrop = backdrop
-        this.popup = popup
+        const modal = ElementSynthesis(popup_template)
+        this.modal = modal
 
-        // Prevent the TAB button from selecting the background
-        popup.addEventListener('keydown', (e) => { // @ts-ignore
-            if (e.key === 'Tab') e.preventDefault() // @ts-ignore
-            if (closeOnESC && e.key === 'Escape') this.close()
-        })
-        backdrop.addEventListener('keydown', (e) => { // @ts-ignore
-            if (e.key === 'Tab') e.preventDefault() // @ts-ignore
+        modal.addEventListener('keydown', (e) => { // @ts-ignore
             if (closeOnESC && e.key === 'Escape') this.close()
         })
 
-        const header = this.header = querySelect(popup, '.plc-popup-header')
-        const footer = this.footer = querySelect(popup, '.plc-popup-footer')
+        const header = this.header = querySelect(modal, '.plc-popup-header')
+        const footer = this.footer = querySelect(modal, '.plc-popup-footer')
 
-        const title = querySelect(popup, '.plc-popup-title')
-        const description = querySelect(popup, '.plc-popup-description')
-        const content = querySelect(popup, '.plc-popup-content')
-        const closeButton = querySelect(popup, '.plc-popup-close')
+        const title = querySelect(modal, '.plc-popup-title')
+        const description = querySelect(modal, '.plc-popup-description')
+        const content = querySelect(modal, '.plc-popup-content')
+        const closeButton = querySelect(modal, '.plc-popup-close')
         if (options.title) title.innerHTML = options.title
         else title.remove()
         if (options.description) description.innerHTML = options.description
@@ -203,11 +179,16 @@ export class Popup {
         const popup_styles = []
         if (options.width) popup_styles.push(`width: ${options.width};`)
         if (options.height) popup_styles.push(`height: ${options.height};`)
-        if (popup_styles.length > 0) popup.setAttribute('style', popup_styles.join(' '))
+        if (popup_styles.length > 0) modal.setAttribute('style', popup_styles.join(' '))
 
         if (options.backdrop) {
-            backdrop.addEventListener('click', () => {
-                this.close()
+            let backdropClick = false;
+            modal.addEventListener('mousedown', (e) => backdropClick = e.target === modal)
+            modal.addEventListener('mouseup', (e) => {
+                if (backdropClick && e.target === modal) { // Confirmed backdrop click
+                    this.close()
+                }
+                backdropClick = false;
             })
         }
         closeButton.addEventListener('click', () => {
@@ -258,25 +239,20 @@ export class Popup {
 
         // Add the popup to the custom container or document body
         const container = options.container || document.body
-        container.appendChild(this.backdrop)
-        container.appendChild(this.popup)
+        container.appendChild(this.modal)
 
         if (options.onOpen) options.onOpen() // @ts-ignore
-        this.popup.style.display = 'block'
+        this.modal.style.display = 'block'
 
 
         if (options.draggable) {
-            const parent_width = container.clientWidth
-            const parent_height = container.clientHeight
-            const popup_width = popup.clientWidth
-            const popup_height = popup.clientHeight
-            const x = Math.floor((parent_width - popup_width) / 2)
-            const y = Math.floor((parent_height - popup_height) / 2)
+            const x = 0
+            const y = 0
 
             // @ts-ignore
-            popup.style.left = `${x}px` // @ts-ignore
-            popup.style.top = `${y}px` // @ts-ignore
-            popup.style.display = 'block'
+            modal.style.left = `${x}px` // @ts-ignore
+            modal.style.top = `${y}px` // @ts-ignore
+            modal.style.display = 'block'
 
             const drag = {
                 dragging: false,
@@ -287,7 +263,7 @@ export class Popup {
                 start: e => {
                     drag.dragging = true
                     drag.startX = e.clientX * 2 - drag.x
-                    drag.startY = e.clientY - drag.y
+                    drag.startY = e.clientY * 2 - drag.y
                 },
                 stop: () => {
                     drag.dragging = false
@@ -295,20 +271,21 @@ export class Popup {
                 move: e => {
                     if (drag.dragging) {
                         drag.x = e.clientX * 2 - drag.startX
-                        drag.y = e.clientY - drag.startY // @ts-ignore
-                        popup.style.left = `${drag.x}px` // @ts-ignore
-                        popup.style.top = `${drag.y}px`
+                        drag.y = e.clientY * 2 - drag.startY // @ts-ignore
+                        modal.style.left = `${drag.x}px` // @ts-ignore
+                        modal.style.top = `${drag.y}px`
                     }
                 }
             }
             header.classList.add('draggable')
             header.addEventListener('mousedown', drag.start)
-            popup.addEventListener('mouseup', drag.stop)
-            popup.addEventListener('mousemove', drag.move)
-            backdrop.addEventListener('mousemove', drag.move)
-            backdrop.addEventListener('mouseup', drag.stop)
+            modal.addEventListener('mouseup', drag.stop)
+            modal.addEventListener('mousemove', drag.move)
         }
 
+        // Show modal
+        // @ts-ignore
+        modal.showModal()
     }
 
     /** @param {string} [value] */
@@ -319,8 +296,7 @@ export class Popup {
             if (!ok) return
         }
         if (this.options.onClose) this.options.onClose(value)
-        this.popup.remove()
-        this.backdrop.remove()
+        this.modal.remove()
     }
 
     /** @param { PopupOptions } options */
