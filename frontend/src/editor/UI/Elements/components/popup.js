@@ -86,12 +86,17 @@ export class Popup {
                 e.preventDefault()
                 if (options.closeOnESC) this.close()
             } // @ts-ignore
-            // Enter should select the next element like TAB key
+            // Enter should select the next element like TAB key inside .plc-popup-window
             if (e.key === 'Enter') {
-                e.preventDefault()
-                // const next = document.querySelector(':focus + *')
-                const next = document.querySelector('.plc-popup-content :focus + *') // @ts-ignore
-                if (next) next.focus()
+                const focusableElements = modal.querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"]), input, select, textarea, [contenteditable]')
+                const index = Array.prototype.indexOf.call(focusableElements, e.target)
+                const element = focusableElements[index] 
+                const next = focusableElements[index + 1] || focusableElements[0]
+                const is_plc_popup_confirm_button = element && element.classList.contains('plc-popup-confirm-button')
+                if (next && !is_plc_popup_confirm_button) {
+                    e.preventDefault() // @ts-ignore
+                    next.focus()
+                }
             }
         })
 
@@ -151,9 +156,10 @@ export class Popup {
         if (options.buttons) {
             options.buttons.forEach(button => {
                 const btn = document.createElement('button')
+                btn.classList.add('plc-popup-confirm-button')
                 btn.innerHTML = button.text || 'Button'
-                btn.style.color = button.color || '#000'
-                btn.style.backgroundColor = button.background || '#fff'
+                if (button.color) btn.style.color = button.color
+                if (button.background) btn.style.backgroundColor = button.background
                 const verify = button.verify
                 if (verify) {
                     btn.addEventListener('click', () => {
@@ -365,6 +371,12 @@ export class Popup {
             }
             input_element.addEventListener('input', onInput)
             input_element.addEventListener('change', onInput)
+            input_element.addEventListener('keydown', (e) => { // @ts-ignore
+                if (e.key === 'Enter') {
+                    e.preventDefault()
+                    if (onChange) onChange(states)
+                }
+            })
             formLabels.appendChild(label_element)
             formInputs.appendChild(input_element)
         })
