@@ -109,3 +109,17 @@
     background: transparent !important;
     border: transparent !important;
 }
+
+
+.plc-icon-folder {
+    background-image: var(--plc-folder-icon) !important;
+    background-size: 80% 80% !important;
+    background-repeat: no-repeat !important;
+    background-position: center center !important;
+}
+.plc-icon-gears {
+    background-image: var(--plc-program-icon) !important;
+    background-size: 80% 80% !important;
+    background-repeat: no-repeat !important;
+    background-position: center center !important;
+}

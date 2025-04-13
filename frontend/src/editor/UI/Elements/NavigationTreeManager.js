@@ -2,7 +2,7 @@
 "use strict"
 
 import { MenuElement, PLC_Program, PLC_ProjectItem, PLCEditor } from "../../../utils/types.js"
-import { ElementSynthesis, importCSSCode, CSSimporter } from "../../../utils/tools.js"
+import { ElementSynthesis, CSSimporter } from "../../../utils/tools.js"
 import { folder_icon_url, program_icon_url } from "./components/icons.js"
 
 const minimized = false
@@ -10,21 +10,6 @@ const minimized = false
 const importCSS = CSSimporter(import.meta.url)
 
 await importCSS('./NavigationTreeManager.css')
-
-await importCSSCode(/*CSS*/`
-    .plc-icon-folder {
-        background-image: ${folder_icon_url} !important;
-        background-size: 80% 80% !important;
-        background-repeat: no-repeat !important;
-        background-position: center center !important;
-    }
-    .plc-icon-gears {
-        background-image: ${program_icon_url} !important;
-        background-size: 80% 80% !important;
-        background-repeat: no-repeat !important;
-        background-position: center center !important;
-    }
-`)
 
 const folder_item_html = /*HTML*/`
     <div class="plc-navigation-item ${minimized ? 'minimized' : ''}">

@@ -1,7 +1,7 @@
 // @ts-check
 "use strict"
 
-import { ImageRenderer } from "../../../../utils/tools.js"
+import { ImageRenderer, importCSSCode } from "../../../../utils/tools.js"
 
 // Simple 12x12 folder icon in yellow color, with the ear sticking out on the top left in dark yellow
 //
@@ -60,3 +60,11 @@ export const program_icon = program_icon_svg.outerHTML
 
 export const folder_icon_url = `url('${ImageRenderer.renderSVG(folder_icon_source)}')`
 export const program_icon_url = `url('${ImageRenderer.renderSVG(program_icon_source)}')`
+
+
+await importCSSCode(/*CSS*/`
+    :root {
+        --plc-folder-icon: ${folder_icon_url};
+        --plc-program-icon: ${program_icon_url};
+    }
+`)
