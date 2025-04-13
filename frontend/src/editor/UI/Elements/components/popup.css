@@ -86,3 +86,64 @@
 .plc-popup-footer button[disabled]:focus {
     outline: none;
 }
+
+.plc-popup-form {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+}
+.plc-popup-form-content {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-start;
+}
+.plc-popup-form-labels {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    gap: 4px;
+}
+.plc-popup-form-inputs {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    gap: 4px;
+}
+.plc-popup-form-labels label {
+    font-size: 14px;
+    margin: 4px;
+    padding: 0;
+    margin-right: 4px;
+    user-select: none;
+}
+.plc-popup-form-inputs input {
+    font-size: 14px;
+    padding: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 100%;
+    box-sizing: border-box;
+    outline: none;
+    /* disable auto-complete */
+    -webkit-autocomplete: off;
+    -moz-autocomplete: off;
+    -ms-autocomplete: off;
+    -o-autocomplete: off;
+}
+.plc-popup-form-inputs input:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+}
+
+.plc-popup-form-inputs input.error {
+    border-color: #dc3545;
+    box-shadow: 0 0 5px rgba(220, 53, 69, 0.5);
+}

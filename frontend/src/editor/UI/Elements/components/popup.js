@@ -1,7 +1,7 @@
 // @ts-check
 "use strict"
 
-import { CSSimporter, debug_components, ElementSynthesis } from "../../../../utils/tools.js"
+import { CSSimporter, debug_components, ElementSynthesis, ElementSynthesisMany, toCapitalCase } from "../../../../utils/tools.js"
 
 /** 
  * 
@@ -23,7 +23,8 @@ import { CSSimporter, debug_components, ElementSynthesis } from "../../../../uti
  *     backdrop?: boolean,
  *     closeButton?: boolean,
  *     closeOnESC?: boolean,
- *     verify?: () => boolean,
+ *     verify?: (data: any) => boolean,
+ *     confirmClose?: boolean,
  *     onOpen?: () => void,
  *     onClose?: (value?: string) => void,
  *     closeHandler?: (callback: (value?: string) => void) => void,
@@ -125,17 +126,17 @@ export class Popup {
             })
         }
 
-        const appendContent = (content) => {
-            if (Array.isArray(content)) {
-                content.forEach(c => appendContent(c))
-            } else if (typeof content === 'string') {
+        const appendContent = (element) => {
+            if (Array.isArray(element)) {
+                element.forEach(c => appendContent(c))
+            } else if (typeof element === 'string') {
                 const div = document.createElement('div')
-                div.innerHTML = content
-                this.body.appendChild(div)
-            } else if (content instanceof HTMLElement || content instanceof Element) {
-                this.body.appendChild(content)
+                div.innerHTML = element
+                content.appendChild(div)
+            } else if (element instanceof HTMLElement || element instanceof Element) {
+                content.appendChild(element)
             } else {
-                throw new Error(`Invalid content type: ${typeof content}`)
+                throw new Error(`Invalid content type: ${typeof element}`)
             }
         }
         if (options.content) appendContent(options.content)
@@ -219,25 +220,145 @@ export class Popup {
     }
 
     /** @param {string} [value] */
-    close(value) {
+    async close(value) {
         if (typeof value === 'undefined') value = 'closed'
-        if (this.options.verify) {
-            const ok = this.options.verify()
+        const cancel = value === 'cancel' || value === 'closed'
+        if (cancel) {
+            if (this.options.confirmClose) {
+                const confirmed = await Popup.confirm({
+                    title: 'Confirm',
+                    description: 'Are you sure you want to close this popup?',
+                    confirm_text: 'Yes',
+                    cancel_text: 'No',
+                })
+                if (!confirmed) return
+            }
+        }
+        if (!cancel && this.options.verify) {
+            const ok = this.options.verify(null)
             if (!ok) return
         }
         if (this.options.onClose) this.options.onClose(value)
         this.modal.remove()
     }
 
+
     /** @param { PopupOptions } options */
-    static async form(options) {
+    static async promise(options) {
         options = options || {}
         const popup = new Popup(options)
         const promise = new Promise((resolve) => popup.options.onClose = (value) => resolve(value))
-        const selected = await promise
-        return selected
+        return promise
     }
 
+    /** @param {{ title: string, description: string, confirm_text: string, cancel_text: string }} options */
+    static async confirm(options) { // @ts-ignore
+        options = options || {}
+        const title = options.title || 'Confirm'
+        const description = options.description || 'Are you sure?'
+        const confirm_text = options.confirm_text || 'OK'
+        const cancel_text = options.cancel_text || 'Cancel'
+        const buttons = [
+            { text: confirm_text, value: 'confirm' },
+            { text: cancel_text, value: 'cancel' },
+        ]
+        const selected = await Popup.promise({
+            title,
+            description,
+            buttons,
+            // backdrop: false,
+            // closeButton: false,
+        })
+        return selected === 'confirm'
+    }
+
+
+    /**
+     * @typedef {{ type: 'text', name: string, label?: string, value?: string, placeholder?: string }} TextInput
+     * @typedef {{ type: 'number', name: string, label?: string, value?: number }} NumberInput
+     * @typedef {{ type: 'integer', name: string, label?: string, value?: number }} IntegerInput
+     * @typedef { TextInput | NumberInput | IntegerInput } InputField
+     * 
+     * @typedef { PopupOptions & { inputs: InputField[] }} FormOptions
+     */
+
+    /** @param { FormOptions } options */
+    static async form(options) {
+        options = options || { inputs: [] }
+        const inputs = options.inputs || []
+        const _verify = options.verify
+        options.verify = () => _verify ? _verify(states) : true
+
+        const form = document.createElement('form') // Will be passed to the popup as content
+        form.classList.add('plc-popup-form')
+        const formContent = document.createElement('div')
+        formContent.classList.add('plc-popup-form-content')
+        form.appendChild(formContent)
+        const formLabels = document.createElement('div')
+        formLabels.classList.add('plc-popup-form-labels')
+        formContent.appendChild(formLabels)
+        const formInputs = document.createElement('div')
+        formInputs.classList.add('plc-popup-form-inputs')
+        formContent.appendChild(formInputs)
+        options.content = form
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault()
+        })
+
+        const states = {}
+
+        inputs.forEach((input, index) => {
+            const { type, label, name, value } = input
+            if (!['text', 'number', 'integer'].includes(type)) throw new Error(`Invalid input type: ${type}`)
+            if (!input.name) throw new Error(`Input name is required`)
+            if (input.value && typeof input.value !== 'string' && type === 'text') throw new Error(`Invalid input value: ${input.value}`)
+            if (input.value && typeof input.value !== 'number' && (type === 'number' || type === 'integer')) throw new Error(`Invalid input value: ${input.value}`)
+            const placeholder = type === 'text' ? input.placeholder || '' : ''
+
+            let typeName = type
+            if (type === 'integer') typeName = 'number'
+
+            const [label_element, input_element] = ElementSynthesisMany(/*HTML*/`
+                <label for="${name}">${label || toCapitalCase(name)}</label>
+                <input type="${typeName}" name="${name}" value="${value || ''}" placeholder="${placeholder}">
+            `)
+            states[name] = {
+                value: input.value || '',
+                setError: () => {
+                    input_element.classList.add('error')
+                },
+                clearError: () => {
+                    input_element.classList.remove('error')
+                },
+            }
+            const onChange = e => {
+                const value = e.target.value
+                if (type === 'number') {
+                    states[name].value = parseFloat(value)
+                } else if (type === 'integer') {
+                    states[name].value = parseInt(value, 10)
+                } else {
+                    states[name].value = value
+                }
+            }
+            input_element.addEventListener('input', onChange)
+            input_element.addEventListener('change', onChange)
+            formLabels.appendChild(label_element)
+            formInputs.appendChild(input_element)
+        })
+
+        const selected = await Popup.promise(options)
+        if (selected === 'closed') return null
+        if (selected === 'destroyed') return null
+        if (selected === 'cancel') return null
+        const output = {}
+        Object.keys(states).forEach(key => {
+            const state = states[key]
+            output[key] = state.value
+        })
+        return output
+    }
 
 }
 

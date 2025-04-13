@@ -18,6 +18,12 @@ export const trimWhitespace = (str) => {
     return trimmed
 }
 
+/** @type { (str: string) => string } */
+export const toCapitalCase = (str) => {
+    if (typeof str !== 'string') throw new Error(`Invalid string: ${str}`)
+    return str.charAt(0).toUpperCase() + str.slice(1)
+}
+
 
 /** @type { (href: string) => Promise<void> } */
 export const importCSS = async (href) => {
