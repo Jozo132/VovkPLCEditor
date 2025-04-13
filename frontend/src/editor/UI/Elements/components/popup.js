@@ -21,6 +21,7 @@ import { ElementSynthesis, importCSSCode } from "../../../../utils/tools.js"
  *     draggable?: boolean,
  *     container?: Element | HTMLElement,
  *     backdrop?: boolean,
+ *     closeButton?: boolean,
  *     closeOnESC?: boolean,
  *     verify?: () => boolean,
  *     onOpen?: () => void,
@@ -156,13 +157,19 @@ export class Popup {
         options = options || {}
         if (typeof options.backdrop === 'undefined') options.backdrop = true
         if (typeof options.draggable === 'undefined') options.draggable = true
+        if (typeof options.closeButton === 'undefined') options.closeButton = true
+        if (typeof options.closeOnESC === 'undefined') options.closeOnESC = true
         this.options = options
-        const closeOnESC = typeof options.closeOnESC === 'undefined' ? true : options.closeOnESC
         const modal = ElementSynthesis(popup_template)
         this.modal = modal
 
+        const container = options.container || document.body
+
         modal.addEventListener('keydown', (e) => { // @ts-ignore
-            if (closeOnESC && e.key === 'Escape') this.close()
+            if (e.key === 'Escape') {
+                e.preventDefault()
+                if (options.closeOnESC) this.close()
+            }
         })
 
         const header = this.header = querySelect(modal, '.plc-popup-header')
@@ -172,6 +179,7 @@ export class Popup {
         const description = querySelect(modal, '.plc-popup-description')
         const content = querySelect(modal, '.plc-popup-content')
         const closeButton = querySelect(modal, '.plc-popup-close')
+        if (!options.closeButton) closeButton.remove()
         if (options.title) title.innerHTML = options.title
         else title.remove()
         if (options.description) description.innerHTML = options.description
@@ -238,7 +246,6 @@ export class Popup {
         } else footer.remove()
 
         // Add the popup to the custom container or document body
-        const container = options.container || document.body
         container.appendChild(this.modal)
 
         if (options.onOpen) options.onOpen() // @ts-ignore
@@ -279,6 +286,7 @@ export class Popup {
             }
             header.classList.add('draggable')
             header.addEventListener('mousedown', drag.start)
+            header.addEventListener('mouseup', drag.stop)
             modal.addEventListener('mouseup', drag.stop)
             modal.addEventListener('mousemove', drag.move)
         }
@@ -286,6 +294,13 @@ export class Popup {
         // Show modal
         // @ts-ignore
         modal.showModal()
+
+        const observer = new MutationObserver(() => {
+            if (!container.contains(modal)) {
+                this.close('destroyed')
+            }
+        })
+        observer.observe(container, { childList: true, subtree: true })
     }
 
     /** @param {string} [value] */
