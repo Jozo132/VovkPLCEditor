@@ -65,16 +65,20 @@
 .plc-popup-footer button {
     margin-left: 8px;
     padding: 8px 16px;
-    border: none;
+    border: 1px solid #0000;
     border-radius: 4px;
     cursor: pointer;
     user-select: none;
 }
 .plc-popup-footer button:hover {
     background-color: #ddd;
+    border-color: #ccc;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
 }
 .plc-popup-footer button:focus {
     outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
 }
 .plc-popup-footer button[disabled] {
     background-color: #ccc;
