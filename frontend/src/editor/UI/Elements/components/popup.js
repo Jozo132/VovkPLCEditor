@@ -85,6 +85,13 @@ export class Popup {
             if (e.key === 'Escape') {
                 e.preventDefault()
                 if (options.closeOnESC) this.close()
+            } // @ts-ignore
+            // Enter should select the next element like TAB key
+            if (e.key === 'Enter') {
+                e.preventDefault()
+                // const next = document.querySelector(':focus + *')
+                const next = document.querySelector('.plc-popup-content :focus + *') // @ts-ignore
+                if (next) next.focus()
             }
         })
 
@@ -215,8 +222,12 @@ export class Popup {
             if (!container.contains(modal)) {
                 this.close('destroyed')
             }
+            // If the modal loses "open" attribute, reopen it
+            if (!modal.hasAttribute('open')) { // @ts-ignore
+                modal.showModal()
+            }
         })
-        observer.observe(container, { childList: true, subtree: true })
+        observer.observe(container, { childList: true, subtree: true, attributes: true })
     }
 
     /** @param {string} [value] */
