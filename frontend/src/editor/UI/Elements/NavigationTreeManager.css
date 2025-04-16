@@ -79,6 +79,14 @@
     background: #678F;
 }
 
+.plc-navigation-program:focus > .plc-icon,
+.plc-navigation-program:focus > .plc-title,
+.plc-navigation-folder:focus > .plc-icon,
+.plc-navigation-folder:focus > .plc-title {
+    color: rgb(159, 205, 255);
+    background: #678A;
+}
+
 .plc-icon {
     align-self: center;
     text-align: center;

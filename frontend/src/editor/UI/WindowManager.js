@@ -2,7 +2,7 @@
 "use strict"
 
 import { PLC_Project, PLCEditor } from "../../utils/types.js"
-import { ElementSynthesisMany, getEventPath } from "../../utils/tools.js"
+import { ElementSynthesisMany, getEventPath, isVisible } from "../../utils/tools.js"
 import NavigationTreeManager from "./Elements/NavigationTreeManager.js"
 import TabManager from "./Elements/TabManager.js"
 import EditorUI from "./Elements/EditorUI.js"
@@ -43,7 +43,7 @@ export default class WindowManager {
                                     <!-- More options will be added dynamically -->
                                 </select>
                             </div>
-                            <div class="plc-device-online green">Go online</div>
+                            <div class="plc-device-online green" tabindex="0">Go online</div>
                         </div>
                         <div class="plc-device-info">
                             <!-- Device info will be displayed here -->
@@ -247,6 +247,15 @@ export default class WindowManager {
         device_select_element.value = this.active_device
     }
 
+    get_focusable_elements = () => {
+        const workspace = this.#editor.workspace
+        const elems = [...workspace.querySelectorAll('[tabindex]')]
+        return elems.filter((elem) => { // @ts-ignore
+            const focusable = elem.tabIndex >= 0
+            const visible = isVisible(elem)
+            return focusable && visible
+        })
+    }
 
     initialize() {
         this.refreshDeviceOptions()
@@ -255,8 +264,12 @@ export default class WindowManager {
 
         this.tree_manager.initialize()
 
+
         // On ESC remove all selections
         workspace.addEventListener('keydown', (event) => {
+            const enter = event.key === 'Enter'
+            const space = event.key === ' '
+            const tab = event.key === 'Tab'
             const esc = event.key === 'Escape'
             const ctrl = event.ctrlKey
             const shift = event.shiftKey
@@ -266,14 +279,79 @@ export default class WindowManager {
             const c = event.key.toLocaleLowerCase() === 'c'
             const v = event.key.toLocaleLowerCase() === 'v'
             const a = event.key.toLocaleLowerCase() === 'a'
+            const left = event.key === 'ArrowLeft'
+            const right = event.key === 'ArrowRight'
+            const up = event.key === 'ArrowUp'
+            const down = event.key === 'ArrowDown'
+            const home = event.key === 'Home'
+            const end = event.key === 'End'
+            const pageup = event.key === 'PageUp'
+            const pagedown = event.key === 'PageDown'
+            const f2 = event.key === 'F2'
             // if (esc) this.deselectAll()
             // if (ctrl && c) this.copySelection()
             // if (ctrl && x) this.cutSelection()
             // if (ctrl && v) this.pasteSelection()
             // if (del) this.deleteSelection()
+
+            const activeElement = document.activeElement
+            if (activeElement) {
+                const tree_folder = activeElement.classList.contains('plc-navigation-folder')
+                const tree_file = activeElement.classList.contains('plc-navigation-program')
+                const tree_item = tree_folder || tree_file
+
+                const focusable_elements = this.get_focusable_elements()
+                const length = focusable_elements.length
+                const index = focusable_elements.indexOf(activeElement)
+                const next = index >= 0 ? focusable_elements[(index + 1) % length] : null
+                const prev = index >= 0 ? focusable_elements[(index - 1 + length) % length] : null
+
+
+                if (tree_item) {
+                    if (f2) { // Trigger rename
+                        const item = this.tree_manager.findTreeItemByElement(activeElement)
+                        if (item) { // @ts-ignore
+                            // item.requestRename()
+                        }
+                    }
+                    if (enter || space) { // @ts-ignore
+                        // trigger click on the element
+                        activeElement.click()
+                    }
+                    if (up) {
+                        const prev_item = this.tree_manager.findTreeItemByElement(prev)
+                        if (!prev_item) return
+                        event.preventDefault() // @ts-ignore
+                        if (prev) prev.focus()
+                    }
+                    if (down) {
+                        const next_item = this.tree_manager.findTreeItemByElement(next)
+                        if (!next_item) return
+                        event.preventDefault() // @ts-ignore
+                        if (next) next.focus()
+                    }
+                }
+
+                if (tree_folder) {
+                    if (left) {
+                        const item = this.tree_manager.findTreeItemByElement(activeElement)
+                        if (item) { // @ts-ignore
+                            item.collapse()
+                        }
+                    }
+                    if (right) {
+                        const item = this.tree_manager.findTreeItemByElement(activeElement)
+                        if (item) { // @ts-ignore
+                            item.expand()
+                        }
+                    }
+                }
+
+            }
         })
 
         workspace.addEventListener('mousemove', this.onMouseMove)
+
     }
 
     onMouseMove = (event) => {

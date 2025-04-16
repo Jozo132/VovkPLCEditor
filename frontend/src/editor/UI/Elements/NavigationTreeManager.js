@@ -17,7 +17,7 @@ await importCSS('./NavigationTreeManager.css')
 /** @type { (minimized: boolean) => string } */
 const folder_item_html = minimized => /*HTML*/`
     <div class="plc-navigation-item ${minimized ? 'minimized' : ''}">
-        <div class="plc-navigation-folder">
+        <div class="plc-navigation-folder" tabindex="0">
             <div class="minimize">${minimized ? '+' : '-'}</div>
             <div class="plc-icon plc-icon-folder"></div>
             <div class="plc-title">empty</div>
@@ -30,7 +30,7 @@ const folder_item_html = minimized => /*HTML*/`
 
 const program_item_html = /*HTML*/`
     <div class="plc-navigation-item">
-        <div class="plc-navigation-program">
+        <div class="plc-navigation-program" tabindex="0">
             <div class="plc-void"></div>
             <div class="plc-icon plc-icon-gears"></div>
             <div class="plc-title">empty</div>
@@ -51,7 +51,7 @@ const sortTree = (a, b) => {
 }
 
 /**
- * @typedef { { path: string, div: Element, name: string } } PLC_FolderChild_Base
+ * @typedef { { path: string, div: Element, name: string, expand?: Function, collapse?: Function } } PLC_FolderChild_Base
  * @typedef { PLC_FolderChild_Base & { type: 'folder', item: null } } PLC_FolderChild_Folder
  * @typedef { PLC_FolderChild_Base & { type: 'item', item: PLC_ProjectItem } } PLC_FolderChild_Program
  * @typedef { PLC_FolderChild_Folder | PLC_FolderChild_Program } PLC_FolderChild
@@ -106,12 +106,24 @@ class PLC_Folder {
         return proxy
     }
 
-    onClick = () => {
+    onClick = () => { // @ts-ignore
+        this.header.focus()
         this.div.classList.toggle('minimized')
         const minimized = this.div.classList.contains('minimized')
-        this.navigation.minimized_folders[this.path] = minimized
-        // @ts-ignore
+        this.navigation.minimized_folders[this.path] = minimized // @ts-ignore
         this.minimize.innerText = minimized ? '+' : '-'
+    }
+
+    collapse = () => {
+        this.div.classList.add('minimized')
+        this.navigation.minimized_folders[this.path] = true // @ts-ignore
+        this.minimize.innerText = '+'
+    }
+
+    expand = () => {
+        this.div.classList.remove('minimized')
+        this.navigation.minimized_folders[this.path] = false // @ts-ignore
+        this.minimize.innerText = '-'
     }
 
     sortChildren = () => {
@@ -336,7 +348,10 @@ export default class NavigationTreeManager {
         return div
     }
 
-    #onContextMenu = async (action, event, element) => {
+    /** @param { HTMLElement | Element | null } element */
+    findTreeItemByElement = (element) => {
+        if (!element) return
+
         const classes = element.classList
         const className = classes[0] // Get the first class name
         // console.log(`Navigation tree selected [${className}]: ${selected}, element:`, element, `event:`, event)
@@ -350,7 +365,6 @@ export default class NavigationTreeManager {
         const is_navigation = className === 'plc-navigation-tree'
         if (is_navigation) {
             console.log('Empty navigation tree clicked')
-            console.log(`Action ${action} on empty navigation tree`)
             return
         }
         const container = element.parentElement
@@ -383,6 +397,12 @@ export default class NavigationTreeManager {
         }
         if (!found) return console.error('Item not found in folders or root')
         if (!item) throw new Error('Item not found')
+        return item
+    }
+
+    #onContextMenu = async (action, event, element) => {
+        const item = this.findTreeItemByElement(element)
+        if (!item) return console.error('Item not found in folders or root')
         const type = item.type === 'folder' ? 'folder' : item.item?.type || item.type
         const full_path = item.type === 'folder' ? item.path : ((item.item?.path + '/' + item.item?.name) || '').replace('//', '/') || item.path
         console.log(`Action ${action} on ${type}`, item)

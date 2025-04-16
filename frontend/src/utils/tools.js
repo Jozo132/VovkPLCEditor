@@ -130,6 +130,19 @@ export class ImageRenderer {
     }
 }
 
+/** @type { (elem: HTMLElement | Element) => boolean } */
+export const isVisible = (elem) => {
+    const style = getComputedStyle(elem)
+    if (style.visibility === 'hidden' || style.display === 'none') return false
+    let parent = elem.parentElement
+    while (parent) {
+        const parentStyle = getComputedStyle(parent)
+        if (parentStyle.display === 'none' || parentStyle.visibility === 'hidden') return false
+        parent = parent.parentElement
+    }
+    return true
+}
+
 if (debug_components) {
     Object.assign(window, {
         generateID,
@@ -141,6 +154,7 @@ if (debug_components) {
         getEventPath,
         ImageRenderer,
         CSSimporter,
+        isVisible,
         debug_components,
     })
 }
