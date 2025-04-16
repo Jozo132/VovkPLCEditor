@@ -90,7 +90,7 @@ export class Popup {
             if (e.key === 'Enter') {
                 const focusableElements = modal.querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"]), input, select, textarea, [contenteditable]')
                 const index = Array.prototype.indexOf.call(focusableElements, e.target)
-                const element = focusableElements[index] 
+                const element = focusableElements[index]
                 const next = focusableElements[index + 1] || focusableElements[0]
                 const is_plc_popup_confirm_button = element && element.classList.contains('plc-popup-confirm-button')
                 if (next && !is_plc_popup_confirm_button) {
@@ -110,7 +110,7 @@ export class Popup {
         if (!options.closeButton) closeButton.remove()
         if (options.title) title.innerHTML = options.title
         else title.remove()
-        if (options.description) description.innerHTML = options.description
+        if (options.description) description.innerHTML = options.description.replaceAll('\n', '<br>')
         else description.remove()
         const popup_styles = []
         if (options.width) popup_styles.push(`width: ${options.width};`)
@@ -292,10 +292,11 @@ export class Popup {
 
 
     /**
-     * @typedef {{ type: 'text', value?: string, placeholder?: string }} TextInput
-     * @typedef {{ type: 'number', value?: number }} NumberInput
-     * @typedef {{ type: 'integer', value?: number }} IntegerInput
-     * @typedef { (TextInput | NumberInput | IntegerInput) & { name: string, label?: string, onChange: (data: any) => void } } InputField
+     * @typedef {{ name: string, label?: string, readonly?: boolean, margin?: string, onChange?: (data: any) => void }} InputCommon
+     * @typedef {InputCommon & { type: 'text', value?: string, placeholder?: string }} TextInput
+     * @typedef {InputCommon & { type: 'number', value?: number }} NumberInput
+     * @typedef {InputCommon & { type: 'integer', value?: number }} IntegerInput
+     * @typedef { TextInput | NumberInput | IntegerInput  } InputField
      * 
      * @typedef { PopupOptions & { inputs: InputField[] }} FormOptions
      */
@@ -309,15 +310,6 @@ export class Popup {
 
         const form = document.createElement('form') // Will be passed to the popup as content
         form.classList.add('plc-popup-form')
-        const formContent = document.createElement('div')
-        formContent.classList.add('plc-popup-form-content')
-        form.appendChild(formContent)
-        const formLabels = document.createElement('div')
-        formLabels.classList.add('plc-popup-form-labels')
-        formContent.appendChild(formLabels)
-        const formInputs = document.createElement('div')
-        formInputs.classList.add('plc-popup-form-inputs')
-        formContent.appendChild(formInputs)
         options.content = form
 
         form.addEventListener('submit', (e) => {
@@ -327,7 +319,7 @@ export class Popup {
         const states = {}
 
         inputs.forEach(input => {
-            const { type, label, name, value, onChange } = input
+            const { type, label, name, value, margin, readonly, onChange } = input
             if (!['text', 'number', 'integer'].includes(type)) throw new Error(`Invalid input type: ${type}`)
             if (!input.name) throw new Error(`Input name is required`)
             if (input.value && typeof input.value !== 'string' && type === 'text') throw new Error(`Invalid input value: ${input.value}`)
@@ -337,14 +329,24 @@ export class Popup {
             let typeName = type
             if (type === 'integer') typeName = 'number'
 
-            const [label_element, input_element] = ElementSynthesisMany(/*HTML*/`
-                <label for="${name}">${label || toCapitalCase(name)}</label>
+            const label_element = ElementSynthesis(/*HTML*/`
+                <label for="${name}">${typeof label !== 'undefined' ? label : label || toCapitalCase(name)}</label>
+            `)
+            const input_element = readonly ? ElementSynthesis(/*HTML*/`
+                <p class="readonly"></p>
+            `) : ElementSynthesis(/*HTML*/`
                 <input type="${typeName}" name="${name}" value="${value || ''}" placeholder="${placeholder}">
             `)
+            if (typeof margin !== 'undefined') { // @ts-ignore
+                input_element.style.margin = margin
+            }
+            if (readonly) { // @ts-ignore
+                input_element.innerText = value || ''
+            }
             states[name] = new Proxy({
                 value: input.value || '',
-                setError: () => input_element.classList.add('error'),
-                clearError: () => input_element.classList.remove('error'),
+                setError: () => { input_element.classList.add('error'); return false },
+                clearError: () => { input_element.classList.remove('error'); return false },
             }, {
                 set: (target, prop, value) => {
                     if (prop === 'value_in') {
@@ -352,7 +354,10 @@ export class Popup {
                     }
                     if (prop === 'value') {
                         target.value = value // @ts-ignore
-                        input_element.value = value
+                        if (readonly) input_element.innerText = value
+                        else { // @ts-ignore
+                            input_element.value = value
+                        }
                     }
                     return true
                 }
@@ -369,16 +374,18 @@ export class Popup {
                 }
                 if (onChange) onChange(states)
             }
-            input_element.addEventListener('input', onInput)
-            input_element.addEventListener('change', onInput)
-            input_element.addEventListener('keydown', (e) => { // @ts-ignore
-                if (e.key === 'Enter') {
-                    e.preventDefault()
-                    if (onChange) onChange(states)
-                }
-            })
-            formLabels.appendChild(label_element)
-            formInputs.appendChild(input_element)
+            if (!readonly) {
+                input_element.addEventListener('input', onInput)
+                input_element.addEventListener('change', onInput)
+                input_element.addEventListener('keydown', (e) => { // @ts-ignore
+                    if (e.key === 'Enter') {
+                        e.preventDefault()
+                        if (onChange) onChange(states)
+                    }
+                })
+            }
+            form.appendChild(label_element)
+            form.appendChild(input_element)
         })
 
         const selected = await Popup.promise(options)
@@ -392,6 +399,109 @@ export class Popup {
         })
         return output
     }
+
+    /** @type { (type: string, directory: string, verify?: (path: string) => boolean) => Promise<string | null> } */
+    static createItem = async (type, directory, verify) => {
+        const Type = toCapitalCase(type)
+        const default_name = `New ${Type}`
+        const res = await Popup.form({
+            title: `Create ${Type}`,
+            description: `Enter new ${Type} name`,
+            //draggable: false,
+            backdrop: false,
+            //closeHandler: close => c = close,
+            //closeButton: false,
+            //closeOnESC: false,
+            //confirmClose: true,
+            confirmCloseText: 'Are you sure?',
+            inputs: [
+                { type: 'text', name: 'preview', label: '', value: `${directory}/${default_name}`, readonly: true },
+                {
+                    type: 'text',
+                    name: 'name',
+                    value: default_name,
+                    onChange: data => {
+                        data.name.value = data.name.value.replaceAll('  ', ' ')
+                        data.name.value = data.name.value.replaceAll(/[^a-zA-Z0-9-_ ]/g, '')
+                        while (data.name.value.startsWith(' ')) {
+                            data.name.value = data.name.value.substring(1)
+                        }
+                        data.preview.value = `${directory}/${data.name.value.trim()}`
+                    }
+                },
+            ],
+            verify: values => {
+                const name = values.name
+                const preview = values.preview
+                if (!name.value.trim()) return name.setError('Name is empty')
+                if (verify) {
+                    const valid = verify(preview.value)
+                    if (!valid) return name.setError(`Name already exists`)
+                }
+                return true
+            },
+            buttons: [
+                { text: 'Create', value: 'confirm' },
+                { text: 'Cancel', value: 'cancel' },
+            ]
+        })
+
+        if (!res) return null
+        return res.preview
+    }
+
+    
+    /** @type { (type: string, path: string, verify?: (path: string) => boolean) => Promise<string | null> } */
+    static renameItem = async (type, path, verify) => {
+        const Type = toCapitalCase(type)
+        const segments = path.split('/')
+        const default_name = segments.pop()
+        const res = await Popup.form({
+            title: `Rename ${Type}`,
+            description: `Enter new ${Type} name`,
+            //draggable: false,
+            backdrop: false,
+            //closeHandler: close => c = close,
+            //closeButton: false,
+            //closeOnESC: false,
+            //confirmClose: true,
+            confirmCloseText: 'Are you sure?',
+            inputs: [
+                { type: 'text', name: 'preview', label: '', value: `${path}`, readonly: true },
+                {
+                    type: 'text',
+                    name: 'name',
+                    value: default_name,
+                    onChange: data => {
+                        data.name.value = data.name.value.replaceAll('  ', ' ')
+                        data.name.value = data.name.value.replaceAll(/[^a-zA-Z0-9-_ ]/g, '')
+                        while (data.name.value.startsWith(' ')) {
+                            data.name.value = data.name.value.substring(1)
+                        }
+                        data.preview.value = `${path.split('/').slice(0, -1).join('/')}/${data.name.value.trim()}`
+                    }
+                },
+            ],
+            verify: values => {
+                const name = values.name
+                const preview = values.preview
+                if (!name.value.trim()) return name.setError('Name is empty')
+                if (verify) {
+                    const valid = verify(preview.value)
+                    if (!valid) return name.setError(`Name already exists`)
+                }
+                return true
+            },
+            buttons: [
+                { text: 'Rename', value: 'confirm' },
+                { text: 'Cancel', value: 'cancel' },
+            ]
+        })
+
+        if (!res) return null
+        return res.preview
+    }
+
 
 }
 

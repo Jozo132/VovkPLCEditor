@@ -60,7 +60,7 @@
     color: #666;
 }
 .plc-popup-content {
-    margin-top: 16px;
+    margin-top: 4px;
 }
 .plc-popup-footer button {
     margin-left: 8px;
@@ -91,44 +91,38 @@
     outline: none;
 }
 
+/*
+    The popup form is a grid with 2 columns
+    Its' content is an array of alternating labels and inputs
+    The labels are on the left and the inputs are on the right
+    The first colum should fit the content while the second column should take the rest of the space
+    The all columns should always be centered vertically
+*/
 .plc-popup-form {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto;
     margin: 0;
     padding: 0;
 }
-.plc-popup-form-content {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
+.plc-popup-form * {
+    box-sizing: border-box;
     margin: 0;
     padding: 0;
-    gap: 8px;
-    align-items: center;
-    justify-content: flex-start;
-}
-.plc-popup-form-labels {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    gap: 4px;
-}
-.plc-popup-form-inputs {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    gap: 4px;
-}
-.plc-popup-form-labels label {
+    font-family: Arial, sans-serif;
     font-size: 14px;
-    margin: 4px;
-    padding: 0;
-    margin-right: 4px;
+    margin-top: 4px;
+    margin-bottom: 4px;
     user-select: none;
+    text-align: left;
+    align-self: center;
+    justify-self: stretch;
+    min-width: 0;
 }
-.plc-popup-form-inputs input {
+.plc-popup-form label {
+    margin-right: 8px;
+}
+.plc-popup-form input {
     font-size: 14px;
     padding: 4px;
     border: 1px solid #ccc;
@@ -142,12 +136,12 @@
     -ms-autocomplete: off;
     -o-autocomplete: off;
 }
-.plc-popup-form-inputs input:focus {
+.plc-popup-form input:focus {
     border-color: #007bff;
     box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
 }
 
-.plc-popup-form-inputs input.error {
+.plc-popup-form input.error {
     border-color: #dc3545;
     box-shadow: 0 0 5px rgba(220, 53, 69, 0.5);
 }
