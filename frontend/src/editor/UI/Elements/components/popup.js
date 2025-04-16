@@ -240,6 +240,7 @@ export class Popup {
     /** @param {string} [value] */
     async close(value) {
         if (typeof value === 'undefined') value = 'closed'
+        if (value === 'destroyed') throw new Error('Popup destroyed')
         const cancel = value === 'cancel' || value === 'closed'
         if (cancel) {
             if (this.options.confirmClose) {
