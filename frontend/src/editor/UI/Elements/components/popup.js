@@ -330,14 +330,11 @@ export class Popup {
             let typeName = type
             if (type === 'integer') typeName = 'number'
 
-            const label_element = ElementSynthesis(/*HTML*/`
-                <label for="${name}">${typeof label !== 'undefined' ? label : label || toCapitalCase(name)}</label>
-            `)
-            const input_element = readonly ? ElementSynthesis(/*HTML*/`
-                <p class="readonly"></p>
-            `) : ElementSynthesis(/*HTML*/`
-                <input type="${typeName}" name="${name}" value="${value || ''}" placeholder="${placeholder}">
-            `)
+            const label_element = ElementSynthesis(/*HTML*/`<label for="${name}">${typeof label !== 'undefined' ? label : label || toCapitalCase(name)}</label>`)
+            const input_element =
+                readonly
+                    ? ElementSynthesis(/*HTML*/`<p class="readonly"></p>`)
+                    : ElementSynthesis(/*HTML*/`<input type="${typeName}" name="${name}" value="${value || ''}" placeholder="${placeholder}">`)
             if (typeof margin !== 'undefined') { // @ts-ignore
                 input_element.style.margin = margin
             }
@@ -451,7 +448,7 @@ export class Popup {
         return res.preview
     }
 
-    
+
     /** @type { (type: string, path: string, verify?: (path: string) => boolean) => Promise<string | null> } */
     static renameItem = async (type, path, verify) => {
         const Type = toCapitalCase(type)
