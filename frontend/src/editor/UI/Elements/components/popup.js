@@ -68,6 +68,8 @@ export class Popup {
     /** @type {Element} */ body
     /** @type {Element} */ footer
 
+    closed = false
+
     /** @param {PopupOptions} options */
     constructor(options) {
         options = options || {}
@@ -239,6 +241,7 @@ export class Popup {
 
     /** @param {string} [value] */
     async close(value) {
+        if (this.closed) return
         if (typeof value === 'undefined') value = 'closed'
         if (value === 'destroyed') throw new Error('Popup destroyed')
         const cancel = value === 'cancel' || value === 'closed'
@@ -257,6 +260,7 @@ export class Popup {
             const ok = this.options.verify(null)
             if (!ok) return
         }
+        this.closed = true
         if (this.options.onClose) this.options.onClose(value)
         this.modal.remove()
     }
