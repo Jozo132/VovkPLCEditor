@@ -51,7 +51,7 @@ const sortTree = (a, b) => {
 }
 
 /**
- * @typedef { { path: string, div: Element, name: string, expand?: Function, collapse?: Function } } PLC_FolderChild_Base
+ * @typedef { { path: string, full_path: string, div: Element, name: string, expand?: Function, collapse?: Function } } PLC_FolderChild_Base
  * @typedef { PLC_FolderChild_Base & { type: 'folder', item: null } } PLC_FolderChild_Folder
  * @typedef { PLC_FolderChild_Base & { type: 'item', item: PLC_ProjectItem } } PLC_FolderChild_Program
  * @typedef { PLC_FolderChild_Folder | PLC_FolderChild_Program } PLC_FolderChild
@@ -59,6 +59,7 @@ const sortTree = (a, b) => {
 class PLC_Folder {
     type = 'folder'
     path = ''
+    full_path = ''
     div
     name
     /** @type { PLC_FolderChild[] } */
@@ -74,6 +75,7 @@ class PLC_Folder {
         path = sanitizePath(path)
         if (!path) throw new Error('Path is empty')
         this.path = path
+        this.full_path = path
         this.name = path.split('/').pop() || ''
         if (!this.name) throw new Error('Folder name not found')
         if (typeof this.navigation.minimized_folders[path] === 'undefined') {
@@ -157,6 +159,7 @@ class PLC_Folder {
         if (!name) throw new Error('Folder name not found')
         const old_path = this.path
         this.path = new_path
+        this.full_path = new_path
         this.name = name // @ts-ignore
         this.title.innerText = name
 
@@ -181,6 +184,7 @@ export default class NavigationTreeManager {
     /** @type { PLC_Folder[] } */
     folders = []
 
+    state
 
     /** @type { { [path: string]: boolean } } */
     minimized_folders = {}
@@ -197,6 +201,18 @@ export default class NavigationTreeManager {
         if (!container) throw new Error('Navigation tree container not found')
         container.innerHTML = ''
         this.#container = container
+
+        this.state = new Proxy({
+            highlighted: null,
+            focused: null,
+        }, {
+            set: (target, prop, value) => {
+                const prev_highlighted = target.highlighted
+                const prev_focused = target.focused
+                target[prop] = value
+                return true
+            }
+        })
     }
 
 
@@ -325,7 +341,7 @@ export default class NavigationTreeManager {
                 folder = new PLC_Folder(this, walker)
                 this.folders.push(folder)
                 /** @type { PLC_FolderChild } */
-                const child = { type: 'folder', path: walker, div: folder.div, name: folder.name, item: null }
+                const child = { type: 'folder', path: walker, full_path: walker, div: folder.div, name: folder.name, item: null }
                 if (parent) parent.addChild(child)
                 else this.#root.push(child)
             }
@@ -348,60 +364,8 @@ export default class NavigationTreeManager {
         return div
     }
 
-    /** @param { HTMLElement | Element | null } element */
-    findTreeItemByElement = (element) => {
-        if (!element) return
-
-        const classes = element.classList
-        const className = classes[0] // Get the first class name
-        // console.log(`Navigation tree selected [${className}]: ${selected}, element:`, element, `event:`, event)
-        const matches = [
-            'plc-navigation-folder',
-            'plc-navigation-program',
-            'plc-navigation-tree',
-        ]
-        const isMatch = matches.some(match => className === match)
-        if (!isMatch) return console.error('Element does not match any of the expected classes', classes, matches, element)
-        const is_navigation = className === 'plc-navigation-tree'
-        if (is_navigation) {
-            console.log('Empty navigation tree clicked')
-            return
-        }
-        const container = element.parentElement
-        let found = false
-        let item = null
-        // console.log('Folders', this.folders)
-        for (const folder of this.folders) {
-            // selected -> 'delete' | 'rename' | 'add_program' | 'add_folder' | ...
-            if (folder.div === container) {
-                found = true
-                item = folder
-                break
-            }
-            folder.children.forEach(child => {
-                if (!found && child.div === container) {
-                    found = true
-                    item = child
-                }
-            })
-        }
-        if (!found) {
-            for (let i = 0; i < this.#root.length; i++) {
-                const root = this.#root[i]
-                if (root.div === container) {
-                    found = true
-                    item = root
-                    break
-                }
-            }
-        }
-        if (!found) return console.error('Item not found in folders or root')
-        if (!item) throw new Error('Item not found')
-        return item
-    }
-
     #onContextMenu = async (action, event, element) => {
-        const item = this.findTreeItemByElement(element)
+        const item = this.findItem(element)
         if (!item) return console.error('Item not found in folders or root')
         const type = item.type === 'folder' ? 'folder' : item.item?.type || item.type
         const full_path = item.type === 'folder' ? item.path : ((item.item?.path + '/' + item.item?.name) || '').replace('//', '/') || item.path
@@ -506,10 +470,11 @@ export default class NavigationTreeManager {
             if (!div) throw new Error('Div not found')
             const folder = this.folders.find(f => f.path === file.path)
             if (folder) {
-                const full_path = folder.path + '/' + file.name
-                folder.addChild({ type: 'item', path: full_path, name: file.name, div, item: file })
+                const full_path = `${folder.path}/${file.name}`.replace('//', '/')
+                folder.addChild({ type: 'item', path: full_path, full_path, name: file.name, div, item: file })
             } else {
-                root.push({ type: 'item', path: file.path, name: file.name, div, item: file })
+                const full_path = `${file.path}/${file.name}`.replace('//', '/')
+                root.push({ type: 'item', path: file.path, full_path, name: file.name, div, item: file })
             }
         })
 
@@ -522,6 +487,97 @@ export default class NavigationTreeManager {
         editor.initial_program = null // Prevent opening the initial program again on redraw
     }
 
+    /** @type { (filter: any) => (PLC_Folder | PLC_FolderChild | null) }  */
+    findItem(filter) { // Find item (folder, program, ...) by path or matching element
+        if (!filter) return null // @ts-ignore
+        if (filter && filter.full_path) return filter
+        if (typeof filter === 'string') {
+            filter = sanitizePath(filter)
+            /** @type { (items: PLC_Folder | PLC_FolderChild) => (PLC_Folder | PLC_FolderChild | null) } */
+            const recursiveSearch = (item) => {
+                if (item.full_path === filter) return item // @ts-ignore
+                if (item.type === 'folder' && item.children) {
+                    /** @type { PLC_Folder } *///@ts-ignore
+                    const folder = item
+                    for (let i = 0; i < folder.children.length; i++) {
+                        const found_in_children = recursiveSearch(folder.children[i])
+                        if (found_in_children) return found_in_children
+                    }
+                }
+                return null
+            }
+            for (let i = 0; i < this.folders.length; i++) {
+                const found_in_folders = recursiveSearch(this.folders[i])
+                if (found_in_folders) return found_in_folders
+            }
+            for (let i = 0; i < this.#root.length; i++) {
+                const found_in_root = recursiveSearch(this.#root[i])
+                if (found_in_root) return found_in_root
+            }
+            return null
+        }
+
+
+        const findTreeItemByElement = (element) => {
+            const classes = element.classList
+            const className = classes[0] // Get the first class name
+            // console.log(`Navigation tree selected [${className}]: ${selected}, element:`, element, `event:`, event)
+            const matches = [
+                'plc-navigation-item',
+                'plc-navigation-folder',
+                'plc-navigation-program',
+                'plc-navigation-tree',
+            ]
+            const isMatch = matches.some(match => className === match)
+            if (!isMatch) return console.error('Element does not match any of the expected classes', classes, matches, element)
+            const is_navigation_item = className === 'plc-navigation-item'
+            if (is_navigation_item) {
+                const child0 = element.childNodes[0] // @ts-ignore
+                return findTreeItemByElement(child0)
+            }
+            const is_navigation = className === 'plc-navigation-tree'
+            if (is_navigation) {
+                console.log('Empty navigation tree clicked')
+                return
+            }
+            const container = element.parentElement
+            let found = false
+            let item = null
+            // console.log('Folders', this.folders)
+            for (const folder of this.folders) {
+                // selected -> 'delete' | 'rename' | 'add_program' | 'add_folder' | ...
+                if (folder.div === container) {
+                    found = true
+                    item = folder
+                    break
+                }
+                folder.children.forEach(child => {
+                    if (!found && child.div === container) {
+                        found = true
+                        item = child
+                    }
+                })
+            }
+            if (!found) {
+                for (let i = 0; i < this.#root.length; i++) {
+                    const root = this.#root[i]
+                    if (root.div === container) {
+                        found = true
+                        item = root
+                        break
+                    }
+                }
+            }
+            if (!found) return console.error('Item not found in folders or root')
+            if (!item) throw new Error('Item not found')
+            return item
+        }
+
+        const item = findTreeItemByElement(filter)
+
+        if (!item) return null
+        return item
+    }
 
 
     /** @param { string } path */

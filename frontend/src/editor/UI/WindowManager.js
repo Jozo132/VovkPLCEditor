@@ -20,6 +20,8 @@ export default class WindowManager {
     /** @type { (device: string) => Promise<boolean> } */
     requestConnect = async (device) => false
 
+    findItem = (element) => this.tree_manager.findItem(element)
+
     #editor
     /** @param {PLCEditor} editor */
     constructor(editor) {
@@ -309,7 +311,7 @@ export default class WindowManager {
 
                 if (tree_item) {
                     if (f2) { // Trigger rename
-                        const item = this.tree_manager.findTreeItemByElement(activeElement)
+                        const item = this.findItem(activeElement)
                         if (item) { // @ts-ignore
                             // item.requestRename()
                         }
@@ -319,13 +321,13 @@ export default class WindowManager {
                         activeElement.click()
                     }
                     if (up) {
-                        const prev_item = this.tree_manager.findTreeItemByElement(prev)
+                        const prev_item = this.findItem(prev)
                         if (!prev_item) return
                         event.preventDefault() // @ts-ignore
                         if (prev) prev.focus()
                     }
                     if (down) {
-                        const next_item = this.tree_manager.findTreeItemByElement(next)
+                        const next_item = this.findItem(next)
                         if (!next_item) return
                         event.preventDefault() // @ts-ignore
                         if (next) next.focus()
@@ -334,13 +336,13 @@ export default class WindowManager {
 
                 if (tree_folder) {
                     if (left) {
-                        const item = this.tree_manager.findTreeItemByElement(activeElement)
+                        const item = this.findItem(activeElement)
                         if (item) { // @ts-ignore
                             item.collapse()
                         }
                     }
                     if (right) {
-                        const item = this.tree_manager.findTreeItemByElement(activeElement)
+                        const item = this.findItem(activeElement)
                         if (item) { // @ts-ignore
                             item.expand()
                         }
