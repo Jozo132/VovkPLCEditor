@@ -38,7 +38,7 @@ export let PLC_Symbol
 /** @typedef { import('../languages/index.js').PLC_ProgramBlock } PLC_ProgramBlock * @type { PLC_ProgramBlock } */
 export let PLC_ProgramBlock
 
-/** @typedef {{ id?: string, path: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], host?: EditorUI, tab?: Element }} PLC_Program * @type { PLC_Program } */
+/** @typedef {{ id?: string, path: string, full_path: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], host?: EditorUI, tab?: Element }} PLC_Program * @type { PLC_Program } */
 export let PLC_Program
 
 /** @typedef { PLC_Program } PLC_ProjectItem * @type { PLC_ProjectItem } */

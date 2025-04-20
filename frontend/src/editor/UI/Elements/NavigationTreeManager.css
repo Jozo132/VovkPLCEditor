@@ -79,10 +79,10 @@
     background: #678F;
 }
 
-.plc-navigation-program:focus > .plc-icon,
-.plc-navigation-program:focus > .plc-title,
-.plc-navigation-folder:focus > .plc-icon,
-.plc-navigation-folder:focus > .plc-title {
+.plc-navigation-item.selected > .plc-navigation-program > .plc-icon,
+.plc-navigation-item.selected > .plc-navigation-program > .plc-title,
+.plc-navigation-item.selected > .plc-navigation-folder > .plc-icon,
+.plc-navigation-item.selected > .plc-navigation-folder > .plc-title {
     color: rgb(159, 205, 255);
     background: #678A;
 }

@@ -21,15 +21,16 @@ export const plc_project = {
         { name: 'light2', location: 'output', type: 'bit', address: 0.1, initial_value: 0, comment: 'Test output' },
     ],
     folders: [
-        '/test/b',
-        '/test/a',
-        '/test/c',
+        '/programs/test/b',
+        '/programs/test/a',
+        '/programs/test/c',
     ],
     files: [
         {
             path: '/',
             type: 'program',
             name: 'main',
+            full_path: '/main',
             comment: 'This is the main program',
             blocks: [
                 {
@@ -89,6 +90,7 @@ export const plc_project = {
             path: '/programs/some more programs',
             type: 'program',
             name: 'test',
+            full_path: '/programs/some more programs/test',
             comment: 'This is not the main program',
             blocks: [
                 {

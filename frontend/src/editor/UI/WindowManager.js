@@ -21,6 +21,7 @@ export default class WindowManager {
     requestConnect = async (device) => false
 
     findItem = (element) => this.tree_manager.findItem(element)
+    highlightItem = (element) => this.tree_manager.highlightItem(element)
 
     #editor
     /** @param {PLCEditor} editor */
@@ -337,14 +338,16 @@ export default class WindowManager {
                 if (tree_folder) {
                     if (left) {
                         const item = this.findItem(activeElement)
+                        // console.log('Left', item)
                         if (item) { // @ts-ignore
-                            item.collapse()
+                            item.item.collapse()
                         }
                     }
                     if (right) {
                         const item = this.findItem(activeElement)
+                        // console.log('Right', item)
                         if (item) { // @ts-ignore
-                            item.expand()
+                            item.item.expand()
                         }
                     }
                 }
@@ -384,7 +387,7 @@ export default class WindowManager {
     /** @param { PLC_Project } project */
     openProject(project) {
         this.project = project
-        this.tree_manager.draw_navigation_tree()
+        this.tree_manager.draw_navigation_tree(true)
         // this.tab_manager.draw_tabs()
         this.refreshDeviceOptions()
         // this.#editor.draw()

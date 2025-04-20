@@ -14,10 +14,10 @@ const importCSS = CSSimporter(import.meta.url)
 
 await importCSS('./NavigationTreeManager.css')
 
-/** @type { (minimized: boolean) => string } */
-const folder_item_html = minimized => /*HTML*/`
-    <div class="plc-navigation-item ${minimized ? 'minimized' : ''}">
-        <div class="plc-navigation-folder" tabindex="0">
+/** @type { (params: { minimized: boolean, draggable: boolean, selected: boolean }) => string } */
+const folder_item_html = ({ minimized, draggable, selected }) => /*HTML*/`
+    <div class="plc-navigation-item ${minimized ? 'minimized' : ''} ${selected ? 'selected' : ''}">
+        <div class="plc-navigation-folder" tabindex="0" draggable="${draggable}">
             <div class="minimize">${minimized ? '+' : '-'}</div>
             <div class="plc-icon plc-icon-folder"></div>
             <div class="plc-title">empty</div>
@@ -28,9 +28,10 @@ const folder_item_html = minimized => /*HTML*/`
     </div>
 `
 
-const program_item_html = /*HTML*/`
-    <div class="plc-navigation-item">
-        <div class="plc-navigation-program" tabindex="0">
+/** @type { (params: { draggable: boolean, selected: boolean }) => string } */
+const program_item_html = ({ draggable, selected }) => /*HTML*/`
+    <div class="plc-navigation-item ${selected ? 'selected' : ''}">
+        <div class="plc-navigation-program" tabindex="0" draggable="${draggable}">
             <div class="plc-void"></div>
             <div class="plc-icon plc-icon-gears"></div>
             <div class="plc-title">empty</div>
@@ -41,31 +42,112 @@ const program_item_html = /*HTML*/`
 
 const sanitizePath = path => '/' + (path.replace(/\/+/g, '/').split('/').map(p => p.trim()).filter(Boolean).join('/') || '')
 const sortTree = (a, b) => {
-    if (b.type === 'item' && b.item.name === 'main') return 1
-    if (a.type === 'item' && a.item.name === 'main') return -1
+    // Sort by depth, where higher depth has higher priority
+    if (a.depth !== b.depth) return a.depth - b.depth
+    if (b.type === 'file' && b.item.name === 'main') return 1
+    if (a.type === 'file' && a.item.name === 'main') return -1
     if (a.type === 'folder' && b.type !== 'folder') return -1
     if (a.type !== 'folder' && b.type === 'folder') return 1
-    const a_name = a.path.split('/').pop() || ''
-    const b_name = b.path.split('/').pop() || ''
+    const a_name = (a.full_path || a.path).split('/').pop() || ''
+    const b_name = (b.full_path || b.path).split('/').pop() || ''
     return a_name.localeCompare(b_name)
 }
 
-/**
- * @typedef { { path: string, full_path: string, div: Element, name: string, expand?: Function, collapse?: Function } } PLC_FolderChild_Base
- * @typedef { PLC_FolderChild_Base & { type: 'folder', item: null } } PLC_FolderChild_Folder
- * @typedef { PLC_FolderChild_Base & { type: 'item', item: PLC_ProjectItem } } PLC_FolderChild_Program
- * @typedef { PLC_FolderChild_Folder | PLC_FolderChild_Program } PLC_FolderChild
- */
+
+class PLC_File {
+    type = 'file'
+    path = ''
+    full_path = ''
+    div
+    name = ''
+    comment = ''
+    blocks = []
+    item
+    /** @param { PLC_ProjectItem } item */
+
+    navigation
+
+    /** @param { NavigationTreeManager } navigation * @param { PLC_ProjectItem } item */
+    constructor(navigation, item) {
+        this.navigation = navigation
+        this.item = item
+        this.path = sanitizePath(item.path)
+        this.full_path = sanitizePath(item.full_path)
+        this.name = item.name || ''
+        this.comment = item.comment || ''
+        if (!this.name) throw new Error('File name not found')
+        if (!this.path) throw new Error('File path not found')
+        if (!this.full_path) throw new Error('File full path not found')
+        const draggable = true
+        const selected = this.navigation.state.selected === this.full_path
+        this.div = ElementSynthesis(program_item_html({ draggable, selected }))
+        const program_div = this.div.querySelector('.plc-navigation-program'); if (!program_div) throw new Error('Program div not found')
+        const title = this.div.querySelector('.plc-title'); if (!title) throw new Error('Title not found')
+        this.title = title
+        program_div.addEventListener('click', this.onClick)
+
+
+
+        // Use proxy to update the folder name change dynamically
+        const proxy = new Proxy(this, {
+            set(target, prop, value) {
+                if (prop === 'name') { // @ts-ignore
+                    target.title.innerText = value
+                    return true
+                }
+                return Reflect.set(target, prop, value)
+            }
+        })
+
+        proxy.name = this.name // Update the name property to trigger the setter
+        return proxy
+    }
+
+    onClick = () => { // @ts-ignore
+        this.div.classList.toggle('selected')
+        this.navigation.state.selected = this.div.classList.contains('selected') ? this.full_path : null
+        this.navigation.state.focused = this.full_path
+        // TODO: Open the program in the editor
+        const is_highlighted = this.navigation.state.selected === this.full_path
+        // if (!is_highlighted) {
+        this.navigation.highlightItem(this.full_path)
+        // return
+        // }
+    }
+
+    /** @param { string } new_path */
+    rename = (new_path) => {
+        if (!new_path) throw new Error('New path is empty')
+        const parts = new_path.split('/')
+        const new_name = parts.pop() || ''
+        const path = parts.join('/')
+        if (!new_name) throw new Error('File name not found')
+        this.name = new_name
+        this.full_path = new_path
+        this.path = path
+        this.item.name = new_name
+        this.item.full_path = new_path
+        this.item.path = path
+    }
+
+    destroy() {
+        this.div.remove()
+    }
+}
+
 class PLC_Folder {
     type = 'folder'
     path = ''
     full_path = ''
     div
     name
-    /** @type { PLC_FolderChild[] } */
-    children = []
+
+    depth = -1
 
     item = null
+
+    /** @type { PLC_TreeItem[] } */
+    children = []
 
     navigation
 
@@ -76,12 +158,17 @@ class PLC_Folder {
         if (!path) throw new Error('Path is empty')
         this.path = path
         this.full_path = path
-        this.name = path.split('/').pop() || ''
+        const parts = path.split('/')
+        this.name = parts.pop() || ''
+        this.depth = parts.length - 1
         if (!this.name) throw new Error('Folder name not found')
         if (typeof this.navigation.minimized_folders[path] === 'undefined') {
             this.navigation.minimized_folders[path] = initial_tree_minimized
         }
-        this.div = ElementSynthesis(folder_item_html(this.navigation.minimized_folders[path]))
+        const minimized = this.navigation.minimized_folders[path]
+        const draggable = true
+        const selected = this.navigation.state.selected === path
+        this.div = ElementSynthesis(folder_item_html({ minimized, draggable, selected }))
         const minimize = this.div.querySelector('.minimize'); if (!minimize) throw new Error('Minimize button not found')
         const header = this.div.querySelector('.plc-navigation-folder'); if (!header) throw new Error('Navigation folder not found')
         const title = this.div.querySelector('.plc-title'); if (!title) throw new Error('Title not found')
@@ -92,6 +179,7 @@ class PLC_Folder {
         this.list = list
 
         this.header.addEventListener('click', this.onClick)
+
 
         // Use proxy to update the folder name change dynamically
         const proxy = new Proxy(this, {
@@ -110,10 +198,28 @@ class PLC_Folder {
 
     onClick = () => { // @ts-ignore
         this.header.focus()
+        // const is_selected = this.navigation.state.selected === this.full_path
+        // if (!is_selected) {
+        this.navigation.highlightItem(this.full_path)
+        // return
+        // }
         this.div.classList.toggle('minimized')
         const minimized = this.div.classList.contains('minimized')
         this.navigation.minimized_folders[this.path] = minimized // @ts-ignore
         this.minimize.innerText = minimized ? '+' : '-'
+    }
+
+    /** @param { PLC_TreeItem } child */
+    appendChild = (child) => {
+        if (this.children.find(c => c.full_path === child.full_path)) return
+        this.children.push(child)
+        if (this.list) this.list.appendChild(child.div)
+        else throw new Error('Children list not found')
+    }
+    clearChildren = () => {
+        this.children = []
+        if (this.list) this.list.innerHTML = ''
+        else throw new Error('Children list not found')
     }
 
     collapse = () => {
@@ -128,68 +234,76 @@ class PLC_Folder {
         this.minimize.innerText = '-'
     }
 
-    sortChildren = () => {
-        this.children.sort(sortTree)
-        this.list.innerHTML = ''
-        this.children.forEach(child => this.list.appendChild(child.div))
-    }
-
-    /** @param { PLC_FolderChild } child */
-    addChild = (child) => {
-        if (!child) throw new Error('Child not found')
-        if (this.children.some(c => c.path === child.path)) return
-        this.children.push(child)
-        this.list.appendChild(child.div)
-    }
-
-    /** @param { PLC_FolderChild } child */
-    removeChild = (child) => {
-        if (!child) throw new Error('Child not found')
-        const index = this.children.findIndex(c => c.path === child.path)
-        if (index === -1) return
-        this.children.splice(index, 1)
-        child.div.remove()
-    }
-
     /** @param { string } new_path */
     rename = (new_path) => {
-        const exists = this.navigation.folders.find(f => f.path === new_path)
-        if (exists) throw new Error('Folder already exists')
-        const name = new_path.split('/').pop() || ''
-        if (!name) throw new Error('Folder name not found')
-        const old_path = this.path
-        this.path = new_path
+        if (!new_path) throw new Error('New path is empty')
+        const parts = new_path.split('/')
+        const new_name = parts.pop() || ''
+        const path = parts.join('/')
+        if (!new_name) throw new Error('Folder name not found')
+        this.name = new_name
         this.full_path = new_path
-        this.name = name // @ts-ignore
-        this.title.innerText = name
-
-        const minimized = this.navigation.minimized_folders[old_path]
-        delete this.navigation.minimized_folders[old_path]
-        this.navigation.minimized_folders[new_path] = minimized
+        this.path = path
+        for (const child of this.children) {
+            const name = child.name
+            const new_child_path = sanitizePath(`${new_path}/${name}`)
+            child.rename(new_child_path)
+        }
     }
 
     destroy() {
-        this.children.forEach(child => child.div.remove())
-        this.children = []
         this.div.remove()
     }
 }
 
 
+/** 
+ * @typedef { PLC_Folder | PLC_File } PLC_TreeItem
+ * 
+ * @typedef { { fixed?: boolean, full_path: string, depth: number, type: 'file' | 'folder', minimized?: boolean, selected?: boolean, item: PLC_TreeItem } }  RootState
+**/
+
+/** @type {{ files: PLC_ProjectItem[], folders: string[] }} */
+const default_root_state = {
+    files: [
+        { type: 'program', name: 'main', path: '/', full_path: '/main', comment: '', blocks: [] }
+    ],
+    folders: [
+        '/programs',
+    ]
+}
+
 export default class NavigationTreeManager {
 
-    /** @type { PLC_FolderChild[] } */
-    #root = []
 
-    /** @type { PLC_Folder[] } */
-    folders = []
+    /*
+        /main -> file (L0 - fixed)
+        /programs/ -> folder (L0 - fixed)
+        /porgrams/sample_1 -> file (L1)
+        /programs/sample_2 -> file (L1)
+        /programs/tests/ -> folder (L1)
+        /programs/tests/sample_3 -> file (L2)
+        /programs/tests/sample_4 -> file (L2)
+        /programs/tests/sample_5 -> file (L2)
+        /programs/tests/more tests/ -> folder (L2)
+        /programs/tests/more tests/sample_6 -> file (L3)
+        /programs/tests/more tests/sample_7 -> file (L3)
+        /programs/tests/more tests/sample_8 -> file (L3)
+    */
 
-    state
+    /** @type { RootState[] } */
+    root = []
+
+    /** @type {{ [key: string]: string | null }} */
+    state = {
+        focused: null,
+        selected: null,
+    }
 
     /** @type { { [path: string]: boolean } } */
     minimized_folders = {}
 
-    #container
+    container
     #editor
     /** @param { PLCEditor } editor */
     constructor(editor) {
@@ -200,14 +314,14 @@ export default class NavigationTreeManager {
         const container = workspace.querySelector('.plc-navigation-tree')
         if (!container) throw new Error('Navigation tree container not found')
         container.innerHTML = ''
-        this.#container = container
+        this.container = container
 
         this.state = new Proxy({
-            highlighted: null,
+            selected: null,
             focused: null,
         }, {
             set: (target, prop, value) => {
-                const prev_highlighted = target.highlighted
+                const prev_highlighted = target.selected
                 const prev_focused = target.focused
                 target[prop] = value
                 return true
@@ -233,9 +347,10 @@ export default class NavigationTreeManager {
         ]
         /** @type { MenuElement[] } */
         const ctx_edit_program = [
-            { type: 'item', name: 'cut', label: 'Cut' },
-            { type: 'item', name: 'copy', label: 'Copy' },
-            { type: 'item', name: 'paste', label: 'Paste' },
+            { type: 'item', name: 'open', label: 'Open' },
+            // { type: 'item', name: 'cut', label: 'Cut' },
+            // { type: 'item', name: 'copy', label: 'Copy' },
+            // { type: 'item', name: 'paste', label: 'Paste' },
             { type: 'separator' },
             { type: 'item', name: 'delete', label: 'Delete' },
             { type: 'item', name: 'rename', label: 'Rename' },
@@ -250,9 +365,10 @@ export default class NavigationTreeManager {
         ]
         /** @type { MenuElement[] } */
         const ctx_online_program = [
-            { type: 'item', name: 'cut', label: 'Cut', disabled: true },
-            { type: 'item', name: 'copy', label: 'Copy' },
-            { type: 'item', name: 'paste', label: 'Paste', disabled: true },
+            { type: 'item', name: 'open', label: 'Open' },
+            // { type: 'item', name: 'cut', label: 'Cut', disabled: true },
+            // { type: 'item', name: 'copy', label: 'Copy' },
+            // { type: 'item', name: 'paste', label: 'Paste', disabled: true },
             { type: 'separator' },
             { type: 'item', name: 'delete', label: 'Delete', disabled: true },
             { type: 'item', name: 'rename', label: 'Rename', disabled: true },
@@ -291,7 +407,7 @@ export default class NavigationTreeManager {
 
         /** @type { MenuElement[] } */
         const ctx_edit_empty = [
-            { type: 'item', name: 'add_folder', label: 'Add Folder' },
+            // { type: 'item', name: 'add_folder', label: 'Add Folder' },
         ]
 
         const on_context_open_empty = (event, element) => {
@@ -302,7 +418,7 @@ export default class NavigationTreeManager {
             editor.window_manager.tree_manager.#onContextMenu(action, event, element)
         }
         editor.context_manager.addListener({
-            target: this.#container,
+            target: this.container,
             className: 'plc-navigation-tree',
             onOpen: on_context_open_empty,
             onClose: on_context_close_empty,
@@ -310,70 +426,82 @@ export default class NavigationTreeManager {
 
     }
 
-    /** @param { PLC_ProjectItem } item */
-    #draw_structure = (item) => {
-        if (item.type === 'program') return this.#draw_item(item)
-        if (item.type === 'item') return this.#draw_item(item)
-    }
 
 
+    /** @param { { item?: PLC_Program | PLC_TreeItem, path?: string, recursive?: boolean, fixed?: boolean, redraw?: boolean } } params */
+    createTreeItem = ({ item, path, recursive, fixed, redraw }) => {
+        if (path) path = sanitizePath(path)
+        if (item && item.path && item.name && !item.full_path) item.full_path = sanitizePath(item.path + '/' + item.name)
+        if (item && item.full_path) path = item.full_path = sanitizePath(item.full_path)
+        if (!path) throw new Error('Path is empty')
+        fixed = fixed || false // @ts-ignore
+        if (item && item.fixed) fixed = true
+        if (typeof redraw === undefined) redraw = true
 
-    /** @param { string } path */
-    #recursivelyCreateFolder = (path) => {
-        path = sanitizePath(path)
+        const type = item ? (item.type === 'folder' ? 'folder' : 'file') : 'folder'
+
+        // console.log(`Create tree item`, { item, path, recursive, fixed })
+
         // Recurively add folder structures to the tree
         // Example:
         // "/folder1/folder2/folder3" -> ["/folder1", "/folder1/folder2", "/folder1/folder2/folder3"]
-        const tree = path.split('/').filter(Boolean)
-        let folder = this.folders.find(f => f.path === path)
-        if (folder) return
+        let exists = this.root.find(f => f.full_path === path)
+        if (exists) return
         let walker = ''
-        while (tree.length) {
+        const tree = path.split('/').filter(Boolean)
+        if (type === 'file') tree.pop() // Remove the file name from the path for folder generation
+        let root_path = true
+        while (root_path || tree.length) {
             const name = tree.shift() || ''
             walker += '/' + name
-            const parent = folder
-            folder = this.folders.find(f => f.path === walker)
-            if (!folder) {
-                this.#editor.project.folders = this.#editor.project.folders || []
-                if (!this.#editor.project.folders.includes(walker)) {
-                    this.#editor.project.folders.push(walker)
-                }
-                folder = new PLC_Folder(this, walker)
-                this.folders.push(folder)
-                /** @type { PLC_FolderChild } */
-                const child = { type: 'folder', path: walker, full_path: walker, div: folder.div, name: folder.name, item: null }
-                if (parent) parent.addChild(child)
-                else this.#root.push(child)
-            }
-        }
-    }
+            exists = this.root.find(f => f.full_path === walker)
 
-    /** @param { PLC_Program } program */
-    #draw_item = (program) => {
-        const div = ElementSynthesis(program_item_html)
-        const title = div.querySelector('.plc-title'); if (!title) throw new Error('Title not found') // @ts-ignore
-        title.innerText = program.name
-        div.addEventListener('click', () => {
-            if (!program.id) throw new Error('Program ID not found')
-            this.#editor.window_manager.openProgram(program.id)
-        })
-        if (this.#editor.initial_program && program.name === this.#editor.initial_program) {
-            this.#editor.initial_program = null
-            setTimeout(() => this.#editor.window_manager.openProgram(program.id), 50)
+            if (walker !== '/' && (type === 'folder' || recursive) && (!exists || !exists.item)) {
+                /** @type { RootState } */ // @ts-ignore
+                const root_child = exists || {
+                    fixed,
+                    type: 'folder',
+                    depth: -1,
+                    full_path: walker
+                }
+                root_child.item = new PLC_Folder(this, walker)
+                // console.log('Creating tree item', root_child)
+                this.root.push(root_child)
+            }
+            if (item && type === 'file' && !tree.length) {
+                /** @type { RootState } */
+                const root_child = {
+                    fixed,
+                    type,
+                    depth: -1,
+                    full_path: path, // @ts-ignore
+                    item: new PLC_File(this, item),
+                }
+                // console.log('Creating tree item', root_child)
+                this.root.push(root_child)
+            }
+            root_path = false
         }
-        return div
+        if (redraw) {
+            this.root.sort(sortTree)
+            this.draw_navigation_tree()
+        }
     }
 
     #onContextMenu = async (action, event, element) => {
-        const item = this.findItem(element)
+        const rootItem = this.findItem(element)
+        if (!rootItem) return console.error('Item not found in root')
+        const item = rootItem.item
         if (!item) return console.error('Item not found in folders or root')
         const type = item.type === 'folder' ? 'folder' : item.item?.type || item.type
-        const full_path = item.type === 'folder' ? item.path : ((item.item?.path + '/' + item.item?.name) || '').replace('//', '/') || item.path
+        const full_path = item.full_path
         console.log(`Action ${action} on ${type}`, item)
         if (item.name === 'main') {
             return
         }
         if (action === 'delete') {
+            if (full_path === '/main') throw new Error('Cannot delete main program')
+            if (full_path === '/programs') throw new Error('Cannot delete programs folder')
             const confirm = await Popup.confirm({
                 title: 'Delete item',
                 description: `<b>${full_path}</b>\n\nAre you sure you want to delete ${type} "${item.name}"?\nThis action cannot be undone.`,
@@ -381,29 +509,37 @@ export default class NavigationTreeManager {
                 cancel_text: 'Cancel',
             })
             if (!confirm) return
-            if (item.type === 'item') this.deleteFile(item.path)
-            if (item.type === 'folder') this.deleteFolder(item.path)
+            this.deleteItem(item.full_path)
         }
         if (action === 'add_folder') {
-            const path = await Popup.createItem('folder', full_path) // Returns full path
-            if (!path) return
-            this.#recursivelyCreateFolder(path)
-        }
-        if (action === 'add_program') {
-            const path = await Popup.createItem('program', full_path, (path) => {  // Returns full path
+            const path = await Popup.createItem('folder', full_path, (path) => { // Returns full path
                 if (path.endsWith('/main')) return false
+                const exists = this.root.find(f => f.full_path === path)
+                if (exists) return false
                 return true
             })
             if (!path) return
-            const segments = path.split('/')
-            const name = segments.pop()
+            this.createTreeItem({ path, recursive: true, redraw: true })
+        }
+        if (action === 'add_program') {
+            const path = await Popup.createItem('program', full_path, (path) => { // Returns full path
+                if (path.endsWith('/main')) return false
+                const exists = this.root.find(f => f.full_path === path)
+                if (exists) return false
+                return true
+            })
+            if (!path) return
+            const parts = path.split('/')
+            const name = parts.pop() || ''
+            const dir = parts.join('/')
             if (!name) throw new Error('Program name not found')
-            const folder_path = segments.join('/')
-            this.#editor.project.files.push({ type: 'program', name, comment: '', blocks: [], path: folder_path })
-            this.draw_navigation_tree()
+            /** @type { PLC_ProjectItem } */
+            const item = { type: 'program', name, full_path: path, path: dir, comment: '', blocks: [] }
+            this.createTreeItem({ item, recursive: true, redraw: true })
         }
         if (action === 'rename') {
             if (full_path.endsWith('/main')) throw new Error('Cannot rename main program')
+            if (full_path === '/programs') throw new Error('Cannot rename programs folder')
             const path = await Popup.renameItem(type, full_path, (path) => {  // Returns full path
                 if (path.endsWith('/main')) return false
                 return true
@@ -412,108 +548,114 @@ export default class NavigationTreeManager {
             const segments = path.split('/')
             const name = segments.pop()
             if (!name) throw new Error(toCapitalCase(type) + ' name not found')
-            if (type === 'folder') { // @ts-ignore
-                item.name = name // @ts-ignore
-                item.rename(path)
-                this.renameFolder(full_path, path)
-            } else if (type === 'program') {
-                if (item.item) item.item.name = name
-            }
+            this.renameItem(full_path, path)
             this.draw_navigation_tree()
         }
     }
 
     /** @param { string } old_path @param { string } new_path */
-    renameFolder = (old_path, new_path) => {
+    renameItem = (old_path, new_path) => {
         // In all files that are in the folder, change the path to the new path
-        const files = this.#editor.project.files
-        files.forEach(file => {
-            if (!file.path.startsWith(old_path)) return
-            file.path = file.path.replace(old_path, new_path)
+        const new_name = new_path.split('/').pop() || ''
+        if (!new_name) throw new Error('Folder name not found')
+        console.log('Renaming item', old_path, new_path)
+        this.root.forEach(item => {
+            const { type, full_path } = item
+            const matches = full_path === old_path
+            const is_child = !matches && full_path.startsWith(old_path)
+            if (matches) {
+                item.full_path = new_path
+                item.item.name = new_name
+                item.item.full_path = new_path
+                return
+            }
+            if (is_child) {
+                const new_full_path = full_path.replace(old_path, new_path)
+                item.full_path = new_full_path
+                item.item.rename(new_full_path)
+            }
         })
-        this.#editor.project.folders = this.#editor.project.folders.map(folder => {
-            if (!folder.startsWith(old_path)) return folder
-            return folder.replace(old_path, new_path)
-        })
-        // Delete the old folder from the list of folders
-        this.folders = this.folders.filter(folder => folder.path !== old_path)
     }
 
-    draw_navigation_tree = () => {
+    /** @param { boolean } [reload] */
+    draw_navigation_tree = (reload) => {
         const editor = this.#editor
         // [ + ] [icon] [title]   < ------ folder
         //       [icon] [title]   < ------ item
         const files = editor.project.files
         editor.project.folders = editor.project.folders || []
         const empty_folders = editor.project.folders
-        const container = this.#container
-        // Reset folder list
-        this.folders.forEach(f => f.destroy())
-        this.folders = []
+        const container = this.container
         container.innerHTML = ''
 
-        this.#root = []
-        const root = this.#root
-
-        empty_folders.forEach(path => {
-            path = sanitizePath(path)
-            this.#recursivelyCreateFolder(path)
-        })
-        files.forEach(file => {
-            file.path = sanitizePath(file.path)
-            this.#recursivelyCreateFolder(file.path)
-        })
-
-
-        files.forEach(file => {
-            const div = this.#draw_structure(file)
-            if (!div) throw new Error('Div not found')
-            const folder = this.folders.find(f => f.path === file.path)
-            if (folder) {
-                const full_path = `${folder.path}/${file.name}`.replace('//', '/')
-                folder.addChild({ type: 'item', path: full_path, full_path, name: file.name, div, item: file })
-            } else {
-                const full_path = `${file.path}/${file.name}`.replace('//', '/')
-                root.push({ type: 'item', path: file.path, full_path, name: file.name, div, item: file })
+        const container_handler = {
+            depth: 0,
+            appendChild: (child) => {
+                // console.log(``, 'Appending child', child)
+                container.appendChild(child.div)
+            },
+            clearChildren: () => {
+                container.innerHTML = ''
             }
+        }
+
+        if (reload) {
+            default_root_state.files.forEach(item => this.createTreeItem({ item, recursive: true, fixed: true, redraw: false }))
+            default_root_state.folders.forEach(path => this.createTreeItem({ path, recursive: true, fixed: true, redraw: false }))
+
+            empty_folders.forEach(path => this.createTreeItem({ path, recursive: true, redraw: false }))
+            files.forEach(item => this.createTreeItem({ item, recursive: true, redraw: false }))
+        }
+
+        // Evaluate each item in the root and set the depth
+        this.root.forEach((item, index) => {
+            const { full_path } = item
+            const parts = full_path.split('/').filter(Boolean)
+            item.depth = parts.length - 1
         })
 
-        root.sort(sortTree)
-        root.forEach(item => container.appendChild(item.div))
+        console.log(this.root)
 
-        this.folders.forEach(folder => folder.sortChildren())
+        this.root.sort(sortTree)
 
-        console.log(root)
+        const renderFolder = (folder, path) => {
+            folder.clearChildren()
+            const items = this.root.filter(f => {
+                if (!f.full_path.startsWith(path)) return false // Filter only items that start with the path
+                if (f.full_path === path) return false // Do not include the folder itself
+                const depth = path === '/' ? 0 : (folder.depth + 1)
+                if (f.depth !== depth) return false // Filter only items that are in the same depth level
+                return true // Include the item
+            })
+            // console.log(`Items for folder filter path "${path}" and depth ${folder.depth} ->`, items)
+            items.forEach(item => {
+                if (item.type === 'folder') {
+                    // console.log('Adding folder', item)
+                    const subfolder = item.item // @ts-ignore
+                    folder.appendChild(subfolder)
+                    renderFolder(subfolder, item.full_path)
+                } else if (item.type === 'file') {
+                    // console.log('Adding file', item)
+                    const file = item.item // @ts-ignore
+                    folder.appendChild(file)
+                }
+            })
+        }
+
+        renderFolder(container_handler, '/')
+
+
         editor.initial_program = null // Prevent opening the initial program again on redraw
     }
 
-    /** @type { (filter: any) => (PLC_Folder | PLC_FolderChild | null) }  */
+    /** @type { (filter: any) => (RootState | null) }  */
     findItem(filter) { // Find item (folder, program, ...) by path or matching element
         if (!filter) return null // @ts-ignore
         if (filter && filter.full_path) return filter
         if (typeof filter === 'string') {
             filter = sanitizePath(filter)
-            /** @type { (items: PLC_Folder | PLC_FolderChild) => (PLC_Folder | PLC_FolderChild | null) } */
-            const recursiveSearch = (item) => {
-                if (item.full_path === filter) return item // @ts-ignore
-                if (item.type === 'folder' && item.children) {
-                    /** @type { PLC_Folder } *///@ts-ignore
-                    const folder = item
-                    for (let i = 0; i < folder.children.length; i++) {
-                        const found_in_children = recursiveSearch(folder.children[i])
-                        if (found_in_children) return found_in_children
-                    }
-                }
-                return null
-            }
-            for (let i = 0; i < this.folders.length; i++) {
-                const found_in_folders = recursiveSearch(this.folders[i])
-                if (found_in_folders) return found_in_folders
-            }
-            for (let i = 0; i < this.#root.length; i++) {
-                const found_in_root = recursiveSearch(this.#root[i])
-                if (found_in_root) return found_in_root
-            }
+            const item = this.root.find(f => f.full_path === filter)
+            if (item) return item
             return null
         }
 
@@ -529,7 +671,7 @@ export default class NavigationTreeManager {
                 'plc-navigation-tree',
             ]
             const isMatch = matches.some(match => className === match)
-            if (!isMatch) return console.error('Element does not match any of the expected classes', classes, matches, element)
+            if (!isMatch) return //console.error('Element does not match any of the expected classes', classes, matches, element)
             const is_navigation_item = className === 'plc-navigation-item'
             if (is_navigation_item) {
                 const child0 = element.childNodes[0] // @ts-ignore
@@ -541,67 +683,43 @@ export default class NavigationTreeManager {
                 return
             }
             const container = element.parentElement
-            let found = false
-            let item = null
-            // console.log('Folders', this.folders)
-            for (const folder of this.folders) {
-                // selected -> 'delete' | 'rename' | 'add_program' | 'add_folder' | ...
-                if (folder.div === container) {
-                    found = true
-                    item = folder
-                    break
-                }
-                folder.children.forEach(child => {
-                    if (!found && child.div === container) {
-                        found = true
-                        item = child
-                    }
-                })
-            }
-            if (!found) {
-                for (let i = 0; i < this.#root.length; i++) {
-                    const root = this.#root[i]
-                    if (root.div === container) {
-                        found = true
-                        item = root
-                        break
-                    }
-                }
-            }
-            if (!found) return console.error('Item not found in folders or root')
-            if (!item) throw new Error('Item not found')
+            const item = this.root.find(f => f.item.div === element || f.item.div === container)
+            if (!item) return console.error('Item not found in folders or root', element, container, this.root)
             return item
         }
 
         const item = findTreeItemByElement(filter)
 
-        if (!item) return null
+        if (!item) return null // @ts-ignore
         return item
     }
 
 
-    /** @param { string } path */
-    deleteFile = (path, was_recursive = false) => {
-        path = sanitizePath(path)
-        console.log('Deleting file', path)
-        const segments = path.split('/')
-        const name = segments.pop()
-        const folder_path = segments.join('/')
-        this.#recursivelyCreateFolder(folder_path)
-        this.#editor.project.files = this.#editor.project.files.filter(f => !(sanitizePath(f.path) === folder_path && f.name === name))
-        if (!was_recursive) this.draw_navigation_tree()
+    highlightItem = (filter) => {
+        const rootItem = this.findItem(filter)
+        if (!rootItem) return console.error('Item not found in root')
+        const item = rootItem.item
+        if (!item) return console.error('Item not found')
+        this.root.forEach(item => {
+            if (item.item.div) item.item.div.classList.remove('selected')
+        })
+        if (item.div) item.div.classList.add('selected')
+        this.state.selected = item.full_path // @ts-ignore
     }
 
+
     /** @param { string } path */
-    deleteFolder = (path, was_recursive = false) => {
-        path = sanitizePath(path)
-        console.log('Deleting folder', path)
-        const files = this.#editor.project.files.filter(f => sanitizePath(f.path).startsWith(path))
-        if (files.length) files.forEach(file => this.deleteFile(file.path + '/' + file.name, true))
-        const subfolders = this.folders.filter(f => f.path.startsWith(path) && f.path !== path)
-        subfolders.forEach(folder => this.deleteFolder(folder.path, true))
-        this.folders = this.folders.filter(f => f.path !== path)
-        this.#editor.project.folders = this.#editor.project.folders.filter(f => f !== path)
-        if (!was_recursive) this.draw_navigation_tree()
+    deleteItem = (path) => {
+        console.log(`Deleting item "${path}"`)
+        this.root = this.root.filter(f => {
+            if (f.fixed) return true // Do not delete fixed items
+            if (f.full_path.startsWith(path)) return false // Delete all items that start with the path
+            return true // Keep all other items
+        })
+        this.#editor.project.files = this.#editor.project.files.filter(f => {
+            if (f.full_path.startsWith(path)) return false // Delete all files that start with the path
+            return true // Keep all other files
+        }) // Delete all files that start with the path
+        this.draw_navigation_tree()
     }
 }
