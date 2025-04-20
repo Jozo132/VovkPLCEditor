@@ -18,17 +18,22 @@ export default class TabManager {
         if (!this._editorHost) throw new Error("Editor host not found")
     }
 
-    /** @type { (filePath: string, content: string) => void } */
-    openTab(filePath, content) {
-        if (this.tabs.has(filePath)) {
-            this.switchTo(filePath);
+    /** @type { (id: string, content: string) => void } */
+    openTab(id, content) {
+
+        if (this.tabs.has(id)) {
+            this.switchTo(id);
             return;
         }
 
+        const program = this.#editor.findProgram(id);
+        if (!program) throw new Error(`Program not found: ${id}`)
+        const { name, comment } = program
+
         const tabEl = document.createElement("div");
-        tabEl.className = "tab";
-        tabEl.textContent = filePath.split("/").pop() || filePath;
-        tabEl.onclick = () => this.switchTo(filePath);
+        tabEl.className = "plc-tab";
+        tabEl.textContent = name;
+        tabEl.onclick = () => this.switchTo(id);
         this._tabBar.appendChild(tabEl);
 
         const editorEl = document.createElement("div");
@@ -37,21 +42,26 @@ export default class TabManager {
         editorEl.style.display = "none";
         this._editorHost.appendChild(editorEl);
 
-        this.tabs.set(filePath, { tabEl, editorEl });
-        this.switchTo(filePath);
+        this.tabs.set(id, { tabEl, editorEl });
+        this.switchTo(id);
     }
 
-    /** @type { (filePath: string) => void } */
-    switchTo(filePath) {
-        if (!this.tabs.has(filePath)) return;
+    /** @type { (id: string) => void } */
+    switchTo(id) {
+        if (!this.tabs.has(id)) return;
+
+        const program = this.#editor.findProgram(id);
+        if (!program) throw new Error(`Program not found: ${id}`)
+
+        this.#editor.window_manager.highlightItem(id)
 
         for (const [path, { tabEl, editorEl }] of this.tabs) {
-            const isActive = path === filePath;
+            const isActive = path === id;
             tabEl.classList.toggle("active", isActive);
             editorEl.style.display = isActive ? "block" : "none";
         }
 
-        this.active = filePath;
+        this.active = id;
     }
 
     /** @type { () => string | null } */
@@ -59,20 +69,20 @@ export default class TabManager {
         return this.active;
     }
 
-    /** @type { (filePath: string, content: string) => void } */
-    updateTab(filePath, content) {
-        const tab = this.tabs.get(filePath);
+    /** @type { (id: string, content: string) => void } */
+    updateTab(id, content) {
+        const tab = this.tabs.get(id);
         if (tab) tab.editorEl.textContent = content;
     }
 
-    /** @type { (filePath: string) => void } */
-    closeTab(filePath) {
-        const tab = this.tabs.get(filePath);
+    /** @type { (id: string) => void } */
+    closeTab(id) {
+        const tab = this.tabs.get(id);
         if (!tab) return;
         tab.tabEl.remove();
         tab.editorEl.remove();
-        this.tabs.delete(filePath);
-        if (this.active === filePath) {
+        this.tabs.delete(id);
+        if (this.active === id) {
             const next = this.tabs.keys().next().value || null;
             if (next) this.switchTo(next);
             else this.active = null;

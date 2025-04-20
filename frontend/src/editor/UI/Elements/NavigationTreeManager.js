@@ -65,11 +65,17 @@ class PLC_File {
     item
     /** @param { PLC_ProjectItem } item */
 
+    #editor
     navigation
 
-    /** @param { NavigationTreeManager } navigation * @param { PLC_ProjectItem } item */
-    constructor(navigation, item) {
+    /** @param { PLCEditor } editor * @param { NavigationTreeManager } navigation * @param { PLC_ProjectItem } item */
+    constructor(editor, navigation, item) {
+        if (!editor) throw new Error('Editor not found')
+        if (!navigation) throw new Error('Navigation not found')
+        if (!item) throw new Error('Item not found')
+        this.#editor = editor
         this.navigation = navigation
+        item.id = item.id || editor._generateID()
         this.item = item
         this.path = sanitizePath(item.path)
         this.full_path = sanitizePath(item.full_path)
@@ -113,6 +119,11 @@ class PLC_File {
         this.navigation.highlightItem(this.full_path)
         // return
         // }
+        this.open()
+    }
+
+    open = () => {
+        this.#editor.window_manager.openProgram(this.item.id)
     }
 
     /** @param { string } new_path */
@@ -475,7 +486,7 @@ export default class NavigationTreeManager {
                     type,
                     depth: -1,
                     full_path: path, // @ts-ignore
-                    item: new PLC_File(this, item),
+                    item: new PLC_File(this.#editor, this, item),
                 }
                 // console.log('Creating tree item', root_child)
                 this.root.push(root_child)
@@ -653,6 +664,11 @@ export default class NavigationTreeManager {
         if (!filter) return null // @ts-ignore
         if (filter && filter.full_path) return filter
         if (typeof filter === 'string') {
+            // Search by program ID first
+            for (let i = 0; i < this.root.length; i++) {
+                const item = this.root[i] // @ts-ignore
+                if (item.type === 'file' && item?.item?.item?.id === filter) return item
+            }
             filter = sanitizePath(filter)
             const item = this.root.find(f => f.full_path === filter)
             if (item) return item
@@ -694,6 +710,17 @@ export default class NavigationTreeManager {
         return item
     }
 
+    /** @type { (id: string | null) => (PLC_ProjectItem | null) } */
+    findProgram = (id) => {
+        if (!id) return null
+        for (let i = 0; i < this.root.length; i++) {
+            const item = this.root[i] // @ts-ignore
+            if (item.type === 'file' && item.item.item.id === id) return item.item.item
+        }
+        const item = this.findItem(id) // @ts-ignore
+        if (item && item.item?.item) return item.item.item
+        return null
+    }
 
     highlightItem = (filter) => {
         const rootItem = this.findItem(filter)

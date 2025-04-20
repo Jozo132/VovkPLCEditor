@@ -107,25 +107,12 @@ export class VovkPLCEditor {
         return null
     }
 
-    /** @type { (id: string | null) => PLC_Program | null } */
+    /** @type { (id: any) => PLC_Program | null } */
     findProgram = (id) => {
         const editor = this
         if (!editor) throw new Error('Editor not found')
-        if (!editor.project) return null
-        if (!editor.project.files) return null
-        const files = editor.project.files
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i]
-            let program
-            if (file.type === 'program') program = this.searchForProgram(file)
-            else throw new Error(`Invalid folder type: ${file.type}`)
-            if (id && program && program.id === id) return program
-            if (program && id === null) {
-                console.log(`Loading the first program found`, program)
-                return program
-            }
-        }
-        return null
+        // Search the navigation tree for the program with the given ID
+        return editor.window_manager.tree_manager.findProgram(id)
     }
 
     /** @param { string | null } id */
