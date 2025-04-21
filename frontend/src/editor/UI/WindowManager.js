@@ -7,6 +7,9 @@ import NavigationTreeManager from "./Elements/NavigationTreeManager.js"
 import TabManager from "./Elements/TabManager.js"
 import EditorUI from "./Elements/EditorUI.js"
 
+
+/** @typedef { EditorUI } WindowType */
+
 export default class WindowManager {
 
     /** @type {'edit' | 'online'} */
@@ -16,6 +19,12 @@ export default class WindowManager {
     active_device = 'simulation'
 
     workspace_body
+
+
+    /** @type { Map<string, WindowType> } */
+    windows = new Map(); // filePath → { tabEl, editorEl }
+
+    window_frame
 
     /** @type { (device: string) => Promise<boolean> } */
     requestConnect = async (device) => false
@@ -110,6 +119,10 @@ export default class WindowManager {
         const navigation = this.workspace.querySelector('.plc-navigation')
         if (!navigation) throw new Error('Navigation not found')
         this.div_navigation = navigation
+
+        const window_frame = this.workspace.querySelector('.plc-window-frame')
+        if (!window_frame) throw new Error('Window frame not found')
+        this.window_frame = window_frame
 
         const tools = this.workspace.querySelector('.plc-tools')
         if (!tools) throw new Error('Tools not found')
@@ -393,6 +406,35 @@ export default class WindowManager {
         // this.#editor.draw()
     }
 
+    /** @type { (id: string) => (EditorUI | undefined) } */
+    createEditorWindow(id) {
+        // Check if the program exists in 'this.windows'
+        if (this.windows.has(id)) {
+            // If it exists, return the existing editor UI
+            return this.windows.get(id)
+        }
+        // If it doesn't exist, create a new editor UI
+        const editorUI = new EditorUI(this.#editor, id)
+        this.windows.set(id, editorUI)
+        // Append the editor UI to the workspace
+        this.window_frame.appendChild(editorUI.div)
+        // Return the newly created editor UI
+        return editorUI
+    }
+
+    /** @type { (id: string) => void } */
+    closeProgram(id) {
+        if (!id) throw new Error('Program ID not found')
+        const exists = this.windows.get(id)
+        this.windows.delete(id)
+        exists?.close()
+        this.#editor.window_manager.tab_manager.closeTab(id)
+        const active_program = this.#editor.findProgram(id)
+        if (active_program) {
+            active_program.host = undefined
+        }
+    }
+
     /** @param { string | null | undefined } id */
     openProgram(id) {
         const editor = this.#editor
@@ -403,12 +445,10 @@ export default class WindowManager {
         this.active_tab = id
         this.active_program = editor.findProgram(id)
         if (!this.active_program) throw new Error(`Program not found: ${id}`)
-        this.tab_manager.openTab(id, this.active_program.name)
-        if (!this.active_program.host) {
-            const host = new EditorUI(editor, id)
-            this.active_program.host = host
-            host.div.setAttribute('id', id)
-        }
+        const host = this.active_program.host || this.createEditorWindow(id)
+        if (!host) throw new Error('Host not found')
+        if (!this.active_program.host) this.active_program.host = host
+        this.tab_manager.openTab(id, host)
         this.active_program.host.program = this.active_program
         this.active_tab = id
         this.active_program.host.reloadProgram()

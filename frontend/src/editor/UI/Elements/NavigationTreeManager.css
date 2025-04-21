@@ -76,7 +76,7 @@
 .plc-navigation-program:hover > .plc-title,
 .plc-navigation-folder:hover > .plc-icon,
 .plc-navigation-folder:hover > .plc-title {
-    background: #678F;
+    background: #555;
 }
 
 .plc-navigation-item.selected > .plc-navigation-program > .plc-icon,
@@ -85,6 +85,12 @@
 .plc-navigation-item.selected > .plc-navigation-folder > .plc-title {
     color: rgb(159, 205, 255);
     background: #678A;
+}
+.plc-navigation-item.selected:hover > .plc-navigation-program > .plc-icon,
+.plc-navigation-item.selected:hover > .plc-navigation-program > .plc-title,
+.plc-navigation-item.selected:hover > .plc-navigation-folder > .plc-icon,
+.plc-navigation-item.selected:hover > .plc-navigation-folder > .plc-title {
+    background: #555;
 }
 
 .plc-icon {

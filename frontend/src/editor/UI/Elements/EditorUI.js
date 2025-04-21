@@ -67,6 +67,13 @@ export default class EditorUI {
 
     reloadProgram() {
         this.program = this.master.findProgram(this.id)
+        if (!this.program) throw new Error(`Program not found: ${this.id}`)
+        this.name = this.program.name
+        this.comment = this.program.comment
+        this.header.innerHTML = /*HTML*/`
+            <h2 style="margin-top: 0px; margin-bottom: 3px;">Program: ${this.name || ''}</h2>
+            <p>${this.comment || ''}</p>
+        `
     }
 
     draw() {
@@ -96,5 +103,20 @@ export default class EditorUI {
     show() {
         this.hidden = false
         this.div.classList.remove('hidden')
+    }
+
+    close() {
+        this.div.remove()
+        this.master.context_manager.removeListener(this.div)
+        this.master.window_manager.windows.delete(this.id)
+    }
+
+    /** @param { { name?: string, comment?: string } } options */
+    updateInfo(options) {
+        if (!this.program) throw new Error(`Program not found: ${this.id}`)
+        this.program.name = options.name || this.program.name
+        this.program.comment = options.comment || this.program.comment
+        this.reloadProgram()
+        this.draw()
     }
 }

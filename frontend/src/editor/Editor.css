@@ -366,13 +366,15 @@ ul {
     display: flex;
     flex-direction: row;
     align-items: bottom;
+    font-size: 14px;
     padding: 0px;
     width: 100%;
-    min-height: 32px;
+    min-height: 28px;
 }
 .plc-window-tabs .plc-tab:first-child {
     margin-left: 8px;
 }
+/* <div class="plc-tab"><div class="plc-tab-title">${name}</div><div class="plc-tab-close">×</div></div> */
 .plc-tab {
     margin: 3px 3px 0px 3px;
     padding: 2px;
@@ -382,20 +384,40 @@ ul {
     cursor: pointer;
     user-select: none;
     background: #6789;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    text-align: center;
 }
 .plc-tab:hover {
-    background: #dedede;
-    color: black;
+    background: #555;
 }
 
 .plc-tab.active {
-    background: #ccc;
-    color: black;
-    font-weight: bold;
+    color: rgb(159, 205, 255);
+    background: #678A;
 }
 .plc-tab.active:hover {
-    background: #FFF;
+    background: #555;
 }
+
+.plc-tab-close {
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bolder;
+    color: #333;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    margin-left: 5px;
+    font-weight: bold;
+    user-select: none;
+}
+.plc-tab-close:hover {
+    color: #f00;
+}
+
 
 /* Ensure the editor takes full space inside the window */
 .plc-editor {

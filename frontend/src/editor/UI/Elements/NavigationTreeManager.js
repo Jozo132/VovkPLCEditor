@@ -133,12 +133,20 @@ class PLC_File {
         const new_name = parts.pop() || ''
         const path = parts.join('/')
         if (!new_name) throw new Error('File name not found')
+        const old_path = this.full_path
         this.name = new_name
         this.full_path = new_path
         this.path = path
         this.item.name = new_name
         this.item.full_path = new_path
         this.item.path = path
+        const root_child = this.navigation.root.find(f => f.full_path === old_path)
+        if (root_child) {
+            root_child.full_path = new_path
+            root_child.item.name = new_name
+            root_child.item.full_path = new_path
+            root_child.item.path = path
+        }
     }
 
     destroy() {
@@ -573,14 +581,24 @@ export default class NavigationTreeManager {
         this.root.forEach(item => {
             const { type, full_path } = item
             const matches = full_path === old_path
-            const is_child = !matches && full_path.startsWith(old_path)
+            const is_child = !matches && full_path.startsWith(old_path) // @ts-ignore
+            const id = item?.item?.item?.id || item?.item?.id || ''
             if (matches) {
+                if (type === 'file' && id) {
+                    this.#editor.window_manager.tab_manager.updateTab(id, new_name)
+                    this.#editor.window_manager.windows.get(id)?.updateInfo({ name: new_name })
+                }
                 item.full_path = new_path
                 item.item.name = new_name
                 item.item.full_path = new_path
+                item.item.rename(new_path)
                 return
             }
             if (is_child) {
+                if (type === 'file' && id) {
+                    this.#editor.window_manager.tab_manager.updateTab(id, new_name)
+                    this.#editor.window_manager.windows.get(id)?.updateInfo({ name: new_name })
+                }
                 const new_full_path = full_path.replace(old_path, new_path)
                 item.full_path = new_full_path
                 item.item.rename(new_full_path)
@@ -738,6 +756,15 @@ export default class NavigationTreeManager {
     /** @param { string } path */
     deleteItem = (path) => {
         console.log(`Deleting item "${path}"`)
+
+        const exists = this.root.find(f => f.full_path === path)
+        if (!exists) return console.error('Item not found in root', path)
+        if (exists.type === 'file') { // @ts-ignore
+            const id = exists.item?.item?.id || exists.item?.id || ''
+            if (id) this.#editor.window_manager.closeProgram(id) // Close the program if it is open
+            exists.item.destroy() // Destroy the item
+        }
+
         this.root = this.root.filter(f => {
             if (f.fixed) return true // Do not delete fixed items
             if (f.full_path.startsWith(path)) return false // Delete all items that start with the path
