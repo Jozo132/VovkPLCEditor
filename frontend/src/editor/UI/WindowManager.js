@@ -316,6 +316,7 @@ export default class WindowManager {
                 const tree_file = activeElement.classList.contains('plc-navigation-program')
                 const tree_item = tree_folder || tree_file
                 const tab = activeElement.classList.contains('plc-tab')
+                const online_button = activeElement.classList.contains('plc-device-online')
 
                 const focusable_elements = this.get_focusable_elements()
                 const length = focusable_elements.length
@@ -323,7 +324,7 @@ export default class WindowManager {
                 const next = index >= 0 ? focusable_elements[(index + 1) % length] : null
                 const prev = index >= 0 ? focusable_elements[(index - 1 + length) % length] : null
 
-                const clickable = tree_item || tab
+                const clickable = tree_item || tab || online_button
                 if (clickable && (enter || space)) {// @ts-ignore
                     // trigger click on the element
                     activeElement.click()
