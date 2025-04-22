@@ -757,17 +757,26 @@ export default class NavigationTreeManager {
     deleteItem = (path) => {
         console.log(`Deleting item "${path}"`)
 
-        const exists = this.root.find(f => f.full_path === path)
-        if (!exists) return console.error('Item not found in root', path)
-        if (exists.type === 'file') { // @ts-ignore
-            const id = exists.item?.item?.id || exists.item?.id || ''
-            if (id) this.#editor.window_manager.closeProgram(id) // Close the program if it is open
-            exists.item.destroy() // Destroy the item
+        /** @type { (item: RootState) => void } */
+        const deleteFile = item => {
+            if (!item) return
+            if (item.type === 'file') { // @ts-ignore
+                const id = item.item?.item?.id || item.item?.id || ''
+                console.log('Deleting file', item, id)
+                if (id) this.#editor.window_manager.closeProgram(id) // Close the program if it is open
+                item.item.destroy() // Destroy the item
+            }
         }
+
+        const exists = this.root.find(f => f.full_path === path)
+        if (exists) deleteFile(exists) // Delete the file if it exists
 
         this.root = this.root.filter(f => {
             if (f.fixed) return true // Do not delete fixed items
-            if (f.full_path.startsWith(path)) return false // Delete all items that start with the path
+            if (f.full_path.startsWith(path)) {
+                deleteFile(f) // Delete the item
+                return false // Delete all items that start with the path
+            }
             return true // Keep all other items
         })
         this.#editor.project.files = this.#editor.project.files.filter(f => {

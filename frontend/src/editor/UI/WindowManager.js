@@ -425,10 +425,10 @@ export default class WindowManager {
     /** @type { (id: string) => void } */
     closeProgram(id) {
         if (!id) throw new Error('Program ID not found')
-        const exists = this.windows.get(id)
-        this.windows.delete(id)
-        exists?.close()
         this.#editor.window_manager.tab_manager.closeTab(id)
+        this.windows.delete(id)
+        const exists = this.windows.get(id)
+        exists?.close()
         const active_program = this.#editor.findProgram(id)
         if (active_program) {
             active_program.host = undefined
