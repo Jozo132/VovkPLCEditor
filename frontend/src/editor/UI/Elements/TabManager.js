@@ -107,7 +107,6 @@ export default class TabManager {
     }
 
 
-    
     findProgramIdByTab(tabEl) {
         if (!tabEl) return null
         const closest = tabEl.closest(".plc-tab")
@@ -116,5 +115,11 @@ export default class TabManager {
         if (!tab) return null
         const [id, { host }] = tab
         return id
+    }
+
+    /** @type { (element: Element | null) => boolean } */
+    isTabElement(element) {
+        if (!element) return false
+        return element.classList.contains("plc-tab")
     }
 }

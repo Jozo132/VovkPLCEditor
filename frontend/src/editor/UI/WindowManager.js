@@ -29,7 +29,6 @@ export default class WindowManager {
     /** @type { (device: string) => Promise<boolean> } */
     requestConnect = async (device) => false
 
-    findItem = (element) => this.tree_manager.findItem(element)
     highlightItem = (element) => this.tree_manager.highlightItem(element)
     removeHighlight = () => this.tree_manager.removeHighlight()
 
@@ -332,19 +331,19 @@ export default class WindowManager {
 
                 if (tree_item) {
                     if (f2) { // Trigger rename
-                        const item = this.findItem(activeElement)
+                        const item = this.tree_manager.findItem(activeElement)
                         if (item) { // @ts-ignore
                             // item.requestRename()
                         }
                     }
                     if (up) {
-                        const prev_item = this.findItem(prev)
+                        const prev_item = this.tree_manager.findItem(prev)
                         if (!prev_item) return
                         event.preventDefault() // @ts-ignore
                         if (prev) prev.focus()
                     }
                     if (down) {
-                        const next_item = this.findItem(next)
+                        const next_item = this.tree_manager.findItem(next)
                         if (!next_item) return
                         event.preventDefault() // @ts-ignore
                         if (next) next.focus()
@@ -353,14 +352,14 @@ export default class WindowManager {
 
                 if (tree_folder) {
                     if (left) {
-                        const item = this.findItem(activeElement)
+                        const item = this.tree_manager.findItem(activeElement)
                         // console.log('Left', item)
                         if (item) { // @ts-ignore
                             item.item.collapse()
                         }
                     }
                     if (right) {
-                        const item = this.findItem(activeElement)
+                        const item = this.tree_manager.findItem(activeElement)
                         // console.log('Right', item)
                         if (item) { // @ts-ignore
                             item.item.expand()
@@ -368,6 +367,22 @@ export default class WindowManager {
                     }
                 }
 
+                if (tab) {
+                    if (left) {
+                        const prev_is_tab = this.tab_manager.isTabElement(prev)
+                        if (prev_is_tab) {
+                            event.preventDefault() // @ts-ignore
+                            if (prev) prev.focus()
+                        }
+                    }
+                    if (right) {
+                        const next_is_tab = this.tab_manager.isTabElement(next)
+                        if (next_is_tab) {
+                            event.preventDefault() // @ts-ignore
+                            if (next) next.focus()
+                        }
+                    }
+                }
             }
         })
 
