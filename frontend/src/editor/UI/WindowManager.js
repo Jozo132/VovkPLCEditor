@@ -31,6 +31,7 @@ export default class WindowManager {
 
     findItem = (element) => this.tree_manager.findItem(element)
     highlightItem = (element) => this.tree_manager.highlightItem(element)
+    removeHighlight = () => this.tree_manager.removeHighlight()
 
     #editor
     /** @param {PLCEditor} editor */
@@ -315,6 +316,7 @@ export default class WindowManager {
                 const tree_folder = activeElement.classList.contains('plc-navigation-folder')
                 const tree_file = activeElement.classList.contains('plc-navigation-program')
                 const tree_item = tree_folder || tree_file
+                const tab = activeElement.classList.contains('plc-tab')
 
                 const focusable_elements = this.get_focusable_elements()
                 const length = focusable_elements.length
@@ -322,6 +324,11 @@ export default class WindowManager {
                 const next = index >= 0 ? focusable_elements[(index + 1) % length] : null
                 const prev = index >= 0 ? focusable_elements[(index - 1 + length) % length] : null
 
+                const clickable = tree_item || tab
+                if (clickable && (enter || space)) {// @ts-ignore
+                    // trigger click on the element
+                    activeElement.click()
+                }
 
                 if (tree_item) {
                     if (f2) { // Trigger rename
@@ -329,10 +336,6 @@ export default class WindowManager {
                         if (item) { // @ts-ignore
                             // item.requestRename()
                         }
-                    }
-                    if (enter || space) { // @ts-ignore
-                        // trigger click on the element
-                        activeElement.click()
                     }
                     if (up) {
                         const prev_item = this.findItem(prev)
@@ -425,13 +428,18 @@ export default class WindowManager {
     /** @type { (id: string) => void } */
     closeProgram(id) {
         if (!id) throw new Error('Program ID not found')
-        this.#editor.window_manager.tab_manager.closeTab(id)
+        // Remove highlight from the tree
+        this.#editor.window_manager.removeHighlight()
         this.windows.delete(id)
         const exists = this.windows.get(id)
         exists?.close()
         const active_program = this.#editor.findProgram(id)
-        if (active_program) {
-            active_program.host = undefined
+        if (active_program) active_program.host = undefined
+        const next_id = this.#editor.window_manager.tab_manager.closeTab(id)
+        if (next_id) {
+            this.#editor.window_manager.openProgram(next_id)
+        } else {
+            this.#editor.window_manager.active_program = undefined
         }
     }
 

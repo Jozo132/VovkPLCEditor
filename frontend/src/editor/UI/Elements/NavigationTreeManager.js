@@ -752,6 +752,12 @@ export default class NavigationTreeManager {
         this.state.selected = item.full_path // @ts-ignore
     }
 
+    removeHighlight = () => {
+        this.root.forEach(item => {
+            if (item.item.div) item.item.div.classList.remove('selected')
+        })
+        this.state.selected = null // @ts-ignore
+    }
 
     /** @param { string } path */
     deleteItem = (path) => {

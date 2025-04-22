@@ -39,7 +39,7 @@ export default class TabManager {
         // tabEl.onclick = () => this.switchTo(id);
         // this._tabBar.appendChild(tabEl);
 
-        const tabEl = ElementSynthesis(/*HTML*/`<div class="plc-tab"><div class="plc-tab-title">${name}</div><div class="plc-tab-close">×</div></div>`)
+        const tabEl = ElementSynthesis(/*HTML*/`<div class="plc-tab" tabindex="0" draggable="true"><div class="plc-tab-title">${name}</div><div class="plc-tab-close">×</div></div>`)
         const closeEl = tabEl.querySelector(".plc-tab-close");
         if (!tabEl) throw new Error("Tab title not found")
         if (!closeEl) throw new Error("Tab close button not found")
@@ -78,11 +78,12 @@ export default class TabManager {
         this.active = id;
     }
 
-    /** @type { (id: string) => void } */
+    /** @type { (id: string) => (string | null) } */
     closeTab(id) {
         const tab = this.tabs.get(id);
-        if (!tab) return;
+        if (!tab) return null;
         this.tabs.delete(id);
+        this.#editor.window_manager.closeProgram(id)
         tab.host.close();
         tab.tabEl.remove();
         if (this.active === id) {
@@ -90,7 +91,7 @@ export default class TabManager {
             if (next) this.switchTo(next);
             else this.active = null;
         }
-        this.#editor.window_manager.closeProgram(id)
+        return this.active;
     }
 
 
