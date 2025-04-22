@@ -112,7 +112,15 @@ export class VovkPLCEditor {
         const editor = this
         if (!editor) throw new Error('Editor not found')
         // Search the navigation tree for the program with the given ID
-        return editor.window_manager.tree_manager.findProgram(id)
+        const found = editor.window_manager.tree_manager.findProgram(id)
+        if (found) return found
+        if (typeof id === 'object') {
+            const program_id = editor.window_manager.tab_manager.findProgramIdByTab(id)
+            if (!program_id) return null
+            const program = editor.window_manager.tree_manager.findProgram(program_id)
+            if (program) return program
+        }
+        return null
     }
 
     /** @param { string | null } id */

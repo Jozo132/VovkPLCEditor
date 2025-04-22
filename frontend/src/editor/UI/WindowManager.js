@@ -371,6 +371,27 @@ export default class WindowManager {
             }
         })
 
+        
+        workspace.addEventListener('mousedown', (event) => {
+            
+            const middle_mouse = event.button === 1 
+            
+            const target = event.target
+            // @ts-ignore
+            const is_tab = target && target.closest(".plc-tab")
+
+            if (middle_mouse && is_tab) {
+                event.preventDefault()
+                event.stopPropagation()
+                const program = this.#editor.findProgram(event.target)
+                if (program) {
+                    const id = program.id
+                    if (!id) throw new Error('Program ID not found')
+                    this.#editor.window_manager.closeProgram(id)
+                }
+            }
+        })
+
         workspace.addEventListener('mousemove', this.onMouseMove)
 
     }

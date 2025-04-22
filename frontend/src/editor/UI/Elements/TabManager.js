@@ -105,4 +105,16 @@ export default class TabManager {
         if (!titleEl) throw new Error("Tab title not found")
         titleEl.textContent = name;
     }
+
+
+    
+    findProgramIdByTab(tabEl) {
+        if (!tabEl) return null
+        const closest = tabEl.closest(".plc-tab")
+        if (!closest) return null
+        const tab = [...this.tabs].find(([_, { tabEl }]) => tabEl === closest)
+        if (!tab) return null
+        const [id, { host }] = tab
+        return id
+    }
 }
