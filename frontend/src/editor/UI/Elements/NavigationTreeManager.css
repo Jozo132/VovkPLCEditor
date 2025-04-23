@@ -47,30 +47,20 @@
     color: #fff;
 }
 
-.plc-navigation-program > .plc-icon,
-.plc-navigation-program > .plc-title,
-.plc-navigation-folder > .plc-icon,
-.plc-navigation-folder > .plc-title {
+.plc-navigation-item > :first-child > .plc-title {
     background: #6783;
 }
-.plc-navigation-program:hover > .plc-icon,
-.plc-navigation-program:hover > .plc-title,
-.plc-navigation-folder:hover > .plc-icon,
-.plc-navigation-folder:hover > .plc-title {
+
+.plc-navigation-item > :first-child:hover > .plc-title {
     background: #555;
 }
 
-.plc-navigation-item.selected > .plc-navigation-program > .plc-icon,
-.plc-navigation-item.selected > .plc-navigation-program > .plc-title,
-.plc-navigation-item.selected > .plc-navigation-folder > .plc-icon,
-.plc-navigation-item.selected > .plc-navigation-folder > .plc-title {
+.plc-navigation-item.selected > :first-child > .plc-title {
     color: rgb(159, 205, 255);
     background: #678A;
 }
-.plc-navigation-item.selected:hover > .plc-navigation-program > .plc-icon,
-.plc-navigation-item.selected:hover > .plc-navigation-program > .plc-title,
-.plc-navigation-item.selected:hover > .plc-navigation-folder > .plc-icon,
-.plc-navigation-item.selected:hover > .plc-navigation-folder > .plc-title {
+
+.plc-navigation-item.selected > :first-child:hover > .plc-title {
     background: #555;
 }
 
@@ -85,8 +75,7 @@
 }
 
 /** plc-navigation-item contains three elements, aligned to the left with 2px padding-left */
-.plc-navigation-folder,
-.plc-navigation-program {
+.plc-navigation-item > :first-child {
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -94,8 +83,8 @@
     width: 100%;
     cursor: pointer;
 }
-.plc-navigation-folder > div,
-.plc-navigation-program > div {
+
+.plc-navigation-item > :first-child > div {
     height: 20px !important;
 }
 
@@ -155,18 +144,6 @@
 .plc-navigation-folder {
     width: 105%;
     margin-left: 0px !important;
-}
-
-/* current icon */
-.plc-icon-folder::before {
-    content: "";
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    background-image: var(--plc-folder-icon);
-    background-size: 80% 80%;
-    background-repeat: no-repeat;
-    background-position: center;
 }
 .plc-navigation-folder .minimize {
     height: 20px !important;
