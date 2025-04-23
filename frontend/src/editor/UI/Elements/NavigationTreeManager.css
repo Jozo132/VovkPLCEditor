@@ -1,8 +1,14 @@
 
+/* declare variables for icons */
+:root {
+    --plc-minimize-width: 10px;
+    --plc-tree-indentation: 0px;
+}
+
+
 .plc-navigation-tree {
     display: flex;
     flex-direction: column;
-    align-items: left;
     padding: 2px;
     width: calc(100% - 4px);
     min-height: 300px;
@@ -10,12 +16,12 @@
     overflow-y: auto;
     font-size: 12px;
     background: #333B;
+    overflow: hidden;
 }
 
 .plc-navigation-tree-folder {
     display: flex;
     flex-direction: column;
-    align-items: left;
     padding: 0px;
     width: 100%;
     overflow-x: hidden;
@@ -23,47 +29,22 @@
 }
 .plc-navigation-tree-folder.minimized { display: none; }
 
-.plc-navigation-tree-item  {
-    display: flex;
-    flex-direction: row;
+/* .plc-navigation-children:empty::before {
+    content: "empty";
+    display: block;
+    padding-left: 26px; 
+    font-style: italic;
+    color: #999;
+} */
+
+.plc-title {
     align-items: center;
     padding: 0px;
     width: 100%;
-    /* height: 20px; */
     cursor: pointer;
     user-select: none;
-    background: #6789;
-}
-
-/** plc-navigation-item contains three elements, aligned to the left with 2px padding-left */
-.plc-navigation-folder,
-.plc-navigation-program {
-    display: grid;
-    grid-template-columns: 20px 20px 1fr;
-    align-items: center;
-    padding: 0px;
-    width: 100%;
-    cursor: pointer;
-}
-.plc-navigation-folder > div,
-.plc-navigation-program > div {
-    height: 20px !important;
-}
-
-
-.plc-navigation-item > .plc-navigation-children {
-    margin-left: 10px;
-}
-
-
-.plc-navigation-item.minimized > .plc-navigation-children {
-    display: none;
-}
-
-.plc-navigation-program,
-.plc-navigation-folder {
-    /* border-bottom: 1px solid #ccc; */
-    margin-bottom: 3px;
+    font-size: 12px;
+    color: #fff;
 }
 
 .plc-navigation-program > .plc-icon,
@@ -93,47 +74,110 @@
     background: #555;
 }
 
-.plc-icon {
-    align-self: center;
-    text-align: center;
-    content: "center";
+.plc-navigation-tree-item  {
+    align-items: left;
+    padding: 0px;
+    width: 100%;
+    /* height: 20px; */
+    cursor: pointer;
+    user-select: none;
+    background: #6789;
+}
+
+/** plc-navigation-item contains three elements, aligned to the left with 2px padding-left */
+.plc-navigation-folder,
+.plc-navigation-program {
     display: flex;
-    justify-content: center;
+    flex-direction: row;
+    align-items: center;
+    padding: 0px;
+    width: 100%;
+    cursor: pointer;
+}
+.plc-navigation-folder > div,
+.plc-navigation-program > div {
+    height: 20px !important;
+}
+
+.plc-navigation-item {
+    display: flex;
+    flex-direction: column;
+    align-items: left;
+    padding: 0px;
+    margin-top: 2px;
+    width: 100%;
+    cursor: pointer;
     user-select: none;
 }
-.plc-icon img {
+
+.plc-navigation-item > .plc-navigation-children {
+    margin-left: var(--plc-tree-indentation);
+}
+
+
+.plc-navigation-item.minimized > .plc-navigation-children {
+    display: none;
+}
+
+.plc-icon {
+    display: flex;
+    flex-direction: row;
+}
+.plc-icon::before {
+    align-self: center;
+    text-align: center;
+    content: " ";
+    justify-content: center;
+    user-select: none;
+    width: 20px;
+    height: 20px;
+    margin-right: 2px;
+    background-size: 80% 80% !important;
+    background-repeat: no-repeat !important;
+    background-position: center center !important;
+}
+.plc-icon::before img {
     display: inline-block;
     outline: none;
     padding: 2px;
 }
 
-.plc-title {
-    align-self: center;
-    text-align: left;
-    padding-left: 2px;
-    user-select: none;
-    font-size: 14px;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-}
-
-.plc-void {
-    color: transparent !important;
-    background: transparent !important;
-    border: transparent !important;
-}
-
-
-.plc-icon-folder {
+.plc-icon-folder::before {
     background-image: var(--plc-folder-icon) !important;
-    background-size: 80% 80% !important;
-    background-repeat: no-repeat !important;
-    background-position: center center !important;
 }
-.plc-icon-gears {
+.plc-icon-gears::before {
     background-image: var(--plc-program-icon) !important;
-    background-size: 80% 80% !important;
-    background-repeat: no-repeat !important;
-    background-position: center center !important;
 }
+
+.plc-navigation-item div {
+    margin-left: var(--plc-minimize-width);
+}
+.plc-navigation-folder {
+    width: 105%;
+    margin-left: 0px !important;
+}
+
+/* current icon */
+.plc-icon-folder::before {
+    content: "";
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    background-image: var(--plc-folder-icon);
+    background-size: 80% 80%;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+.plc-navigation-folder .minimize {
+    height: 20px !important;
+}
+.plc-navigation-folder .minimize::after {
+    content: "-";
+    display: inline-block;
+    width: var(--plc-minimize-width);
+    height: 20px !important;
+}
+.plc-navigation-item.minimized > .plc-navigation-folder .minimize::after { content: "+"; }
+/* .plc-navigation-item:not(.minimized) > .plc-navigation-folder .minimize::after { content: "-"; } */
+
+.plc-navigation-item:has(> .plc-navigation-children:empty) > .plc-navigation-folder .minimize::after { content: ""; }

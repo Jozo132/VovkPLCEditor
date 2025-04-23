@@ -5,9 +5,9 @@ import { getEventPath } from "../utils/tools.js"
 import { PLCEditor } from "../utils/types.js"
 
 /**
- *  @typedef {{ type: 'item', name: string, label: string, disabled?: boolean, hidden?: boolean }} MenuItem 
- *  @typedef {{ type: 'separator', name?: undefined, label?: undefined, hidden?: boolean }} MenuSeparator
- *  @typedef {{ type: 'submenu', name: string, label: string, items: MenuElement[], disabled?: boolean, hidden?: boolean }} MenuSubmenu
+ *  @typedef {{ type: 'item', name: string, label: string, disabled?: boolean, hidden?: boolean, className?: string }} MenuItem 
+ *  @typedef {{ type: 'separator', name?: undefined, label?: undefined, hidden?: boolean, className?: string }} MenuSeparator
+ *  @typedef {{ type: 'submenu', name: string, label: string, items: MenuElement[], disabled?: boolean, hidden?: boolean, className?: string }} MenuSubmenu
  *  @typedef { MenuItem | MenuSeparator | MenuSubmenu } MenuElement
  *  @typedef { (event: MouseEvent, element: any) => MenuElement[] | undefined } MenuOnOpen 
  *  @typedef { (selected: string, event: MouseEvent, element: any) => void } MenuOnClose  
@@ -47,14 +47,18 @@ export default class Menu {
   /** @type { (item: MenuElement, menu: Element) => void } */
   #addItem = (item, menu) => {
     if (item.hidden) return
+    const className = item.className || item.name
     if (item.type === 'separator') {
-      menu.appendChild(document.createElement('hr'))
+      const hr = document.createElement('hr')
+      if (className) hr.classList.add(...className.split(' '))
+      menu.appendChild(hr)
     } else {
       const div = document.createElement('div')
       div.classList.add('item')
+      if (className) div.classList.add(...className.split(' '))
       if (item.disabled) div.classList.add('disabled')
-        div.innerText = item.label
-      
+      div.innerText = item.label
+
       menu.appendChild(div)
 
       if (item.type === 'item') {
@@ -70,6 +74,7 @@ export default class Menu {
 
         const submenu = document.createElement('div')
         submenu.classList.add('menu', 'submenu-container')
+        if (className) submenu.classList.add(...className.split(' '))
         submenu.style.position = 'absolute'
         submenu.style.zIndex = '12'
         submenu.style.display = 'none'

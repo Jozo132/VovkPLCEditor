@@ -18,9 +18,8 @@ await importCSS('./NavigationTreeManager.css')
 const folder_item_html = ({ minimized, draggable, selected }) => /*HTML*/`
     <div class="plc-navigation-item ${minimized ? 'minimized' : ''} ${selected ? 'selected' : ''}">
         <div class="plc-navigation-folder" tabindex="0" draggable="${draggable}">
-            <div class="minimize">${minimized ? '+' : '-'}</div>
-            <div class="plc-icon plc-icon-folder"></div>
-            <div class="plc-title">empty</div>
+            <span class="minimize"></span>
+            <span class="plc-title plc-icon plc-icon-folder">empty</span>
         </div>
         <div class="plc-navigation-children">
             <!-- Children will be added here dynamically -->
@@ -32,9 +31,7 @@ const folder_item_html = ({ minimized, draggable, selected }) => /*HTML*/`
 const program_item_html = ({ draggable, selected }) => /*HTML*/`
     <div class="plc-navigation-item ${selected ? 'selected' : ''}">
         <div class="plc-navigation-program" tabindex="0" draggable="${draggable}">
-            <div class="plc-void"></div>
-            <div class="plc-icon plc-icon-gears"></div>
-            <div class="plc-title">empty</div>
+        <span class="plc-title plc-icon plc-icon-gears">empty</span>
         </div>
     </div>
 `
@@ -188,11 +185,9 @@ class PLC_Folder {
         const draggable = true
         const selected = this.navigation.state.selected === path
         this.div = ElementSynthesis(folder_item_html({ minimized, draggable, selected }))
-        const minimize = this.div.querySelector('.minimize'); if (!minimize) throw new Error('Minimize button not found')
         const header = this.div.querySelector('.plc-navigation-folder'); if (!header) throw new Error('Navigation folder not found')
         const title = this.div.querySelector('.plc-title'); if (!title) throw new Error('Title not found')
         const list = this.div.querySelector('.plc-navigation-children'); if (!list) throw new Error('Children not found')
-        this.minimize = minimize
         this.header = header
         this.title = title
         this.list = list
@@ -224,8 +219,7 @@ class PLC_Folder {
         // }
         this.div.classList.toggle('minimized')
         const minimized = this.div.classList.contains('minimized')
-        this.navigation.minimized_folders[this.path] = minimized // @ts-ignore
-        this.minimize.innerText = minimized ? '+' : '-'
+        this.navigation.minimized_folders[this.path] = minimized
     }
 
     /** @param { PLC_TreeItem } child */
@@ -243,14 +237,12 @@ class PLC_Folder {
 
     collapse = () => {
         this.div.classList.add('minimized')
-        this.navigation.minimized_folders[this.path] = true // @ts-ignore
-        this.minimize.innerText = '+'
+        this.navigation.minimized_folders[this.path] = true
     }
 
     expand = () => {
         this.div.classList.remove('minimized')
-        this.navigation.minimized_folders[this.path] = false // @ts-ignore
-        this.minimize.innerText = '-'
+        this.navigation.minimized_folders[this.path] = false
     }
 
     /** @param { string } new_path */
@@ -356,8 +348,8 @@ export default class NavigationTreeManager {
         const ctx_edit_folder = [
             {
                 type: 'submenu', name: 'add', label: 'Add item', items: [
-                    { type: 'item', name: 'add_program', label: 'Program' },
-                    { type: 'item', name: 'add_folder', label: 'Folder' },
+                    { type: 'item', name: 'add_program', label: 'Program', className: 'plc-icon plc-icon-gears' },
+                    { type: 'item', name: 'add_folder', label: 'Folder', className: 'plc-icon plc-icon-folder' },
                 ]
             },
             { type: 'separator' },
