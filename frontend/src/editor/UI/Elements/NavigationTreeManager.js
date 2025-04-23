@@ -31,18 +31,48 @@ const folder_item_html = ({ minimized, draggable, selected }) => /*HTML*/`
 const program_item_html = ({ draggable, selected }) => /*HTML*/`
     <div class="plc-navigation-item ${selected ? 'selected' : ''}">
         <div class="plc-navigation-program" tabindex="0" draggable="${draggable}">
-        <span class="plc-title plc-icon plc-icon-gears">empty</span>
+            <span class="plc-title plc-icon plc-icon-gears">empty</span>
         </div>
     </div>
 `
+
+/** @type { (params: { draggable: boolean, selected: boolean, type: string }) => string } */
+const custom_item_html = ({ draggable, selected, type }) => {
+    const icon = type === 'folder' ? 'plc-icon-folder' : type === 'program' ? 'plc-icon-gears' : ''
+    const typename = ['folder', 'program'].includes(type) ? type : 'custom'
+    return /*HTML*/`
+        <div class="plc-navigation-item ${selected ? 'selected' : ''}">
+            <div class="plc-navigation-${typename}" tabindex="0" draggable="${draggable}">
+                <span class="plc-title plc-icon ${icon}">empty</span>
+            </div>
+        </div>
+    `
+}
+
+
+/** 
+ * @typedef { PLC_Folder | PLC_File } PLC_TreeItem
+ * 
+ * @typedef { { fixed?: boolean, full_path: string, depth: number, type: 'file' | 'folder', minimized?: boolean, selected?: boolean, item: PLC_TreeItem } }  RootState
+**/
+
+/** @type {{ files: PLC_ProjectItem[], folders: string[] }} */
+const default_root_state = {
+    files: [
+        { type: 'program', name: 'main', path: '/', full_path: '/main', comment: '', blocks: [] },
+        // { type: 'custom', name: 'custom', path: '/', full_path: '/custom', comment: '', blocks: [] },
+    ],
+    folders: [
+        '/programs',
+    ]
+}
 
 
 const sanitizePath = path => '/' + (path.replace(/\/+/g, '/').split('/').map(p => p.trim()).filter(Boolean).join('/') || '')
 const sortTree = (a, b) => {
     // Sort by depth, where higher depth has higher priority
+    if (a.depth === 0) return 0
     if (a.depth !== b.depth) return a.depth - b.depth
-    if (b.type === 'file' && b.item.name === 'main') return 1
-    if (a.type === 'file' && a.item.name === 'main') return -1
     if (a.type === 'folder' && b.type !== 'folder') return -1
     if (a.type !== 'folder' && b.type === 'folder') return 1
     const a_name = (a.full_path || a.path).split('/').pop() || ''
@@ -81,13 +111,14 @@ class PLC_File {
         if (!this.name) throw new Error('File name not found')
         if (!this.path) throw new Error('File path not found')
         if (!this.full_path) throw new Error('File full path not found')
+        const type = item.type
         const draggable = true
         const selected = this.navigation.state.selected === this.full_path
-        this.div = ElementSynthesis(program_item_html({ draggable, selected }))
-        const program_div = this.div.querySelector('.plc-navigation-program'); if (!program_div) throw new Error('Program div not found')
+        this.div = ElementSynthesis(custom_item_html({ draggable, selected, type}))
+        const element = this.div.childNodes[0]; if (!element) throw new Error('Inner element not found')
         const title = this.div.querySelector('.plc-title'); if (!title) throw new Error('Title not found')
         this.title = title
-        program_div.addEventListener('click', this.onClick)
+        element.addEventListener('click', this.onClick)
 
 
 
@@ -268,21 +299,6 @@ class PLC_Folder {
 }
 
 
-/** 
- * @typedef { PLC_Folder | PLC_File } PLC_TreeItem
- * 
- * @typedef { { fixed?: boolean, full_path: string, depth: number, type: 'file' | 'folder', minimized?: boolean, selected?: boolean, item: PLC_TreeItem } }  RootState
-**/
-
-/** @type {{ files: PLC_ProjectItem[], folders: string[] }} */
-const default_root_state = {
-    files: [
-        { type: 'program', name: 'main', path: '/', full_path: '/main', comment: '', blocks: [] }
-    ],
-    folders: [
-        '/programs',
-    ]
-}
 
 export default class NavigationTreeManager {
 
@@ -393,7 +409,7 @@ export default class NavigationTreeManager {
             if (className === 'plc-navigation-folder') {
                 return connected ? ctx_online_folder : ctx_edit_folder
             }
-            if (className === 'plc-navigation-program') {
+            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom') {
                 return connected ? ctx_online_program : ctx_edit_program
             }
             throw new Error(`Invalid class name: ${className}`)
@@ -410,6 +426,11 @@ export default class NavigationTreeManager {
         })
         editor.context_manager.addListener({
             className: 'plc-navigation-program',
+            onOpen: on_context_open_navigation_tree,
+            onClose: on_context_close_navigation_tree,
+        })
+        editor.context_manager.addListener({
+            className: 'plc-navigation-custom',
             onOpen: on_context_open_navigation_tree,
             onClose: on_context_close_navigation_tree,
         })
@@ -506,13 +527,15 @@ export default class NavigationTreeManager {
         if (!item) return console.error('Item not found in folders or root')
         const type = item.type === 'folder' ? 'folder' : item.item?.type || item.type
         const full_path = item.full_path
+        const name = item.name
         console.log(`Action ${action} on ${type}`, item)
-        if (item.name === 'main') {
-            return
+        const isRoot = item.path === '/' || full_path.split('/').filter(Boolean).length === 1
+        if (action === 'open') {
+            // Trigger click on the element
+            element.click()
         }
         if (action === 'delete') {
-            if (full_path === '/main') throw new Error('Cannot delete main program')
-            if (full_path === '/programs') throw new Error('Cannot delete programs folder')
+            if (isRoot) throw new Error(`Cannot delete root <${type}>"${name}"`)
             const confirm = await Popup.confirm({
                 title: 'Delete item',
                 description: `<b>${full_path}</b>\n\nAre you sure you want to delete ${type} "${item.name}"?\nThis action cannot be undone.`,
@@ -549,8 +572,7 @@ export default class NavigationTreeManager {
             this.createTreeItem({ item, recursive: true, redraw: true })
         }
         if (action === 'rename') {
-            if (full_path.endsWith('/main')) throw new Error('Cannot rename main program')
-            if (full_path === '/programs') throw new Error('Cannot rename programs folder')
+            if (isRoot) throw new Error(`Cannot rename root <${type}>"${item.name}"`)
             const path = await Popup.renameItem(type, full_path, (path) => {  // Returns full path
                 if (path.endsWith('/main')) return false
                 return true
@@ -601,8 +623,8 @@ export default class NavigationTreeManager {
     /** @param { boolean } [reload] */
     draw_navigation_tree = (reload) => {
         const editor = this.#editor
-        // [ + ] [icon] [title]   < ------ folder
-        //       [icon] [title]   < ------ item
+        // [ + ] [title]   < ------ folder
+        //       [title]   < ------ item
         const files = editor.project.files
         editor.project.folders = editor.project.folders || []
         const empty_folders = editor.project.folders
@@ -635,7 +657,7 @@ export default class NavigationTreeManager {
             item.depth = parts.length - 1
         })
 
-        console.log(this.root)
+        if (this.#editor.debug_context) console.log(this.root)
 
         this.root.sort(sortTree)
 
@@ -694,6 +716,7 @@ export default class NavigationTreeManager {
                 'plc-navigation-item',
                 'plc-navigation-folder',
                 'plc-navigation-program',
+                'plc-navigation-custom',
                 'plc-navigation-tree',
             ]
             const isMatch = matches.some(match => className === match)
