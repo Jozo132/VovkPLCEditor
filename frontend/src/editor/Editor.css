@@ -193,6 +193,7 @@ ul {
     border-right: 1px solid #ccc;
     border-radius: 0px;
     margin: 0px;
+    text-align: center;
 }
 
 .plc-device-online {
