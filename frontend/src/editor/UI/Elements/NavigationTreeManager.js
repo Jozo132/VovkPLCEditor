@@ -531,6 +531,8 @@ export default class NavigationTreeManager {
                 titleClass: `plc-icon ${getIconType('delete')}`,
                 title: 'Delete item',
                 description: `<b>${full_path}</b>\n\nAre you sure you want to delete ${type} "${item.name}"?\nThis action cannot be undone.`,
+                confirm_button_color: '#F00C',
+                confirm_text_color: '#FFF',
                 confirm_text: 'Delete',
                 cancel_text: 'Cancel',
             })

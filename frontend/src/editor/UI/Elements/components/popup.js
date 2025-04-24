@@ -281,17 +281,34 @@ export class Popup {
         return promise
     }
 
-    /** @param {{ title: string, titleClass?: string, description: string, confirm_text: string, cancel_text: string }} options */
+    /** 
+     * @param {{ 
+     *  title: string
+     *  titleClass?: string
+     *  description: string
+     *  confirm_text: string
+     *  confirm_text_color?: string
+     *  confirm_button_color?: string
+     *  cancel_text: string
+     *  cancel_text_color?: string
+     *  cancel_button_color?: string
+     * }} options 
+    **/
     static async confirm(options) { // @ts-ignore
         options = options || {}
         const titleClass = options.titleClass || ''
         const title = options.title || 'Confirm'
         const description = options.description || 'Are you sure?'
         const confirm_text = options.confirm_text || 'OK'
+        const confirm_text_color = options.confirm_text_color || 'black'
+        const confirm_button_color = options.confirm_button_color || 'none'
         const cancel_text = options.cancel_text || 'Cancel'
+        const cancel_text_color = options.cancel_text_color || 'black'
+        const cancel_button_color = options.cancel_button_color || 'none'
+        /** @type { PopupEndorseButton[] } */
         const buttons = [
-            { text: confirm_text, value: 'confirm' },
-            { text: cancel_text, value: 'cancel' },
+            { text: confirm_text, value: 'confirm', background: confirm_button_color, color: confirm_text_color },
+            { text: cancel_text, value: 'cancel', background: cancel_button_color, color: cancel_text_color },
         ]
         const selected = await Popup.promise({
             title,
