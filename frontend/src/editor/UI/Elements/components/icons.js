@@ -3,6 +3,34 @@
 
 import { ImageRenderer, importCSSCode } from "../../../../utils/tools.js"
 
+class IconDealer {
+    /** @type { Map<string, string> } */
+    icons = new Map()
+
+    static getInstance() {
+        window['____vovkplceditor_icon_dealer'] = window['____vovkplceditor_icon_dealer'] || new IconDealer()
+        return window['____vovkplceditor_icon_dealer']
+    }
+
+    async importIcon({ type, name, image }) {
+        if (type && this.icons.has(type)) throw new Error(`Icon for ${type} already exists`)
+        this.icons.set(type, name)
+        await importCSSCode(`.${name}::before { background-image: ${image}; }`)
+    }
+
+    /** @param { string } type */
+    getIconType(type) {
+        if (this.icons.has(type)) return this.icons.get(type) || ''
+        return ''
+    }
+}
+const icon_dealer = IconDealer.getInstance()
+/** @type { (name: string, type: string, image: string) => Promise<void> } */
+export const importIcon = (name, type, image) => icon_dealer.importIcon({ name, type, image })
+/** @type { (type: string) => string } */
+export const getIconType = (type) => icon_dealer.getIconType(type)
+
+
 // Simple 12x12 folder icon in yellow color, with the ear sticking out on the top left in dark yellow
 //
 //  +------\
@@ -32,12 +60,12 @@ import { ImageRenderer, importCSSCode } from "../../../../utils/tools.js"
 //  line to 0,4
 //  close path
 
-const folder_icon_source ={
-    width: 12,
-    height: 12,
+const folder_icon_source = {
+    width: 120,
+    height: 120,
     data: `
-        <path fill="#FF0" d="M1,1 L4,1 L6,2 L11,2 L12,3 L12,11 L11,12 L1,12 L0,11 L0,2 L1,1 Z" />
-        <path fill="#AA0" d="M1,1 L4,1 L6,2 L4,3 L0,3 L0,2 L1,1 Z" />
+        <path fill="#AA0" stroke="#000" stroke-width="4" d="M60,20 L105,20 L115,30 L115,105 L105,115 L15,115 L5,105 L5,20 L15,5 L15,5 L40,5 Z" />
+        <path fill="#FF5" stroke="#000" stroke-width="4" d="M60,20 L105,20 L115,30 L115,105 L105,115 L15,115 L5,105 L5,35 L40,35 Z" />
     `
 }
 
@@ -50,31 +78,23 @@ const program_icon_source = {
     `
 }
 
-const folder_icon_svg = ImageRenderer.renderSVGImage(folder_icon_source)
-export const folder_icon = folder_icon_svg.outerHTML
-
-// Round gear icon with 6 teeth in blue color
-const program_icon_svg = ImageRenderer.renderSVGImage(program_icon_source)
-export const program_icon = program_icon_svg.outerHTML
-
-
-export const folder_icon_url = `url('${ImageRenderer.renderSVG(folder_icon_source)}')`
-export const program_icon_url = `url('${ImageRenderer.renderSVG(program_icon_source)}')`
-
-// Import icons into CSS
-await importCSSCode(/*CSS*/`
-    :root {
-        --plc-folder-icon: ${folder_icon_url};
-        --plc-program-icon: ${program_icon_url};
-    }
-    
-    .plc-icon-folder::before { background-image: var(--plc-folder-icon); }
-    .plc-icon-gears::before { background-image: var(--plc-program-icon); }
-`)
-
-/** @type { (type: string) => string } */
-export const getIconType = (type) => {
-    if (type === 'folder') return 'plc-icon-folder'
-    if (type === 'program') return 'plc-icon-gears'
-    return ''
+const plus_icon_source = {
+    width: 120,
+    height: 120,
+    data: `
+        <path fill="#3AD" stroke="#3AD" stroke-width="20" d="M60,0 L60,120 M0,60 L120,60"  />
+    `
 }
+
+const delete_icon_source = {
+    width: 120,
+    height: 120,
+    data: `
+        <path fill="#D33" stroke="#D33" stroke-width="20" d="M15,15 L105,105 M105,15 L15,105"  />
+    `
+}
+
+await icon_dealer.importIcon({ type: 'folder', name: 'plc-icon-folder', image: `url('${ImageRenderer.renderSVG(folder_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'program', name: 'plc-icon-gears', image: `url('${ImageRenderer.renderSVG(program_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'add', name: 'plc-icon-add', image: `url('${ImageRenderer.renderSVG(plus_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'delete', name: 'plc-icon-delete', image: `url('${ImageRenderer.renderSVG(delete_icon_source)}')` })
