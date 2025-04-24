@@ -3,6 +3,7 @@
 
 import { MenuElement, PLC_Program, PLC_ProjectItem, PLCEditor } from "../../../utils/types.js"
 import { ElementSynthesis, CSSimporter, toCapitalCase } from "../../../utils/tools.js"
+import { getIconType } from "./components/icons.js"
 import { Popup } from "./components/popup.js"
 
 import "./components/icons.js"
@@ -19,7 +20,7 @@ const folder_item_html = ({ minimized, draggable, selected }) => /*HTML*/`
     <div class="plc-navigation-item ${minimized ? 'minimized' : ''} ${selected ? 'selected' : ''}">
         <div class="plc-navigation-folder" tabindex="0" draggable="${draggable}">
             <span class="minimize"></span>
-            <span class="plc-title plc-icon plc-icon-folder">empty</span>
+            <span class="plc-title plc-icon ${getIconType('folder')}">empty</span>
         </div>
         <div class="plc-navigation-children">
             <!-- Children will be added here dynamically -->
@@ -27,23 +28,13 @@ const folder_item_html = ({ minimized, draggable, selected }) => /*HTML*/`
     </div>
 `
 
-/** @type { (params: { draggable: boolean, selected: boolean }) => string } */
-const program_item_html = ({ draggable, selected }) => /*HTML*/`
-    <div class="plc-navigation-item ${selected ? 'selected' : ''}">
-        <div class="plc-navigation-program" tabindex="0" draggable="${draggable}">
-            <span class="plc-title plc-icon plc-icon-gears">empty</span>
-        </div>
-    </div>
-`
-
 /** @type { (params: { draggable: boolean, selected: boolean, type: string }) => string } */
 const custom_item_html = ({ draggable, selected, type }) => {
-    const icon = type === 'folder' ? 'plc-icon-folder' : type === 'program' ? 'plc-icon-gears' : ''
     const typename = ['folder', 'program'].includes(type) ? type : 'custom'
     return /*HTML*/`
         <div class="plc-navigation-item ${selected ? 'selected' : ''}">
             <div class="plc-navigation-${typename}" tabindex="0" draggable="${draggable}">
-                <span class="plc-title plc-icon ${icon}">empty</span>
+                <span class="plc-title plc-icon ${getIconType(type)}">empty</span>
             </div>
         </div>
     `
@@ -364,8 +355,8 @@ export default class NavigationTreeManager {
         const ctx_edit_folder = [
             {
                 type: 'submenu', name: 'add', label: 'Add item', items: [
-                    { type: 'item', name: 'add_program', label: 'Program', className: 'plc-icon plc-icon-gears' },
-                    { type: 'item', name: 'add_folder', label: 'Folder', className: 'plc-icon plc-icon-folder' },
+                    { type: 'item', name: 'add_program', label: 'Program', className: `plc-icon ${getIconType('program')}` },
+                    { type: 'item', name: 'add_folder', label: 'Folder', className: `plc-icon ${getIconType('folder')}` },
                 ]
             },
             { type: 'separator' },

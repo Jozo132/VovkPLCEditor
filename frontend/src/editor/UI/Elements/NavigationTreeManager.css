@@ -85,7 +85,7 @@
 }
 
 .plc-navigation-item > :first-child > div {
-    height: 20px !important;
+    height: 20px;
 }
 
 .plc-navigation-item {
@@ -121,9 +121,9 @@
     width: 20px;
     height: 20px;
     margin-right: 2px;
-    background-size: 80% 80% !important;
-    background-repeat: no-repeat !important;
-    background-position: center center !important;
+    background-size: 80% 80%;
+    background-repeat: no-repeat;
+    background-position: center center;
 }
 .plc-icon::before img {
     display: inline-block;
@@ -131,28 +131,21 @@
     padding: 2px;
 }
 
-.plc-icon-folder::before {
-    background-image: var(--plc-folder-icon) !important;
-}
-.plc-icon-gears::before {
-    background-image: var(--plc-program-icon) !important;
-}
-
 .plc-navigation-item div {
     margin-left: var(--plc-minimize-width);
 }
 .plc-navigation-folder {
-    width: 105%;
+    width: 105% !important;
     margin-left: 0px !important;
 }
 .plc-navigation-folder .minimize {
-    height: 20px !important;
+    height: 20px;
 }
 .plc-navigation-folder .minimize::after {
     content: "-";
     display: inline-block;
     width: var(--plc-minimize-width);
-    height: 20px !important;
+    height: 20px;
 }
 .plc-navigation-item.minimized > .plc-navigation-folder .minimize::after { content: "+"; }
 /* .plc-navigation-item:not(.minimized) > .plc-navigation-folder .minimize::after { content: "-"; } */

@@ -61,10 +61,20 @@ export const program_icon = program_icon_svg.outerHTML
 export const folder_icon_url = `url('${ImageRenderer.renderSVG(folder_icon_source)}')`
 export const program_icon_url = `url('${ImageRenderer.renderSVG(program_icon_source)}')`
 
-
+// Import icons into CSS
 await importCSSCode(/*CSS*/`
     :root {
         --plc-folder-icon: ${folder_icon_url};
         --plc-program-icon: ${program_icon_url};
     }
+    
+    .plc-icon-folder::before { background-image: var(--plc-folder-icon); }
+    .plc-icon-gears::before { background-image: var(--plc-program-icon); }
 `)
+
+/** @type { (type: string) => string } */
+export const getIconType = (type) => {
+    if (type === 'folder') return 'plc-icon-folder'
+    if (type === 'program') return 'plc-icon-gears'
+    return ''
+}

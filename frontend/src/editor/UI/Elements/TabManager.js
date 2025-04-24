@@ -3,6 +3,7 @@
 
 import { ElementSynthesis } from "../../../utils/tools.js";
 import { PLCEditor } from "../../../utils/types.js";
+import { getIconType } from "./components/icons.js";
 import EditorUI from "./EditorUI.js";
 
 export default class TabManager {
@@ -33,7 +34,7 @@ export default class TabManager {
         if (!program) throw new Error(`Program not found: ${id}`)
         const { name, comment } = program
 
-        const tabEl = ElementSynthesis(/*HTML*/`<div class="plc-tab" tabindex="0" draggable="true"><div class="plc-icon plc-icon-gears"></div><div class="plc-tab-title">${name}</div><div class="plc-tab-close">×</div></div>`)
+        const tabEl = ElementSynthesis(/*HTML*/`<div class="plc-tab" tabindex="0" draggable="true"><div class="plc-tab-title plc-icon ${getIconType(program.type)}">${name}</div><div class="plc-tab-close">×</div></div>`)
         const closeEl = tabEl.querySelector(".plc-tab-close");
         if (!tabEl) throw new Error("Tab title not found")
         if (!closeEl) throw new Error("Tab close button not found")
