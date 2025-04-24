@@ -47,7 +47,8 @@ export default class Menu {
   /** @type { (item: MenuElement, menu: Element) => void } */
   #addItem = (item, menu) => {
     if (item.hidden) return
-    const className = item.className || item.name
+    let className = item.className || item.name
+    className = className ? className.split(' ').map(c => c.trim()).filter(Boolean).join(' ') : ''
     if (item.type === 'separator') {
       const hr = document.createElement('hr')
       if (className) hr.classList.add(...className.split(' '))
