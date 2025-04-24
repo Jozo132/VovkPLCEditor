@@ -54,8 +54,8 @@ ul {
 .menu .item {
     cursor: default;
     padding-top: 3px;
-    padding-left: 14px;
-    padding-right: 20px;
+    padding-left: 24px;
+    padding-right: 16px;
     padding-bottom: 3px;
     align-items: center;
     font-size: 14px;
@@ -94,9 +94,20 @@ ul {
 }
 
 .submenu-container {
+    display: flex;
+    flex-direction: row;
     box-shadow: .3em .3em .6em #0007;
     border: #ccc solid 1px;
     border-radius: 2px;
+    align-items: left;
+}
+.submenu-container .item {
+    padding-left: 24px;
+}
+
+.menu-items .plc-icon,
+.submenu-container .plc-icon {
+    padding-left: 2px;
 }
 
 .thick {

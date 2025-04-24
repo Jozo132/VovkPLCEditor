@@ -354,14 +354,14 @@ export default class NavigationTreeManager {
         /** @type { MenuElement[] } */
         const ctx_edit_folder = [
             {
-                type: 'submenu', name: 'add', label: 'Add item', items: [
+                type: 'submenu', name: 'add', label: 'Add item', className: `plc-icon ${getIconType('add')}`, items: [
                     { type: 'item', name: 'add_program', label: 'Program', className: `plc-icon ${getIconType('program')}` },
                     { type: 'item', name: 'add_folder', label: 'Folder', className: `plc-icon ${getIconType('folder')}` },
                 ]
             },
             { type: 'separator' },
-            { type: 'item', name: 'delete', label: 'Delete' },
-            { type: 'item', name: 'rename', label: 'Rename' },
+            { type: 'item', name: 'delete', label: 'Delete', className: `plc-icon ${getIconType('delete')}` },
+            { type: 'item', name: 'rename', label: 'Rename', className: `plc-icon ${getIconType('rename')}` },
         ]
         /** @type { MenuElement[] } */
         const ctx_edit_program = [
@@ -370,15 +370,15 @@ export default class NavigationTreeManager {
             // { type: 'item', name: 'copy', label: 'Copy' },
             // { type: 'item', name: 'paste', label: 'Paste' },
             { type: 'separator' },
-            { type: 'item', name: 'delete', label: 'Delete' },
+            { type: 'item', name: 'delete', label: 'Delete', className: `plc-icon ${getIconType('delete')}` },
             { type: 'item', name: 'rename', label: 'Rename' },
         ]
 
         /** @type { MenuElement[] } */
         const ctx_online_folder = [
-            { type: 'item', name: 'add', label: 'Add item', disabled: true },
+            { type: 'item', name: 'add', label: 'Add item', disabled: true, className: `plc-icon ${getIconType('add')}` },
             { type: 'separator' },
-            { type: 'item', name: 'delete', label: 'Delete', disabled: true },
+            { type: 'item', name: 'delete', label: 'Delete', disabled: true, className: `plc-icon ${getIconType('delete')}` },
             { type: 'item', name: 'rename', label: 'Rename', disabled: true },
         ]
         /** @type { MenuElement[] } */
@@ -388,7 +388,7 @@ export default class NavigationTreeManager {
             // { type: 'item', name: 'copy', label: 'Copy' },
             // { type: 'item', name: 'paste', label: 'Paste', disabled: true },
             { type: 'separator' },
-            { type: 'item', name: 'delete', label: 'Delete', disabled: true },
+            { type: 'item', name: 'delete', label: 'Delete', disabled: true, className: `plc-icon ${getIconType('delete')}` },
             { type: 'item', name: 'rename', label: 'Rename', disabled: true },
         ]
 
