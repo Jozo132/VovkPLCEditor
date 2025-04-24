@@ -528,6 +528,7 @@ export default class NavigationTreeManager {
         if (action === 'delete') {
             if (isRoot) throw new Error(`Cannot delete root <${type}>"${name}"`)
             const confirm = await Popup.confirm({
+                titleClass: `plc-icon ${getIconType('delete')}`,
                 title: 'Delete item',
                 description: `<b>${full_path}</b>\n\nAre you sure you want to delete ${type} "${item.name}"?\nThis action cannot be undone.`,
                 confirm_text: 'Delete',

@@ -13,7 +13,8 @@ import { CSSimporter, debug_components, ElementSynthesis, ElementSynthesisMany, 
  * }} PopupEndorseButton
  * 
  * @typedef {{
- *     title?: string,
+ *     title?: string, 
+ *     titleClass?: string,
  *     description?: string,
  *     width?: string,
  *     height?: string,
@@ -110,7 +111,13 @@ export class Popup {
         const content = querySelect(modal, '.plc-popup-content')
         const closeButton = querySelect(modal, '.plc-popup-close')
         if (!options.closeButton) closeButton.remove()
-        if (options.title) title.innerHTML = options.title
+        if (options.title) {
+            title.innerHTML = options.title
+            if (options.titleClass) {
+                const titleClasses = options.titleClass.split(' ').map(c => c.trim()).filter(Boolean)
+                title.classList.add(...titleClasses)
+            }
+        }
         else title.remove()
         if (options.description) description.innerHTML = options.description.replaceAll('\n', '<br>')
         else description.remove()
@@ -274,9 +281,10 @@ export class Popup {
         return promise
     }
 
-    /** @param {{ title: string, description: string, confirm_text: string, cancel_text: string }} options */
+    /** @param {{ title: string, titleClass?: string, description: string, confirm_text: string, cancel_text: string }} options */
     static async confirm(options) { // @ts-ignore
         options = options || {}
+        const titleClass = options.titleClass || ''
         const title = options.title || 'Confirm'
         const description = options.description || 'Are you sure?'
         const confirm_text = options.confirm_text || 'OK'
@@ -287,6 +295,7 @@ export class Popup {
         ]
         const selected = await Popup.promise({
             title,
+            titleClass,
             description,
             buttons,
             // backdrop: false,
