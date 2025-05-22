@@ -1,8 +1,12 @@
 // @ts-check
 "use strict"
 
-import { ElementSynthesisMany } from "../../../utils/tools.js"
+import { ElementSynthesis, ElementSynthesisMany, CSSimporter } from "../../../utils/tools.js"
 import { PLC_Program, PLCEditor } from "../../../utils/types.js"
+
+const importCSS = CSSimporter(import.meta.url)
+
+await importCSS('./EditorUI.css')
 
 export default class EditorUI {
     id
@@ -74,6 +78,7 @@ export default class EditorUI {
             <h2 style="margin-top: 0px; margin-bottom: 3px;">Program: ${this.name || ''}</h2>
             <p>${this.comment || ''}</p>
         `
+        this.draw()
     }
 
     draw() {
@@ -94,6 +99,43 @@ export default class EditorUI {
             `
         }
         // draw_program(this.master, this.program)
+        
+        this.program.blocks.forEach(block => {
+            if (!block) return
+            if (!block.id) block.id = this.master._generateID(block.id)
+            if (!block.div) {
+                block.div = ElementSynthesis(/*HTML*/`
+                    <div class="plc-program-block">
+                        <div class="plc-program-block-header">
+                            <div class="plc-program-block-header-content">
+                                <div class="plc-program-block-header-title">
+                                    <div class="plc-program-block-header-icon">
+                                        ${(block.type || '???').toUpperCase().substring(0, 3)}
+                                    </div>
+                                    <div class="title">${block.name || ''}</div>
+                                    <div class="plc-comment-simple">${block.comment || ''}</div>
+                                </div>
+                                <div class="plc-program-block-header-buttons">
+                                    <!-- button to edit the block -->
+                                </div>
+                            </div>
+                            <div class="plc-comment-detailed">${block.comment || ''}</div>
+                        </div>
+                        <div class="plc-program-block-container">
+                            <div class="plc-program-block-code">
+                            </div>
+                        </div>
+                    </div>
+                `)
+                this.body.appendChild(block.div)
+            }
+            const { div } = block
+            if (!div) throw new Error('Block div not found')
+            const code = div.querySelector('.plc-program-block-code')
+            if (!code) throw new Error('Block code not found')
+            code.innerHTML = ''
+
+        })
     }
 
     hide() {
@@ -107,6 +149,13 @@ export default class EditorUI {
 
     close() {
         this.div.remove()
+        if (this.program) this.program.blocks.forEach(block => {
+            if (!block) return
+            if (block.div) {
+                block.div.remove()
+                delete block.div
+            }
+        })
         this.master.context_manager.removeListener(this.div)
         this.master.window_manager.windows.delete(this.id)
     }
@@ -117,6 +166,5 @@ export default class EditorUI {
         this.program.name = options.name || this.program.name
         this.program.comment = options.comment || this.program.comment
         this.reloadProgram()
-        this.draw()
     }
 }

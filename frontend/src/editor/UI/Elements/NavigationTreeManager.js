@@ -105,7 +105,7 @@ class PLC_File {
         const type = item.type
         const draggable = true
         const selected = this.navigation.state.selected === this.full_path
-        this.div = ElementSynthesis(custom_item_html({ draggable, selected, type}))
+        this.div = ElementSynthesis(custom_item_html({ draggable, selected, type }))
         const element = this.div.childNodes[0]; if (!element) throw new Error('Inner element not found')
         const title = this.div.querySelector('.plc-title'); if (!title) throw new Error('Title not found')
         this.title = title
@@ -407,7 +407,7 @@ export default class NavigationTreeManager {
         }
 
         const on_context_close_navigation_tree = (action, event, element) => {
-            editor.window_manager.tree_manager.#onContextMenu(action, event, element)
+            this._onContextMenu(action, event, element)
         }
 
         editor.context_manager.addListener({
@@ -438,7 +438,7 @@ export default class NavigationTreeManager {
             return connected ? [] : ctx_edit_empty
         }
         const on_context_close_empty = (action, event, element) => {
-            editor.window_manager.tree_manager.#onContextMenu(action, event, element)
+            this._onContextMenu(action, event, element)
         }
         editor.context_manager.addListener({
             target: this.container,
@@ -469,7 +469,19 @@ export default class NavigationTreeManager {
         // Example:
         // "/folder1/folder2/folder3" -> ["/folder1", "/folder1/folder2", "/folder1/folder2/folder3"]
         let exists = this.root.find(f => f.full_path === path)
-        if (exists) return
+        if (exists) {
+            if (item && item.full_path === '/main') {  // @ts-ignore
+                exists.id = this.#editor._generateID(exists.id) // @ts-ignore
+                exists.comment = item.comment // @ts-ignore
+                exists.blocks = item.blocks
+                // Update reference item for consistency
+                if (exists.item && exists.item.item) { // @ts-ignore
+                    exists.item.item.comment = item.comment // @ts-ignore
+                    exists.item.item.blocks = item.blocks
+                }
+            }
+            return
+        }
         let walker = ''
         const tree = path.split('/').filter(Boolean)
         if (type === 'file') tree.pop() // Remove the file name from the path for folder generation
@@ -511,7 +523,7 @@ export default class NavigationTreeManager {
         }
     }
 
-    #onContextMenu = async (action, event, element) => {
+    _onContextMenu = async (action, event, element) => {
         const rootItem = this.findItem(element)
         if (!rootItem) return console.error('Item not found in root')
         const item = rootItem.item
