@@ -514,6 +514,7 @@ ul {
     justify-content: space-between;
     align-items: center;
     width: 100%;
+    background: #222;
 }
 
 .plc-program-block-header-title {
@@ -526,7 +527,7 @@ ul {
     margin: 0px;
 }
 
-.plc-program-block .plc-comment-simple { display: none; }
+.plc-program-block .plc-comment-simple { display: none; text-overflow: ellipsis; }
 .plc-program-block.minimized .plc-comment-simple { display: block; }
 
 .plc-program-block.minimized .plc-comment-detailed { display: none; }
@@ -541,6 +542,7 @@ ul {
 
 .plc-program-block-header-content .menu-button {
     margin: 3px;
+    height: 100%;
 }
 
 .plc-program-block-header-buttons {

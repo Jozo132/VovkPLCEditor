@@ -9,3 +9,9 @@
     text-align: center;
     font-weight: bold;
 }
+
+.plc-program-block-title {
+    font-size: 1.05em;
+    font-weight: bold;
+    margin: 0px;
+}

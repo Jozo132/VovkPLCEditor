@@ -99,10 +99,11 @@ export default class EditorUI {
             `
         }
         // draw_program(this.master, this.program)
-        
+
         this.program.blocks.forEach(block => {
             if (!block) return
             if (!block.id) block.id = this.master._generateID(block.id)
+            const { id, type, name, comment } = block
             if (!block.div) {
                 block.div = ElementSynthesis(/*HTML*/`
                     <div class="plc-program-block">
@@ -110,16 +111,18 @@ export default class EditorUI {
                             <div class="plc-program-block-header-content">
                                 <div class="plc-program-block-header-title">
                                     <div class="plc-program-block-header-icon">
-                                        ${(block.type || '???').toUpperCase().substring(0, 3)}
+                                        ${(type || '???').toUpperCase().substring(0, 3)}
                                     </div>
-                                    <div class="title">${block.name || ''}</div>
-                                    <div class="plc-comment-simple">${block.comment || ''}</div>
+                                    <div class="plc-program-block-title">${name || ''}</div>
+                                    <p class="plc-comment-simple">${comment || ''}</p>
                                 </div>
                                 <div class="plc-program-block-header-buttons">
-                                    <!-- button to edit the block -->
+                                    <!--div class="menu-button delete">x</div-->
+                                    <!--div class="menu-button edit">/</div-->
+                                    <div class="menu-button minimize">-</div>
                                 </div>
                             </div>
-                            <div class="plc-comment-detailed">${block.comment || ''}</div>
+                            <p class="plc-comment-detailed">${comment || ''}</p>
                         </div>
                         <div class="plc-program-block-container">
                             <div class="plc-program-block-code">
