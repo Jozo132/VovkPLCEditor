@@ -2,6 +2,7 @@
   "name": "vovkplceditor",
   "version": "0.1.0",
   "scripts": {
+    "init": "git pull && git submodule update --init --recursive",
     "start": "node --experimental-strip-types ./backend/main.ts",
     "build": "node ./build.js"
   },
