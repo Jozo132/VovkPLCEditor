@@ -182,12 +182,14 @@ export class VovkPLCEditor {
             if (program.id === this.window_manager.active_tab) {
                 program.blocks.forEach(block => {
                     block.id = this._generateID(block.id)
-                    block.blocks.forEach(ladder => {
-                        ladder.id = this._generateID(ladder.id)
-                    })
-                    block.connections.forEach(con => {
-                        con.id = this._generateID(con.id)
-                    })
+                    if (block.type === 'ladder') {
+                        block.blocks.forEach(ladder => {
+                            ladder.id = this._generateID(ladder.id)
+                        })
+                        block.connections.forEach(con => {
+                            con.id = this._generateID(con.id)
+                        })
+                    }
                 })
             }
         }

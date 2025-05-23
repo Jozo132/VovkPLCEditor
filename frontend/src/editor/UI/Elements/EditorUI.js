@@ -2,7 +2,8 @@
 "use strict"
 
 import { ElementSynthesis, ElementSynthesisMany, CSSimporter } from "../../../utils/tools.js"
-import { PLC_Program, PLCEditor } from "../../../utils/types.js"
+import { PLC_Program, PLC_ProgramBlock, PLCEditor } from "../../../utils/types.js"
+
 
 const importCSS = CSSimporter(import.meta.url)
 
@@ -134,19 +135,32 @@ export default class EditorUI {
                 const minimize_button = block.div.querySelector('.minimize')
                 if (!minimize_button) throw new Error('Minimize button not found')
                 minimize_button.addEventListener('click', () => {
+                    const { div } = block
+                    if (!div) throw new Error('Block div not found')
                     // div.classList.toggle('minimized')
                     const is_minimized = div.classList.contains('minimized')
                     div.classList.toggle('minimized') // @ts-ignore
                     minimize_button.innerText = is_minimized ? '-' : '+'
                 })
             }
-            const { div } = block
-            if (!div) throw new Error('Block div not found')
-            const code = div.querySelector('.plc-program-block-code')
-            if (!code) throw new Error('Block code not found')
-            code.innerHTML = '<div class="TODO"></div>'
-
+            this.#drawProgramBlock(block)
         })
+    }
+
+    /** @param { PLC_ProgramBlock } block */
+    #drawProgramBlock(block) {
+        if (!block) throw new Error('Block not found')
+        const { div, id, type, name } = block
+        if (!div) throw new Error('Block div not found')
+        const block_container = div.querySelector('.plc-program-block-code')
+        if (!block_container) throw new Error('Block code not found')
+        block.props = block.props || {}
+        const rendered = this.master.language_manager.renderBlock(block)
+        if (rendered) return
+
+        // Unknown type
+        console.warn(`Unknown block type: ${type}`)
+        block_container.innerHTML = '<div class="TODO"></div>'
     }
 
     hide() {

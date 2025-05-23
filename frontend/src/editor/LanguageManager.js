@@ -30,18 +30,18 @@ export default class LanguageManager {
   initialize() {
     // TODO: Finish this
   }
-  
+
   /**
    * Render a program block (via its registered renderer)
-   * @param {CanvasRenderingContext2D} ctx
    * @param {PLC_ProgramBlock} block
    */
-  renderBlock(ctx, block) {
+  renderBlock(block) {
     const renderer = this.getRenderer(block.type)
     if (renderer) {
-      renderer.render(this.#editor, ctx, block)
+      renderer.render(this.#editor, block)
+      return true
     } else {
-      console.warn(`No renderer registered for block type: ${block.type}`)
+      return false
     }
   }
 
