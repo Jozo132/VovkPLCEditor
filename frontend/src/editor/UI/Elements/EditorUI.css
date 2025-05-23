@@ -1,0 +1,17 @@
+.plc-program-block-header-icon {
+    color: #578;
+    width: 25px;
+    align-items: center;
+    justify-content: center;
+    margin: auto;
+    margin-top: 5px;
+    font-size: 0.6em;
+    text-align: center;
+    font-weight: bold;
+}
+
+.plc-program-block-title {
+    font-size: 1.05em;
+    font-weight: bold;
+    margin: 0px;
+}
