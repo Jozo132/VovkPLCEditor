@@ -527,6 +527,12 @@ ul {
     margin: 0px;
 }
 
+.plc-comment-simple, .plc-comment-detailed {
+    margin: 3px !important;
+    margin-left: 5px !important;
+    font-size: 0.8em;
+}
+
 .plc-program-block .plc-comment-simple { display: none; text-overflow: ellipsis; }
 .plc-program-block.minimized .plc-comment-simple { display: block; }
 

@@ -131,12 +131,20 @@ export default class EditorUI {
                     </div>
                 `)
                 this.body.appendChild(block.div)
+                const minimize_button = block.div.querySelector('.minimize')
+                if (!minimize_button) throw new Error('Minimize button not found')
+                minimize_button.addEventListener('click', () => {
+                    // div.classList.toggle('minimized')
+                    const is_minimized = div.classList.contains('minimized')
+                    div.classList.toggle('minimized') // @ts-ignore
+                    minimize_button.innerText = is_minimized ? '-' : '+'
+                })
             }
             const { div } = block
             if (!div) throw new Error('Block div not found')
             const code = div.querySelector('.plc-program-block-code')
             if (!code) throw new Error('Block code not found')
-            code.innerHTML = ''
+            code.innerHTML = '<div class="TODO"></div>'
 
         })
     }
