@@ -1,21 +1,17 @@
-// @ts-check
-"use strict"
-
-import { CSSimporter, debug_components } from "../utils/tools.js"
-import { PLC_Program, PLC_Project } from "../utils/types.js"
+import {CSSimporter, debug_components} from '../utils/tools.js'
+import {PLC_Program, PLC_Project} from '../utils/types.js'
 
 const importCSS = CSSimporter(import.meta.url)
 await importCSS('./Editor.css')
 
-import VovkPLC from "../wasm/VovkPLC.js"
-import DeviceManager from "./DeviceManager.js"
-import WindowManager from "./UI/WindowManager.js"
-import ProjectManager from "./ProjectManager.js"
-import LanguageManager from "./LanguageManager.js"
-import ContextManager from "./ContextManager.js"
+import VovkPLC from '../wasm/VovkPLC.js'
+import DeviceManager from './DeviceManager.js'
+import WindowManager from './UI/WindowManager.js'
+import ProjectManager from './ProjectManager.js'
+import LanguageManager from './LanguageManager.js'
+import ContextManager from './ContextManager.js'
 import Actions from './Actions.js'
-import EditorUI from "./UI/Elements/EditorUI.js"
-
+import EditorUI from './UI/Elements/EditorUI.js'
 
 Actions.initialize() // Enable global actions for all instances of VovkPLCEditor
 
@@ -57,8 +53,33 @@ export class VovkPLCEditor {
     }
 
     /** @param {{ workspace?: HTMLElement | string | null, debug_css?: boolean, debug_context?: boolean, debug_hover?: boolean, initial_program?: string | Object }} options */
-    constructor({ workspace, debug_css, debug_context, debug_hover, initial_program }) {
-        this.initial_program = initial_program || null
+    constructor({workspace, debug_css, debug_context, debug_hover, initial_program}) {
+        this.initial_program = initial_program || {
+            offsets: {
+                control: {offset: 0, size: 16},
+                input: {offset: 16, size: 16},
+                output: {offset: 32, size: 16},
+                memory: {offset: 48, size: 16},
+                system: {offset: 64, size: 16},
+            },
+            symbols: [
+                {name: 'button1', location: 'input', type: 'bit', address: 0.0, initial_value: 0, comment: 'Test input'},
+                {name: 'button2', location: 'input', type: 'bit', address: 0.1, initial_value: 0, comment: 'Test input'},
+                {name: 'button3', location: 'input', type: 'bit', address: 0.2, initial_value: 0, comment: 'Test input'},
+                {name: 'button4', location: 'input', type: 'bit', address: 0.3, initial_value: 0, comment: 'Test input'},
+                {name: 'light1', location: 'output', type: 'bit', address: 0.0, initial_value: 0, comment: 'Test output'},
+                {name: 'light2', location: 'output', type: 'bit', address: 0.1, initial_value: 0, comment: 'Test output'},
+            ],
+            folders: ['/programs/test/b', '/programs/test/a', '/programs/test/c'],
+            files: [
+                {
+                    path: '/',
+                    type: 'program',
+                    name: 'main',
+                    full_path: '/main',
+                },
+            ],
+        }
         this.debug_css = !!debug_css
         this.debug_context = !!debug_context
         this.debug_hover = !!debug_hover
@@ -99,7 +120,7 @@ export class VovkPLCEditor {
     }
 
     /** @type { (program: PLC_Program) => PLC_Program | null } */
-    searchForProgram = (program) => {
+    searchForProgram = program => {
         const editor = this
         if (!program.id) throw new Error('Program ID not found')
         // console.log(`Comparing if ${program.id} is equal to ${editor.active_tab}`)
@@ -108,7 +129,7 @@ export class VovkPLCEditor {
     }
 
     /** @type { (id: any) => PLC_Program | null } */
-    findProgram = (id) => {
+    findProgram = id => {
         const editor = this
         if (!editor) throw new Error('Editor not found')
         // Search the navigation tree for the program with the given ID
@@ -140,19 +161,13 @@ export class VovkPLCEditor {
             host.div.setAttribute('id', id)
             this.context_manager.addListener({
                 target: host.div,
-                onOpen: (event) => {
+                onOpen: event => {
                     console.log(`Program "#${id}" context menu open`)
-                    return [
-                        { type: 'item', name: 'edit', label: 'Edit' },
-                        { type: 'item', name: 'delete', label: 'Delete' },
-                        { type: 'separator' },
-                        { type: 'item', name: 'copy', label: 'Copy' },
-                        { type: 'item', name: 'paste', label: 'Paste' },
-                    ]
+                    return [{type: 'item', name: 'edit', label: 'Edit'}, {type: 'item', name: 'delete', label: 'Delete'}, {type: 'separator'}, {type: 'item', name: 'copy', label: 'Copy'}, {type: 'item', name: 'paste', label: 'Paste'}]
                 },
-                onClose: (selected) => {
+                onClose: selected => {
                     console.log(`Program selected: ${selected}`)
-                }
+                },
             })
         }
         this.active_program.host.program = this.active_program
@@ -177,7 +192,7 @@ export class VovkPLCEditor {
     /** @param { PLC_Project } project */
     _prepareProject(project) {
         /** @param { PLC_Program } program */
-        const checkProgram = (program) => {
+        const checkProgram = program => {
             program.id = this._generateID(program.id)
             if (program.id === this.window_manager.active_tab) {
                 program.blocks.forEach(block => {
@@ -219,7 +234,6 @@ export class VovkPLCEditor {
     }
 }
 
-
 if (debug_components) {
-    Object.assign(window, { VovkPLCEditor })
+    Object.assign(window, {VovkPLCEditor})
 }

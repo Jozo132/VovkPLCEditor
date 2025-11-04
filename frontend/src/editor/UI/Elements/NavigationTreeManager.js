@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { MenuElement, PLC_Program, PLC_ProjectItem, PLCEditor } from "../../../utils/types.js"
 import { ElementSynthesis, CSSimporter, toCapitalCase } from "../../../utils/tools.js"
 import { getIconType } from "./components/icons.js"

@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { ElementSynthesis, ElementSynthesisMany, CSSimporter } from "../../../utils/tools.js"
 import { PLC_Program, PLC_ProgramBlock, PLCEditor } from "../../../utils/types.js"
 

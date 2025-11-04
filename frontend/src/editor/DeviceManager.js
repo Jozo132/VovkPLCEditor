@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { initializeConnection, disconnectConnection, ConnectionOptions } from "../connection/index.js"
 import { PLCEditor } from "../utils/types.js"
 

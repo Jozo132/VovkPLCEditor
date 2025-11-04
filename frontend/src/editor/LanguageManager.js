@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { RendererModule, LanguageModule } from "../languages/types.js"
 import { PLC_ProgramBlock, PLCEditor } from "../utils/types.js"
 import defaultLanguages from "../languages/index.js"

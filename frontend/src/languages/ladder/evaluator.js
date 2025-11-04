@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { getSymbolValue } from "../BlockLogic.js"
 import { VovkPLCEditor } from "../../editor/Editor.js"
 import { PLCEditor } from "../../utils/types.js"

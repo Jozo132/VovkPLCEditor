@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 // Check if system is windows or posix
 import { platform } from "os"
 const isWindows = platform() === "win32"

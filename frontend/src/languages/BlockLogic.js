@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { PLCEditor, PLC_Symbol } from "../utils/types.js"
 
 /**

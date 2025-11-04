@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import ConnectionBase from "../ConnectionBase.js";
 import Serial from "./tools/serial.js";
 import VovkPLC from "../../wasm/VovkPLC.js";

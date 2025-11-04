@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import EditorUI from '../editor/UI/Elements/EditorUI.js'
 
 /** @typedef { import('../editor/Editor.js').VovkPLCEditor } PLCEditor * @type { PLCEditor } */

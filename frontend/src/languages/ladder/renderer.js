@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { VovkPLCEditor } from "../../editor/Editor.js"
 import { PLC_Symbol } from "../../utils/types.js"
 import { RendererModule } from "../types.js"

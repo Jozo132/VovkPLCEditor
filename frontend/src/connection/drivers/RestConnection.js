@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import ConnectionBase from "../ConnectionBase.js";
 
 export default class RestConnection extends ConnectionBase {

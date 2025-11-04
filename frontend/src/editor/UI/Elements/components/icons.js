@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { ImageRenderer, importCSSCode } from "../../../../utils/tools.js"
 
 class IconDealer {

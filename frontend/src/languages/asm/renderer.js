@@ -1,6 +1,3 @@
-// @ts-check
-// "use strict"
-
 import { MiniCodeEditor } from "../MiniCodeEditor.js"
 import { RendererModule } from "../types.js"
 // import { resolveBlockState } from "./evaluator.js"

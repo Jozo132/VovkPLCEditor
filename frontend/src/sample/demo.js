@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { PLC_Project } from "../utils/types.js"
 
 /** @type { PLC_Project } */

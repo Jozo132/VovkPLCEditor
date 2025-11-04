@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { CSSimporter, debug_components, ElementSynthesis, ElementSynthesisMany, toCapitalCase } from "../../../../utils/tools.js"
 
 /** 

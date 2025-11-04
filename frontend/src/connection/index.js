@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { PLCEditor } from "../utils/types.js";
 import SimulationConnection from "./drivers/SimulationConnection.js";
 import RestConnection from "./drivers/RestConnection.js";

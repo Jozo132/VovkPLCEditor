@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 const middle_mouse_drag = () => {
     let isDragging = false;
     let startX, startY, scrollLeft, scrollTop;

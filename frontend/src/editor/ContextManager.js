@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { getEventPath } from "../utils/tools.js"
 import { PLCEditor } from "../utils/types.js"
 

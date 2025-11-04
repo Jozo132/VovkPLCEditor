@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { PLC_ContextState, PLC_Symbol } from "../../utils/types.js"
 import { LanguageModule } from "../types.js"
 // import { evaluateAssembly } from "./evaluator.js"

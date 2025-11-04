@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 export const debug_components = true
 
 export const generateID = () => {

@@ -1,7 +1,3 @@
-
-// @ts-check
-"use strict"
-
 import { VovkPLCEditor } from "./editor/Editor.js"
 import { plc_project } from "./sample/demo.js"
 
@@ -15,7 +11,7 @@ const editor = new VovkPLCEditor({
     debug_hover: false
 })
 
-editor.openProject(plc_project)
+// editor.openProject(plc_project)
 
 // const editor2 = new VovkPLCEditor({
 //     workspace: root2,

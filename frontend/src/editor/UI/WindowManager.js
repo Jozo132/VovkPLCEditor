@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { PLC_Project, PLCEditor } from "../../utils/types.js"
 import { ElementSynthesisMany, getEventPath, isVisible } from "../../utils/tools.js"
 import NavigationTreeManager from "./Elements/NavigationTreeManager.js"

@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { LanguageModule, RendererModule } from "./types.js"
 
 import ladderRenderer from "./ladder/renderer.js"

@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { PLC_ProgramBlock, PLCEditor } from "../utils/types.js";
 
 /**

@@ -1,7 +1,3 @@
-// @ts-check
-"use strict"
-
-
 export default class SerialCLASS {
     constructor(maxBufferLength = 1024, debug = false) {
         this.debug = debug;

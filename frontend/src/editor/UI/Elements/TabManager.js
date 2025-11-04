@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 import { ElementSynthesis } from "../../../utils/tools.js";
 import { PLCEditor } from "../../../utils/types.js";
 import { getIconType } from "./components/icons.js";

@@ -1,6 +1,3 @@
-// @ts-check
-"use strict"
-
 export default class ConnectionBase {
     /** @type { () => Promise<boolean> } */
     async connect() { throw new Error("connect() not implemented"); }
