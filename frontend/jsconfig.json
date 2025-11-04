@@ -13,7 +13,10 @@
         "noImplicitAny": false,
         "allowImportingTsExtensions": true,
         "allowArbitraryExtensions": true,
-        "allowUmdGlobalAccess": true
+        "noImplicitReturns": false,
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+        "skipLibCheck": true
     },
     "include": [
         "**/*.js"
@@ -21,6 +24,12 @@
     "exclude": [
         "node_modules",
         "**/dist/**",
-        "**/build/**"
-    ]
+        "**/build/**",
+        "__legacy.js"
+    ],
+    "ts-node": {
+        "compilerOptions": {
+            "allowJs": true
+        }
+    }
 }
