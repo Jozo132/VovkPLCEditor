@@ -289,6 +289,11 @@ ul {
     width: 20px;
 }
 
+.online.simulation .plc-navigation-bar, 
+.online.simulation .plc-tools-bar {
+    background: #444;
+}
+
 .minimize {
     text-align: center;
     cursor: pointer;
