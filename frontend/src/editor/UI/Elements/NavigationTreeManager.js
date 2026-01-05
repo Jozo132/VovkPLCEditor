@@ -389,16 +389,40 @@ export default class NavigationTreeManager {
             { type: 'item', name: 'rename', label: 'Rename', disabled: true },
         ]
 
+        /** @type { MenuElement[] } */
+        const ctx_fixed_folder = [
+            {
+                type: 'submenu', name: 'add', label: 'Add item', className: `plc-icon ${getIconType('add')}`, items: [
+                    { type: 'item', name: 'add_program', label: 'Program', className: `plc-icon ${getIconType('program')}` },
+                    { type: 'item', name: 'add_folder', label: 'Folder', className: `plc-icon ${getIconType('folder')}` },
+                ]
+            },
+        ]
+        /** @type { MenuElement[] } */
+        const ctx_fixed_program = [
+            { type: 'item', name: 'open', label: 'Open' },
+        ]
+
         /** @type { (event: any, element: any) => MenuElement[] } */
         const on_context_open_navigation_tree = (event, element) => {
             const connected = editor.device_manager.connected
             const classes = element.classList
             const className = classes[0] // Get the first class name
+
+            const item = this.findItem(element)
+            const full_path = item ? item.full_path : ''
+            const fixed = new Set(['/main', '/programs'])
+            const is_fixed = fixed.has(full_path)
+
             if (className === 'plc-navigation-folder') {
-                return connected ? ctx_online_folder : ctx_edit_folder
+                if (connected) return ctx_online_folder
+                if (is_fixed) return ctx_fixed_folder
+                return ctx_edit_folder
             }
             if (className === 'plc-navigation-program' || className === 'plc-navigation-custom') {
-                return connected ? ctx_online_program : ctx_edit_program
+                if (connected) return ctx_online_program
+                if (is_fixed) return ctx_fixed_program
+                return ctx_edit_program
             }
             throw new Error(`Invalid class name: ${className}`)
         }
