@@ -13,6 +13,7 @@
         "noImplicitAny": false,
         "allowImportingTsExtensions": true,
         "allowArbitraryExtensions": true,
+        "allowUmdGlobalAccess": true,
         "noImplicitReturns": false,
         "noUnusedLocals": false,
         "noUnusedParameters": false,
@@ -25,7 +26,7 @@
         "node_modules",
         "**/dist/**",
         "**/build/**",
-        "__legacy.js"
+        "**/__legacy.js"
     ],
     "ts-node": {
         "compilerOptions": {
