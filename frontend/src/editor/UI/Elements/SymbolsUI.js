@@ -207,6 +207,10 @@ export default class SymbolsUI {
         if (type === 'input') {
             const input = document.createElement('input')
             input.type = inputType
+            // Ignore for autofill
+            input.setAttribute('autocomplete', 'off')
+            input.setAttribute('name', 'sbl_' + Math.random().toString(36).substr(2, 9))
+            
             input.value = value !== undefined ? value : ''
             input.style.width = '100%'
             input.style.background = '#222'
@@ -218,6 +222,10 @@ export default class SymbolsUI {
             td.appendChild(input)
         } else if (type === 'select') {
             const select = document.createElement('select')
+            // Ignore for autofill
+            select.setAttribute('autocomplete', 'off')
+            select.setAttribute('name', 'sbl_sel_' + Math.random().toString(36).substr(2, 9))
+
             select.style.width = '100%'
             select.style.background = '#222'
             select.style.color = '#ddd'

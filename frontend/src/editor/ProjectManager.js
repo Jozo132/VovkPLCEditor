@@ -66,7 +66,6 @@ export default class ProjectManager {
         const source = item.item.item
         // Create a clean copy to avoid circular references (like .host added by EditorUI)
         return {
-          id: source.id,
           type: source.type,
           name: source.name,
           path: source.path,

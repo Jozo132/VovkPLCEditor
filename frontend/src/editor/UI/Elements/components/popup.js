@@ -1,16 +1,16 @@
-import { CSSimporter, debug_components, ElementSynthesis, ElementSynthesisMany, toCapitalCase } from "../../../../utils/tools.js"
+import {CSSimporter, debug_components, ElementSynthesis, ElementSynthesisMany, toCapitalCase} from '../../../../utils/tools.js'
 
-/** 
- * @typedef {{ 
+/**
+ * @typedef {{
  *     text?: string,
  *     color?: string,
  *     background?: string,
  *     value?: string
  *     verify?: () => boolean,
  * }} PopupEndorseButton
- * 
+ *
  * @typedef {{
- *     title?: string, 
+ *     title?: string,
  *     titleClass?: string,
  *     description?: string,
  *     width?: string,
@@ -29,7 +29,7 @@ import { CSSimporter, debug_components, ElementSynthesis, ElementSynthesisMany, 
  *     content?: string | string[] | HTMLElement | HTMLElement[] | Element | Element[],
  *     buttons?: PopupEndorseButton[],
  * }} PopupOptions
-**/
+ **/
 
 /** @type { (parent: Element, selector: string) => Element } */
 const querySelect = (parent, selector) => {
@@ -38,11 +38,10 @@ const querySelect = (parent, selector) => {
     return el
 }
 
-
 const importCSS = CSSimporter(import.meta.url)
 await importCSS('./popup.css')
 
-const popup_template = /*HTML*/`
+const popup_template = /*HTML*/ `
     <dialog class="plc-popup-window">
         <div class="plc-popup-header">
             <h2 class="plc-popup-title">Popup Title</h2>
@@ -81,7 +80,8 @@ export class Popup {
 
         const container = options.container || document.body
 
-        modal.addEventListener('keydown', (e) => { // @ts-ignore
+        modal.addEventListener('keydown', e => {
+            // @ts-ignore
             if (e.key === 'Escape') {
                 e.preventDefault()
                 if (options.closeOnESC) this.close()
@@ -100,8 +100,8 @@ export class Popup {
             }
         })
 
-        const header = this.header = querySelect(modal, '.plc-popup-header')
-        const footer = this.footer = querySelect(modal, '.plc-popup-footer')
+        const header = (this.header = querySelect(modal, '.plc-popup-header'))
+        const footer = (this.footer = querySelect(modal, '.plc-popup-footer'))
 
         const title = querySelect(modal, '.plc-popup-title')
         const description = querySelect(modal, '.plc-popup-description')
@@ -111,11 +111,13 @@ export class Popup {
         if (options.title) {
             title.innerHTML = options.title
             if (options.titleClass) {
-                const titleClasses = options.titleClass.split(' ').map(c => c.trim()).filter(Boolean)
+                const titleClasses = options.titleClass
+                    .split(' ')
+                    .map(c => c.trim())
+                    .filter(Boolean)
                 title.classList.add(...titleClasses)
             }
-        }
-        else title.remove()
+        } else title.remove()
         if (options.description) description.innerHTML = options.description.replaceAll('\n', '<br>')
         else description.remove()
         const popup_styles = []
@@ -124,13 +126,14 @@ export class Popup {
         if (popup_styles.length > 0) modal.setAttribute('style', popup_styles.join(' '))
 
         if (options.backdrop) {
-            let backdropClick = false;
-            modal.addEventListener('mousedown', (e) => backdropClick = e.target === modal)
-            modal.addEventListener('mouseup', (e) => {
-                if (backdropClick && e.target === modal) { // Confirmed backdrop click
+            let backdropClick = false
+            modal.addEventListener('mousedown', e => (backdropClick = e.target === modal))
+            modal.addEventListener('mouseup', e => {
+                if (backdropClick && e.target === modal) {
+                    // Confirmed backdrop click
                     this.close()
                 }
-                backdropClick = false;
+                backdropClick = false
             })
         }
         closeButton.addEventListener('click', () => {
@@ -139,12 +142,12 @@ export class Popup {
 
         // Allow the popup to be closed with code after it has been opened
         if (options.closeHandler) {
-            options.closeHandler((value) => {
+            options.closeHandler(value => {
                 this.close(value)
             })
         }
 
-        const appendContent = (element) => {
+        const appendContent = element => {
             if (Array.isArray(element)) {
                 element.forEach(c => appendContent(c))
             } else if (typeof element === 'string') {
@@ -186,7 +189,6 @@ export class Popup {
         if (options.onOpen) options.onOpen() // @ts-ignore
         this.modal.style.display = 'block'
 
-
         if (options.draggable) {
             const x = 0
             const y = 0
@@ -217,7 +219,7 @@ export class Popup {
                         modal.style.left = `${drag.x}px` // @ts-ignore
                         modal.style.top = `${drag.y}px`
                     }
-                }
+                },
             }
             header.classList.add('draggable')
             header.addEventListener('mousedown', drag.start)
@@ -236,11 +238,12 @@ export class Popup {
                 this.close('destroyed')
             }
             // If the modal loses "open" attribute, reopen it
-            if (!modal.hasAttribute('open')) { // @ts-ignore
+            if (!modal.hasAttribute('open')) {
+                // @ts-ignore
                 modal.showModal()
             }
         })
-        observer.observe(container, { childList: true, subtree: true, attributes: true })
+        observer.observe(container, {childList: true, subtree: true, attributes: true})
     }
 
     /** @param {string} [value] */
@@ -269,17 +272,16 @@ export class Popup {
         this.modal.remove()
     }
 
-
     /** @param { PopupOptions } options */
     static async promise(options) {
         options = options || {}
         const popup = new Popup(options)
-        const promise = new Promise((resolve) => popup.options.onClose = (value) => resolve(value))
+        const promise = new Promise(resolve => (popup.options.onClose = value => resolve(value)))
         return promise
     }
 
-    /** 
-     * @param {{ 
+    /**
+     * @param {{
      *  title: string
      *  titleClass?: string
      *  description: string
@@ -289,9 +291,10 @@ export class Popup {
      *  cancel_text: string
      *  cancel_text_color?: string
      *  cancel_button_color?: string
-     * }} options 
-    **/
-    static async confirm(options) { // @ts-ignore
+     * }} options
+     **/
+    static async confirm(options) {
+        // @ts-ignore
         options = options || {}
         const titleClass = options.titleClass || ''
         const title = options.title || 'Confirm'
@@ -304,8 +307,8 @@ export class Popup {
         const cancel_button_color = options.cancel_button_color || 'none'
         /** @type { PopupEndorseButton[] } */
         const buttons = [
-            { text: confirm_text, value: 'confirm', background: confirm_button_color, color: confirm_text_color },
-            { text: cancel_text, value: 'cancel', background: cancel_button_color, color: cancel_text_color },
+            {text: confirm_text, value: 'confirm', background: confirm_button_color, color: confirm_text_color},
+            {text: cancel_text, value: 'cancel', background: cancel_button_color, color: cancel_text_color},
         ]
         const selected = await Popup.promise({
             title,
@@ -318,36 +321,35 @@ export class Popup {
         return selected === 'confirm'
     }
 
-
     /**
      * @typedef {{ name: string, label?: string, readonly?: boolean, margin?: string, onChange?: (data: any) => void }} InputCommon
      * @typedef {InputCommon & { type: 'text', value?: string, placeholder?: string }} TextInput
      * @typedef {InputCommon & { type: 'number', value?: number }} NumberInput
      * @typedef {InputCommon & { type: 'integer', value?: number }} IntegerInput
      * @typedef { TextInput | NumberInput | IntegerInput  } InputField
-     * 
+     *
      * @typedef { PopupOptions & { inputs: InputField[] }} FormOptions
      */
 
     /** @param { FormOptions } options */
     static async form(options) {
-        options = options || { inputs: [] }
+        options = options || {inputs: []}
         const inputs = options.inputs || []
         const _verify = options.verify
-        options.verify = () => _verify ? _verify(states) : true
+        options.verify = () => (_verify ? _verify(states) : true)
 
         const form = document.createElement('form') // Will be passed to the popup as content
         form.classList.add('plc-popup-form')
         options.content = form
 
-        form.addEventListener('submit', (e) => {
+        form.addEventListener('submit', e => {
             e.preventDefault()
         })
 
         const states = {}
 
         inputs.forEach(input => {
-            const { type, label, name, value, margin, readonly, onChange } = input
+            const {type, label, name, value, margin, readonly, onChange} = input
             if (!['text', 'number', 'integer'].includes(type)) throw new Error(`Invalid input type: ${type}`)
             if (!input.name) throw new Error(`Input name is required`)
             if (input.value && typeof input.value !== 'string' && type === 'text') throw new Error(`Invalid input value: ${input.value}`)
@@ -357,36 +359,45 @@ export class Popup {
             let typeName = type
             if (type === 'integer') typeName = 'number'
 
-            const label_element = ElementSynthesis(/*HTML*/`<label for="${name}">${typeof label !== 'undefined' ? label : label || toCapitalCase(name)}</label>`)
-            const input_element =
-                readonly
-                    ? ElementSynthesis(/*HTML*/`<p class="readonly"></p>`)
-                    : ElementSynthesis(/*HTML*/`<input type="${typeName}" name="${name}" value="${value || ''}" placeholder="${placeholder}">`)
-            if (typeof margin !== 'undefined') { // @ts-ignore
+            const label_element = readonly ? ElementSynthesis(/*HTML*/ `<div></div>`) : ElementSynthesis(/*HTML*/ `<label for="${name}">${typeof label !== 'undefined' ? label : label || toCapitalCase(name)}</label>`)
+            const input_element = readonly ? ElementSynthesis(/*HTML*/ `<div class="readonly" id="${name}" name="${name}" readonly style="background: none;" tabindex="-1" disabled></div>`) : ElementSynthesis(/*HTML*/ `<input type="${typeName}" id="${name}" name="${name}" value="${value || ''}" placeholder="${placeholder}" autocomplete="off">`)
+            if (typeof margin !== 'undefined') {
+                // @ts-ignore
                 input_element.style.margin = margin
             }
-            if (readonly) { // @ts-ignore
-                input_element.innerText = value || ''
+            if (readonly) {
+                // @ts-ignore
+                input_element.innerHTML = value || ''
             }
-            states[name] = new Proxy({
-                value: input.value || '',
-                setError: () => { input_element.classList.add('error'); return false },
-                clearError: () => { input_element.classList.remove('error'); return false },
-            }, {
-                set: (target, prop, value) => {
-                    if (prop === 'value_in') {
-                        target.value = value
-                    }
-                    if (prop === 'value') {
-                        target.value = value // @ts-ignore
-                        if (readonly) input_element.innerText = value
-                        else { // @ts-ignore
-                            input_element.value = value
+            states[name] = new Proxy(
+                {
+                    value: input.value || '',
+                    setError: () => {
+                        input_element.classList.add('error')
+                        return false
+                    },
+                    clearError: () => {
+                        input_element.classList.remove('error')
+                        return false
+                    },
+                },
+                {
+                    set: (target, prop, value) => {
+                        if (prop === 'value_in') {
+                            target.value = value
                         }
-                    }
-                    return true
+                        if (prop === 'value') {
+                            target.value = value // @ts-ignore
+                            if (readonly) input_element.innerText = value
+                            else {
+                                // @ts-ignore
+                                input_element.value = value
+                            }
+                        }
+                        return true
+                    },
                 }
-            })
+            )
             const onInput = e => {
                 const value = e.target.value
                 // Use proxy value "value_in" to set the value in the state without triggering element value change
@@ -402,14 +413,15 @@ export class Popup {
             if (!readonly) {
                 input_element.addEventListener('input', onInput)
                 input_element.addEventListener('change', onInput)
-                input_element.addEventListener('keydown', (e) => { // @ts-ignore
+                input_element.addEventListener('keydown', e => {
+                    // @ts-ignore
                     if (e.key === 'Enter') {
                         e.preventDefault()
                         if (onChange) onChange(states)
                     }
                 })
             }
-            form.appendChild(label_element)
+            if (label_element) form.appendChild(label_element)
             form.appendChild(input_element)
         })
 
@@ -440,7 +452,7 @@ export class Popup {
             //confirmClose: true,
             confirmCloseText: 'Are you sure?',
             inputs: [
-                { type: 'text', name: 'preview', label: '', value: `${directory}/${default_name}`, readonly: true },
+                {type: 'text', name: 'preview', label: '', value: `${directory}/${default_name}`, readonly: true},
                 {
                     type: 'text',
                     name: 'name',
@@ -452,7 +464,7 @@ export class Popup {
                             data.name.value = data.name.value.substring(1)
                         }
                         data.preview.value = `${directory}/${data.name.value.trim()}`
-                    }
+                    },
                 },
             ],
             verify: values => {
@@ -466,15 +478,14 @@ export class Popup {
                 return true
             },
             buttons: [
-                { text: 'Create', value: 'confirm' },
-                { text: 'Cancel', value: 'cancel' },
-            ]
+                {text: 'Create', value: 'confirm'},
+                {text: 'Cancel', value: 'cancel'},
+            ],
         })
 
         if (!res) return null
         return res.preview
     }
-
 
     /** @type { (type: string, path: string, verify?: (path: string) => boolean) => Promise<string | null> } */
     static renameItem = async (type, path, verify) => {
@@ -492,7 +503,7 @@ export class Popup {
             //confirmClose: true,
             confirmCloseText: 'Are you sure?',
             inputs: [
-                { type: 'text', name: 'preview', label: '', value: `${path}`, readonly: true },
+                {type: 'text', name: 'preview', label: '', value: `${path}`, readonly: true},
                 {
                     type: 'text',
                     name: 'name',
@@ -504,7 +515,7 @@ export class Popup {
                             data.name.value = data.name.value.substring(1)
                         }
                         data.preview.value = `${path.split('/').slice(0, -1).join('/')}/${data.name.value.trim()}`
-                    }
+                    },
                 },
             ],
             verify: values => {
@@ -518,20 +529,16 @@ export class Popup {
                 return true
             },
             buttons: [
-                { text: 'Rename', value: 'confirm' },
-                { text: 'Cancel', value: 'cancel' },
-            ]
+                {text: 'Rename', value: 'confirm'},
+                {text: 'Cancel', value: 'cancel'},
+            ],
         })
 
         if (!res) return null
         return res.preview
     }
-
-
 }
 
-
-
 if (debug_components) {
-    Object.assign(window, { Popup })
+    Object.assign(window, {Popup})
 }
