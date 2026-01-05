@@ -70,7 +70,7 @@ export class VovkPLCEditor {
                 {name: 'light1', location: 'output', type: 'bit', address: 0.0, initial_value: 0, comment: 'Test output'},
                 {name: 'light2', location: 'output', type: 'bit', address: 0.1, initial_value: 0, comment: 'Test output'},
             ],
-            folders: ['/programs/test/b', '/programs/test/a', '/programs/test/c'],
+            // folders: ['/programs/test/b', '/programs/test/a', '/programs/test/c'],
             files: [
                 {
                     path: '/',

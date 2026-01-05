@@ -176,9 +176,8 @@ export default class EditorUI {
 
     close() {
         this.div.remove()
-        if (this.program) this.program.blocks.forEach(block => {
-            if (!block) return
-            if (block.div) {
+        if (this.program && this.program.blocks) this.program.blocks.forEach(block => {
+            if (block && block.div) {
                 block.div.remove()
                 delete block.div
             }
