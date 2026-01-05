@@ -492,14 +492,9 @@ export default class NavigationTreeManager {
         let exists = this.root.find(f => f.full_path === path)
         if (exists) {
             if (item && item.full_path === '/main') {  // @ts-ignore
-                exists.id = this.#editor._generateID(exists.id) // @ts-ignore
-                exists.comment = item.comment // @ts-ignore
-                exists.blocks = item.blocks
-                // Update reference item for consistency
-                if (exists.item && exists.item.item) { // @ts-ignore
-                    exists.item.item.comment = item.comment // @ts-ignore
-                    exists.item.item.blocks = item.blocks
-                }
+                exists.item.item.blocks = item.blocks // @ts-ignore
+                exists.item.item.comment = item.comment
+                exists.item.item.id = this.#editor._generateID(exists.item.item.id)
             }
             return
         }

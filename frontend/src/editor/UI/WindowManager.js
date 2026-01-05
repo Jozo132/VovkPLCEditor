@@ -47,7 +47,7 @@ export default class WindowManager {
                         <div class="plc-device">
                             <!-- Left side: dropdown with options 'Device' and 'Simulation,  the right side: button for going online with text content 'Go online'  -->
                             <div class="plc-device-dropdown">
-                                <select>
+                                <select id="plc-device-select-field">
                                     <option value="simulation">Simulation</option>
                                     <!-- More options will be added dynamically -->
                                 </select>

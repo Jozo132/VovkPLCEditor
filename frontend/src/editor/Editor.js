@@ -191,6 +191,9 @@ export class VovkPLCEditor {
 
     /** @param { PLC_Project } project */
     _prepareProject(project) {
+        // Clear reserved IDs when loading a new project to prevent conflicts with old IDs
+        this.reserved_ids = []
+
         /** @param { PLC_Program } program */
         const checkProgram = program => {
             program.id = this._generateID(program.id)
