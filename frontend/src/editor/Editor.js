@@ -106,8 +106,8 @@ export class VovkPLCEditor {
         this.context_manager.initialize()
         this.language_manager.initialize()
 
-        if (initial_program) {
-            this.openProject(initial_program)
+        if (this.initial_program) {
+            this.openProject(this.initial_program)
         }
     }
 
