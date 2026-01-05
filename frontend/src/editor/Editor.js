@@ -212,8 +212,10 @@ export class VovkPLCEditor {
             }
         }
         project.files.forEach(file => {
-            if (file.type === 'program') return checkProgram(file) // @ts-ignore
-            throw new Error(`Invalid child type: ${child.type}`)
+            if (file.type === 'program') return checkProgram(file)
+            if (file.type === 'symbols') return
+            // @ts-ignore
+            throw new Error(`Invalid child type: ${file.type}`)
         })
     }
 

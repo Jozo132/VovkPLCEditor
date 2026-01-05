@@ -27,7 +27,7 @@ const folder_item_html = ({ minimized, draggable, selected }) => /*HTML*/`
 
 /** @type { (params: { draggable: boolean, selected: boolean, type: string }) => string } */
 const custom_item_html = ({ draggable, selected, type }) => {
-    const typename = ['folder', 'program'].includes(type) ? type : 'custom'
+    const typename = ['folder', 'program', 'symbols'].includes(type) ? type : 'custom'
     return /*HTML*/`
         <div class="plc-navigation-item ${selected ? 'selected' : ''}">
             <div class="plc-navigation-${typename}" tabindex="0" draggable="${draggable}">
@@ -47,11 +47,12 @@ const custom_item_html = ({ draggable, selected, type }) => {
 /** @type {{ files: PLC_ProjectItem[], folders: string[] }} */
 const default_root_state = {
     files: [
+        { id: 'symbols', type: 'symbols', name: 'symbols', path: '/', full_path: '/symbols', comment: 'Symbols Table', blocks: [] },
         { type: 'program', name: 'main', path: '/', full_path: '/main', comment: '', blocks: [] },
         // { type: 'custom', name: 'custom', path: '/', full_path: '/custom', comment: '', blocks: [] },
     ],
     folders: [
-        '/programs',
+        '/project',
     ]
 }
 
@@ -61,6 +62,8 @@ const sortTree = (a, b) => {
     // Sort by depth, where higher depth has higher priority
     if (a.depth === 0) return 0
     if (a.depth !== b.depth) return a.depth - b.depth
+    if (a.full_path === '/symbols') return -1
+    if (b.full_path === '/symbols') return 1
     if (a.type === 'folder' && b.type !== 'folder') return -1
     if (a.type !== 'folder' && b.type === 'folder') return 1
     const a_name = (a.full_path || a.path).split('/').pop() || ''
@@ -411,7 +414,7 @@ export default class NavigationTreeManager {
 
             const item = this.findItem(element)
             const full_path = item ? item.full_path : ''
-            const fixed = new Set(['/main', '/programs'])
+            const fixed = new Set(['/main', '/project', '/symbols'])
             const is_fixed = fixed.has(full_path)
 
             if (className === 'plc-navigation-folder') {
@@ -419,7 +422,7 @@ export default class NavigationTreeManager {
                 if (is_fixed) return ctx_fixed_folder
                 return ctx_edit_folder
             }
-            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom') {
+            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-symbols') {
                 if (connected) return ctx_online_program
                 if (is_fixed) return ctx_fixed_program
                 return ctx_edit_program
@@ -443,6 +446,11 @@ export default class NavigationTreeManager {
         })
         editor.context_manager.addListener({
             className: 'plc-navigation-custom',
+            onOpen: on_context_open_navigation_tree,
+            onClose: on_context_close_navigation_tree,
+        })
+        editor.context_manager.addListener({
+            className: 'plc-navigation-symbols',
             onOpen: on_context_open_navigation_tree,
             onClose: on_context_close_navigation_tree,
         })
@@ -739,6 +747,7 @@ export default class NavigationTreeManager {
                 'plc-navigation-folder',
                 'plc-navigation-program',
                 'plc-navigation-custom',
+                'plc-navigation-symbols',
                 'plc-navigation-tree',
             ]
             const isMatch = matches.some(match => className === match)

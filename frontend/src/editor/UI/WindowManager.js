@@ -3,9 +3,10 @@ import { ElementSynthesisMany, getEventPath, isVisible } from "../../utils/tools
 import NavigationTreeManager from "./Elements/NavigationTreeManager.js"
 import TabManager from "./Elements/TabManager.js"
 import EditorUI from "./Elements/EditorUI.js"
+import SymbolsUI from "./Elements/SymbolsUI.js"
 
 
-/** @typedef { EditorUI } WindowType */
+/** @typedef { EditorUI | SymbolsUI } WindowType */
 
 export default class WindowManager {
 
@@ -443,7 +444,7 @@ export default class WindowManager {
         // this.#editor.draw()
     }
 
-    /** @type { (id: string) => (EditorUI | undefined) } */
+    /** @type { (id: string) => (WindowType | undefined) } */
     createEditorWindow(id) {
         // Check if the program exists in 'this.windows'
         if (this.windows.has(id)) {
@@ -451,10 +452,16 @@ export default class WindowManager {
             return this.windows.get(id)
         }
         // If it doesn't exist, create a new editor UI
-        const editorUI = new EditorUI(this.#editor, id)
+        /** @type { WindowType } */
+        let editorUI
+        if (id === 'symbols') {
+            editorUI = new SymbolsUI(this.#editor)
+        } else {
+            editorUI = new EditorUI(this.#editor, id)
+        }
         this.windows.set(id, editorUI)
         // Append the editor UI to the workspace
-        this.window_frame.appendChild(editorUI.div)
+        if (editorUI.div) this.window_frame.appendChild(editorUI.div)
         // Return the newly created editor UI
         return editorUI
     }
