@@ -98,6 +98,11 @@ export default class EditorUI {
         }
         // draw_program(this.master, this.program)
 
+        if (!this.program.blocks || this.program.blocks.length === 0) {
+            this.body.innerHTML = '<p>No blocks. Add blocks to start programming.</p>'
+            return
+        }
+
         this.program.blocks.forEach(block => {
             if (!block) return
             if (!block.id) block.id = this.master._generateID(block.id)
