@@ -50,8 +50,8 @@ const handle_resizer_drag = (event) => { // @ts-ignore
     const target = resizer.closest('.resizable')
     if (!target) return console.error("No resizable parent found for resizer: ", resizer)
     event.preventDefault();
-    const startX = event.clientX || event.touches[0].clientX;
-    const startY = event.clientY || event.touches[0].clientY;
+    const startX = event.clientX || event.touches && event.touches[0].clientX;
+    const startY = event.clientY || event.touches && event.touches[0].clientY;
     const startWidth = target.offsetWidth;
     const startHeight = target.offsetHeight;
 
@@ -63,8 +63,8 @@ const handle_resizer_drag = (event) => { // @ts-ignore
     }
 
     function onMouseMove(event) {
-        const endX = event.clientX || event.touches[0].clientX
-        const endY = event.clientY || event.touches[0].clientY// @ts-ignore
+        const endX = event.clientX || event.touches && event.touches[0].clientX
+        const endY = event.clientY || event.touches && event.touches[0].clientY// @ts-ignore
         if (resizer.classList.contains("right")) {
             const newWidth = constrain(startWidth + (endX - startX));
             target.style.width = newWidth + "px"; // @ts-ignore
@@ -111,7 +111,8 @@ const handleLongPress = (element, delay = 500) => {
     }
 
     element.addEventListener("touchstart", (event) => {
-        const touch = event.touches[0];
+        const touch = event.touches && event.touches[0];
+        if (!touch) return;
         const { clientX, clientY } = touch;
         start = { clientX, clientY }
         target = event.target
@@ -134,6 +135,7 @@ const handleLongPress = (element, delay = 500) => {
     });
 
     element.addEventListener("touchmove", (event) => {
+        if (!event.touches || event.touches.length === 0) return;
         const distanceX = Math.abs(event.touches[0].clientX - start.clientX);
         const distanceY = Math.abs(event.touches[0].clientY - start.clientY);
         const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
