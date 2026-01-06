@@ -44,7 +44,15 @@ export default class SerialConnection extends ConnectionBase {
 
     async downloadProgram(bytecode) {
         const command = this.plc.buildCommand.programDownload(bytecode);
-        this.serial.write(command + "\n");
+        await this.writeChunked(command + "\n");
+    }
+
+    async writeChunked(data, chunkSize = 64, delay = 5) {
+        for (let i = 0; i < data.length; i += chunkSize) {
+            const chunk = data.substring(i, i + chunkSize);
+            await this.serial.write(chunk);
+            if (delay > 0) await new Promise(r => setTimeout(r, delay));
+        }
     }
 
     async uploadProgram() {
