@@ -41,7 +41,7 @@ export default class SymbolsUI {
                     <p>Global Variable Table</p>
                 </div>
             </div>
-            <div class="plc-editor-body" style="padding: 10px; overflow: auto; display: flex; flex-direction: column; justify-content: space-between;">
+            <div class="plc-editor-body" style="padding: 10px; overflow: auto; display: flex; flex-direction: column; justify-content: space-between; max-width: 1200px;">
                 <table class="symbols-table">
                     <thead>
                         <tr>

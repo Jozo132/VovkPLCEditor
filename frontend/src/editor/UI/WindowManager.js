@@ -109,14 +109,15 @@ export default class WindowManager {
             <div class="plc-workspace-footer" style="height: 22px; background: #007acc; color: #fff; display: flex; align-items: center; padding: 0px; margin: 0px; font-size: 12px; justify-content: space-between;">
                 <div style="display: flex; gap: 10px; align-items: center; margin-left: 15px;">
                     <div class="footer-item"><span class="codicon codicon-remote"></span> VovkPLC Editor</div>
-                    <button id="footer-compile" class="footer-btn" style="background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 5px; opacity: 0.5; pointer-events: none;">
-                        <span class="plc-icon plc-icon-gears"></span> Compile
+                    <button id="footer-compile" class="footer-btn" style="background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; opacity: 0.5; pointer-events: none; font-size: 11px;">
+                        <span style="display: flex; transform: translateY(-1.5px);"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-6a.5.5 0 0 0-1 0v6z"/><path d="M3 11.5h2v2h-2zM7 11.5h2v2h-2zM11 11.5h2v2h-2zM5 8.5h2v2h-2zM9 8.5h2v2h-2z"/></svg></span> Compile
                     </button>
-                    <button id="footer-download" class="footer-btn" style="background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 5px; opacity: 0.5; pointer-events: none;">
-                        <span class="plc-icon plc-icon-upload"></span> Download
+                    <button id="footer-download" class="footer-btn" style="background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; opacity: 0.5; pointer-events: none; font-size: 11px;">
+                        <span style="display: flex; transform: translateY(-1.5px);"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5v5.793l2.146-2.147a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 1 1 .708-.708L7.5 10.293V4.5A.5.5 0 0 1 8 4z"/><path d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-6a.5.5 0 0 0-1 0v6z"/></svg></span> Download
                     </button>
-                    <span id="footer-compile-size" style="margin-left: 5px; opacity: 0.8;"></span>
+                    <span id="footer-compile-size" style="margin-left: 0px; opacity: 0.8; font-size: 11px;"></span>
                 </div>
+
                 <div style="display: flex; gap: 15px; margin-right: 15px">
                      <span id="footer-device-status">Disconnected</span>
                 </div>
@@ -322,8 +323,8 @@ export default class WindowManager {
             const endTime = performance.now()
 
             // Store result for download
-            this.compiledBytecode = result.output
-            this.compiledSize = result.size
+            this.#editor.project.compiledBytecode = result.output
+            this.#editor.project.compiledSize = result.size
 
             const MAX_PROGRAM_SIZE = 1024 // 1KB limit for now
             const percent = +((result.size / MAX_PROGRAM_SIZE) * 100).toFixed(1)
@@ -380,15 +381,18 @@ export default class WindowManager {
     }
 
     async handleFooterDownload() {
-        if (!this.compiledBytecode) {
+        const compiledBytecode = this.#editor.project.compiledBytecode
+        const compiledSize = this.#editor.project.compiledSize
+
+        if (!compiledBytecode) {
             this.logToConsole('No compiled program found. Please Compile first.', 'error')
             this.logToConsole('----------------------------------------', 'info')
             return
         }
 
         const MAX_PROGRAM_SIZE = 1024
-        if (this.compiledSize > MAX_PROGRAM_SIZE) {
-            this.logToConsole(`Program too large! ${this.compiledSize} > ${MAX_PROGRAM_SIZE} bytes.`, 'error')
+        if (compiledSize > MAX_PROGRAM_SIZE) {
+            this.logToConsole(`Program too large! ${compiledSize} > ${MAX_PROGRAM_SIZE} bytes.`, 'error')
             this.logToConsole('Upload aborted.', 'error')
             this.logToConsole('----------------------------------------', 'info')
             return
@@ -430,9 +434,9 @@ export default class WindowManager {
         }
 
         try {
-            this.logToConsole(`Uploading ${this.compiledSize} bytes to device...`, 'info')
+            this.logToConsole(`Uploading ${compiledSize} bytes to device...`, 'info')
             const startTime = performance.now()
-            await this.#editor.device_manager.connection.downloadProgram(this.compiledBytecode)
+            await this.#editor.device_manager.connection.downloadProgram(compiledBytecode)
             const endTime = performance.now()
             this.logToConsole('Program uploaded successfully.', 'success')
             this.logToConsole(`Upload took ${(endTime - startTime).toFixed(0)}ms`, 'info')
