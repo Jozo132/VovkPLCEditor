@@ -47,6 +47,13 @@ export default class DeviceManager {
     }
   }
 
+  #emitUpdate() {
+      const event = new CustomEvent('plc-device-update', { 
+          detail: { connected: this.connected, info: this.deviceInfo } 
+      })
+      this.#editor.workspace.dispatchEvent(event)
+  }
+
   #setError(err) {
     if (err) {
       this.error = err.message || err.toString() || "Unknown error"
@@ -72,8 +79,10 @@ export default class DeviceManager {
       if (!this.options) throw new Error("Connection options required")
       this.connection = await initializeConnection(this.options, this.#editor)
       this.connected = true
+      this.#emitUpdate()
       try {
         this.deviceInfo = await this.connection.getInfo(true)
+        this.#emitUpdate()
         if (this.options && this.options.debug) {
           console.log("Device info:", this.deviceInfo)
         }
@@ -82,6 +91,7 @@ export default class DeviceManager {
         this.connected = false
         console.error("Failed to get device info:", err)
         this.#setError(err)
+        this.#emitUpdate()
       }
     } catch (err) {
       this.connected = false
@@ -90,6 +100,7 @@ export default class DeviceManager {
         console.error("Failed to connect to device:", err)
         this.#setError(err)
       }
+      this.#emitUpdate()
     }
     return this.connection
   }
@@ -102,6 +113,7 @@ export default class DeviceManager {
     this.connection = null
     this.connected = false
     this.deviceInfo = null
+    this.#emitUpdate()
   }
 
   async getInfo() {

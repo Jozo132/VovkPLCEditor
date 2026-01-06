@@ -27,17 +27,10 @@ export default class SetupUI {
 
         this.render()
         
-        // Poll for connection status changes since DeviceManager doesn't emit events
-        this._pollInterval = setInterval(() => {
-            if (this.hidden) return
-            const wasConnected = this._lastConnectedState
-            const isConnected = !!(this.master.device_manager && this.master.device_manager.connected)
-            
-            if (wasConnected !== isConnected) {
-                this._lastConnectedState = isConnected
-                this.render()
-            }
-        }, 1000)
+        // Listen for device updates (connection status, info loaded, etc)
+        this.master.workspace.addEventListener('plc-device-update', () => {
+            if (!this.hidden) this.render()
+        })
     }
 
     async render() {
