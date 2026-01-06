@@ -4,9 +4,10 @@ import NavigationTreeManager from "./Elements/NavigationTreeManager.js"
 import TabManager from "./Elements/TabManager.js"
 import EditorUI from "./Elements/EditorUI.js"
 import SymbolsUI from "./Elements/SymbolsUI.js"
+import SetupUI from "./Elements/SetupUI.js"
 
 
-/** @typedef { EditorUI | SymbolsUI } WindowType */
+/** @typedef { EditorUI | SymbolsUI | SetupUI } WindowType */
 
 export default class WindowManager {
 
@@ -456,6 +457,8 @@ export default class WindowManager {
         let editorUI
         if (id === 'symbols') {
             editorUI = new SymbolsUI(this.#editor)
+        } else if (id === 'setup') {
+            editorUI = new SetupUI(this.#editor)
         } else {
             editorUI = new EditorUI(this.#editor, id)
         }
