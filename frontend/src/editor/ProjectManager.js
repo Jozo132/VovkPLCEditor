@@ -259,7 +259,24 @@ end:                      // Label to jump to
 `
     }
     
-    return this.#editor.runtime.compile(asm)
+    // Hook up console locally to capture WASM output
+    const runtime = this.#editor.runtime
+    const cleanup = () => {
+        runtime.onStdout(undefined)
+        runtime.onStderr(undefined)
+    }
+
+    runtime.onStdout((msg) => this.#editor.window_manager.logToConsole(msg, 'info'))
+    runtime.onStderr((msg) => this.#editor.window_manager.logToConsole(msg, 'error'))
+
+    try {
+        const result = runtime.compile(asm)
+        cleanup()
+        return result
+    } catch (e) {
+        cleanup()
+        throw e
+    }
   }
 
   /** Create a new empty project structure */
