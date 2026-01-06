@@ -1,16 +1,14 @@
-import { PLC_Project, PLCEditor } from "../../utils/types.js"
-import { ElementSynthesisMany, getEventPath, isVisible } from "../../utils/tools.js"
-import NavigationTreeManager from "./Elements/NavigationTreeManager.js"
-import TabManager from "./Elements/TabManager.js"
-import EditorUI from "./Elements/EditorUI.js"
-import SymbolsUI from "./Elements/SymbolsUI.js"
-import SetupUI from "./Elements/SetupUI.js"
-
+import {PLC_Project, PLCEditor} from '../../utils/types.js'
+import {ElementSynthesisMany, getEventPath, isVisible} from '../../utils/tools.js'
+import NavigationTreeManager from './Elements/NavigationTreeManager.js'
+import TabManager from './Elements/TabManager.js'
+import EditorUI from './Elements/EditorUI.js'
+import SymbolsUI from './Elements/SymbolsUI.js'
+import SetupUI from './Elements/SetupUI.js'
 
 /** @typedef { EditorUI | SymbolsUI | SetupUI } WindowType */
 
 export default class WindowManager {
-
     /** @type {'edit' | 'online'} */
     active_mode = 'edit'
 
@@ -19,16 +17,15 @@ export default class WindowManager {
 
     workspace_body
 
-
     /** @type { Map<string, WindowType> } */
-    windows = new Map(); // filePath → { tabEl, editorEl }
+    windows = new Map() // filePath → { tabEl, editorEl }
 
     window_frame
 
     /** @type { (device: string) => Promise<boolean> } */
-    requestConnect = async (device) => false
+    requestConnect = async device => false
 
-    highlightItem = (element) => this.tree_manager.highlightItem(element)
+    highlightItem = element => this.tree_manager.highlightItem(element)
     removeHighlight = () => this.tree_manager.removeHighlight()
 
     #editor
@@ -38,7 +35,7 @@ export default class WindowManager {
         const workspace = this.#editor.workspace
         this.workspace = workspace
 
-        this.workspace_body = ElementSynthesisMany(/*HTML*/`
+        this.workspace_body = ElementSynthesisMany(/*HTML*/ `
             <div class="plc-workspace-header">
                 <p></p>
             </div>
@@ -79,7 +76,7 @@ export default class WindowManager {
                     
                     <div class="resizer-console-top" style="height: 4px; background: #333; cursor: ns-resize; z-index: 10;"></div>
                     
-                    <div class="plc-console minimized" style="height: 25px; min-height: 25px; background: #1e1e1e; border-top: 1px solid #333; display: flex; flex-direction: column;">
+                    <div class="plc-console minimized" style="height: 0px; min-height: 0px; background: #1e1e1e; border-top: 1px solid #333; display: flex; flex-direction: column;">
                         <div class="plc-console-header" style="height: 25px; background: #252526; display: flex; align-items: center; padding: 0 10px; cursor: pointer;">
                             <span class="codicon codicon-chevron-right" style="margin-right: 5px;"></span>
                             <span style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #ccc;">Output</span>
@@ -127,7 +124,6 @@ export default class WindowManager {
 
         this.workspace_body.forEach(element => workspace.appendChild(element))
 
-
         const navigation_minimize_button = workspace.querySelector('.plc-navigation-bar .menu-button')
         const tools_minimize_button = workspace.querySelector('.plc-tools-bar .menu-button')
         if (!navigation_minimize_button) throw new Error('Navigation minimize button not found')
@@ -138,75 +134,72 @@ export default class WindowManager {
         // Footer Events
         const compileBtn = workspace.querySelector('#footer-compile')
         const downloadBtn = workspace.querySelector('#footer-download')
-        
+
         compileBtn.onclick = () => this.handleFooterCompile()
         downloadBtn.onclick = () => this.handleFooterDownload()
-        
+
         const consoleHeader = workspace.querySelector('.plc-console-header')
         const consoleBody = workspace.querySelector('.plc-console')
         const clearConsoleBtn = workspace.querySelector('.clear-console')
         const consoleResizer = workspace.querySelector('.resizer-console-top')
-        
-        consoleBody.style.height = '25px' // Start minimized
-        
+
+        consoleBody.style.height = '0px' // Start minimized
+
         // Initial console state management
         let lastHeight = 150
-        
-        consoleHeader.onclick = (e) => {
-            if (e.target.closest('.plc-console-actions')) return 
-            const isMinimized = consoleBody.classList.contains('minimized')
-            if (isMinimized) {
-                consoleBody.classList.remove('minimized')
-                consoleBody.style.height = Math.max(lastHeight, 100) + 'px'
-            } else {
+
+        consoleHeader.onclick = e => {
+            if (e.target.closest('.plc-console-actions')) return
+            // If visible, minimize it
+            if (!consoleBody.classList.contains('minimized')) {
                 lastHeight = parseInt(getComputedStyle(consoleBody).height, 10)
                 consoleBody.classList.add('minimized')
-                consoleBody.style.height = '25px'
+                consoleBody.style.height = '0px'
             }
         }
-        
+
         clearConsoleBtn.onclick = () => {
-             const body = workspace.querySelector('.plc-console-body')
-             if (body) body.innerHTML = ''
+            const body = workspace.querySelector('.plc-console-body')
+            if (body) body.innerHTML = ''
         }
-        
+
         // Console Resizer Logic (Draggable Line)
         let isResizingConsole = false
-        consoleResizer.addEventListener('mousedown', (e) => {
+        consoleResizer.addEventListener('mousedown', e => {
             isResizingConsole = true
             e.preventDefault()
             document.body.style.cursor = 'ns-resize'
         })
-        
-        document.addEventListener('mousemove', (e) => {
+
+        document.addEventListener('mousemove', e => {
             if (!isResizingConsole) return
-            
+
             const centerCol = workspace.querySelector('.plc-center-column')
             if (!centerCol) return
             const rect = centerCol.getBoundingClientRect()
-            
+
             // Calculate height from bottom of center column
             let newHeight = rect.bottom - e.clientY
-            
+
             // Constraints
-            if (newHeight < 25) newHeight = 25 // Minimum (header only)
+            if (newHeight < 25) newHeight = 0 // Snap to closed if less than header height
             if (newHeight > rect.height - 100) newHeight = rect.height - 100 // Max height
-            
+
             consoleBody.style.height = newHeight + 'px'
-            
-            if (newHeight > 30) {
-                 consoleBody.classList.remove('minimized')
-                 lastHeight = newHeight
+
+            if (newHeight > 0) {
+                consoleBody.classList.remove('minimized')
+                lastHeight = newHeight
             } else {
-                 consoleBody.classList.add('minimized')
+                consoleBody.classList.add('minimized')
             }
         })
-        
+
         document.addEventListener('mouseup', () => {
-             if (isResizingConsole) {
-                 isResizingConsole = false
-                 document.body.style.cursor = ''
-             }
+            if (isResizingConsole) {
+                isResizingConsole = false
+                document.body.style.cursor = ''
+            }
         })
 
         const device_info = workspace.querySelector('.plc-device-info')
@@ -222,24 +215,23 @@ export default class WindowManager {
         if (!device_online_button) throw new Error('Device online button not found')
         device_online_button.addEventListener('click', async () => this.#on_device_online_click())
         this.device_online_button = device_online_button
-        
+
         // Poll connection status for footer buttons
         setInterval(() => {
             const connected = this.#editor.device_manager && this.#editor.device_manager.connected
             const status = workspace.querySelector('#footer-device-status')
             if (status) status.innerText = connected ? 'Connected' : 'Disconnected'
-            
+
             // Enable/Disable buttons based on connection
             if (compileBtn) {
-                 compileBtn.style.opacity = '1'
-                 compileBtn.style.pointerEvents = 'all'
+                compileBtn.style.opacity = '1'
+                compileBtn.style.pointerEvents = 'all'
             }
             if (downloadBtn) {
-                 downloadBtn.style.opacity = connected ? '1' : '0.5'
-                 downloadBtn.style.pointerEvents = connected ? 'all' : 'none'
+                downloadBtn.style.opacity = connected ? '1' : '0.5'
+                downloadBtn.style.pointerEvents = connected ? 'all' : 'none'
             }
         }, 500)
-
 
         const navigation = this.workspace.querySelector('.plc-navigation')
         if (!navigation) throw new Error('Navigation not found')
@@ -257,22 +249,23 @@ export default class WindowManager {
         this.tab_manager = new TabManager(editor)
     }
 
-    #on_device_select_change = () => { // @ts-ignore
+    #on_device_select_change = () => {
+        // @ts-ignore
         const value = this.device_select_element.value
         this.active_device = value
     }
-    
+
     // Console Helpler
     consoleAutoOpened = false
-    
+
     logToConsole(msg, type = 'info') {
         const body = this.workspace.querySelector('.plc-console-body')
         if (!body) return
-        
+
         const line = document.createElement('div')
         line.style.borderBottom = '1px solid #333'
         line.style.padding = '2px 0'
-        
+
         const d = new Date()
         const h = d.getHours().toString().padStart(2, '0')
         const m = d.getMinutes().toString().padStart(2, '0')
@@ -281,15 +274,15 @@ export default class WindowManager {
         const timestamp = `${h}:${m}:${s}.${ms}`
 
         line.innerHTML = `<span style="color: #666; margin-right: 8px;">[${timestamp}]</span>`
-        
+
         const content = document.createElement('span')
         content.innerText = typeof msg === 'string' ? msg : JSON.stringify(msg)
-        
+
         const consoleEl = this.workspace.querySelector('.plc-console')
         const openConsole = () => {
             if (consoleEl && consoleEl.classList.contains('minimized')) {
-                 consoleEl.classList.remove('minimized')
-                 consoleEl.style.height = '150px'
+                consoleEl.classList.remove('minimized')
+                consoleEl.style.height = '150px'
             }
         }
 
@@ -297,34 +290,37 @@ export default class WindowManager {
             content.style.color = '#f48771'
             openConsole()
         } else if (type === 'success') {
-             content.style.color = '#89d185'
+            content.style.color = '#89d185'
+        } else if (type === 'warning') {
+            content.style.color = '#cca700'
         }
-        
+
         // Open console on first log of the session (usually compile/upload start)
         if (!this.consoleAutoOpened) {
             this.consoleAutoOpened = true
             openConsole()
         }
-        
+
         line.appendChild(content)
         body.appendChild(line)
         body.scrollTop = body.scrollHeight
     }
-    
+
     async handleFooterCompile() {
         if (!this.#editor.runtime_ready) {
-             this.logToConsole('WASM Runtime is not ready yet.', 'error')
-             return
+            this.logToConsole('WASM Runtime is not ready yet.', 'error')
+            this.logToConsole('----------------------------------------', 'info')
+            return
         }
-        
+
         try {
             this.logToConsole('Compiling project...', 'info')
             const result = this.#editor.project_manager.compile()
-            
+
             // Store result for download
             this.compiledBytecode = result.output
             this.compiledSize = result.size
-            
+
             // Calculate Checksum
             let checksumMsg = ''
             let hexPreview = ''
@@ -332,54 +328,59 @@ export default class WindowManager {
                 try {
                     const bytes = this.#editor.runtime.parseHex(result.output)
                     const checksum = this.#editor.runtime.crc8(bytes)
-                    
+
                     if (this.lastCompiledChecksum === checksum) {
-                        checksumMsg = ' Bytecode didn\'t change.'
-                    } 
+                        checksumMsg = " Bytecode didn't change."
+                    }
                     // else {
                     //    checksumMsg = ` Checksum: ${checksum.toString(16).toUpperCase().padStart(2, '0')}`
                     // }
                     this.lastCompiledChecksum = checksum
-                    
+
                     // Preview first 64 bytes
                     const subset = bytes.slice(0, 64)
                     hexPreview = subset.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
                     if (bytes.length > 64) hexPreview += '...'
-
-                } catch(e) { console.warn('Checksum calculation failed', e) }
+                } catch (e) {
+                    console.warn('Checksum calculation failed', e)
+                }
             }
 
             this.logToConsole(`Compilation successful. Size: ${result.size} bytes.${checksumMsg}`, 'success')
-            if (hexPreview) this.logToConsole(hexPreview)
-            
+            if (hexPreview) this.logToConsole('Bytecode: ' + hexPreview)
+
             // Show size in footer
             const sizeLabel = this.workspace.querySelector('#footer-compile-size')
             if (sizeLabel) sizeLabel.innerText = `(${result.size} bytes)`
-            
-            // Auto open console
-             const consoleEl = this.workspace.querySelector('.plc-console')
-             if (consoleEl && consoleEl.classList.contains('minimized')) {
-                 consoleEl.classList.remove('minimized')
-                 consoleEl.style.height = '150px'
-             }
 
+            // Auto open console
+            const consoleEl = this.workspace.querySelector('.plc-console')
+            if (consoleEl && consoleEl.classList.contains('minimized')) {
+                consoleEl.classList.remove('minimized')
+                consoleEl.style.height = '150px'
+            }
+            this.logToConsole('----------------------------------------', 'info')
         } catch (e) {
             this.logToConsole(`Compilation failed: ${e.message}`, 'error')
+            this.logToConsole('----------------------------------------', 'info')
         }
     }
-    
+
     async handleFooterDownload() {
         if (!this.compiledBytecode) {
-             this.logToConsole('No compiled program found. Please Compile first.', 'error')
-             return
+            this.logToConsole('No compiled program found. Please Compile first.', 'error')
+            this.logToConsole('----------------------------------------', 'info')
+            return
         }
-        
+
         try {
             this.logToConsole(`Uploading ${this.compiledSize} bytes to device...`, 'info')
             await this.#editor.device_manager.connection.downloadProgram(this.compiledBytecode)
             this.logToConsole('Program uploaded successfully.', 'success')
+            this.logToConsole('----------------------------------------', 'info')
         } catch (e) {
             this.logToConsole(`Upload failed: ${e.message}`, 'error')
+            this.logToConsole('----------------------------------------', 'info')
         }
     }
 
@@ -395,7 +396,8 @@ export default class WindowManager {
         device_online_button.setAttribute('disabled', 'disabled')
         const device_select_element_was_disabled = device_select_element.hasAttribute('disabled')
         if (!device_select_element_was_disabled) device_select_element.setAttribute('disabled', 'disabled')
-        if (mode === 'online') { // @ts-ignore
+        if (mode === 'online') {
+            // @ts-ignore
             const before = device_online_button.innerText
             // @ts-ignore
             device_online_button.innerText = '----------'
@@ -471,11 +473,11 @@ export default class WindowManager {
         }
     }
 
-    setMode = (mode) => {
+    setMode = mode => {
         this.mode = mode
         const workspace = this.#editor.workspace
     }
-    setDevice = (device) => {
+    setDevice = device => {
         this.device = device
     }
 
@@ -489,7 +491,7 @@ export default class WindowManager {
         if (!device_select_element) throw new Error('Device select element not found')
         device_select_element.innerHTML = ''
         options.forEach(option => {
-            const { name, key, disabled } = option
+            const {name, key, disabled} = option
             const opt = document.createElement('option')
             opt.value = key
             opt.innerText = name
@@ -512,7 +514,8 @@ export default class WindowManager {
     get_focusable_elements = () => {
         const workspace = this.#editor.workspace
         const elems = [...workspace.querySelectorAll('[tabindex]')]
-        return elems.filter((elem) => { // @ts-ignore
+        return elems.filter(elem => {
+            // @ts-ignore
             const focusable = elem.tabIndex >= 0
             const visible = isVisible(elem)
             return focusable && visible
@@ -526,9 +529,8 @@ export default class WindowManager {
 
         this.tree_manager.initialize()
 
-
         // On ESC remove all selections
-        workspace.addEventListener('keydown', (event) => {
+        workspace.addEventListener('keydown', event => {
             const enter = event.key === 'Enter'
             const space = event.key === ' '
             const tab = event.key === 'Tab'
@@ -571,15 +573,18 @@ export default class WindowManager {
                 const prev = index >= 0 ? focusable_elements[(index - 1 + length) % length] : null
 
                 const clickable = tree_item || tab || online_button
-                if (clickable && (enter || space)) {// @ts-ignore
+                if (clickable && (enter || space)) {
+                    // @ts-ignore
                     // trigger click on the element
                     activeElement.click()
                 }
 
                 if (tree_item) {
-                    if (f2) { // Trigger rename
+                    if (f2) {
+                        // Trigger rename
                         const item = this.tree_manager.findItem(activeElement)
-                        if (item) { // @ts-ignore
+                        if (item) {
+                            // @ts-ignore
                             // item.requestRename()
                         }
                     }
@@ -601,14 +606,16 @@ export default class WindowManager {
                     if (left) {
                         const item = this.tree_manager.findItem(activeElement)
                         // console.log('Left', item)
-                        if (item) { // @ts-ignore
+                        if (item) {
+                            // @ts-ignore
                             item.item.collapse()
                         }
                     }
                     if (right) {
                         const item = this.tree_manager.findItem(activeElement)
                         // console.log('Right', item)
-                        if (item) { // @ts-ignore
+                        if (item) {
+                            // @ts-ignore
                             item.item.expand()
                         }
                     }
@@ -633,14 +640,12 @@ export default class WindowManager {
             }
         })
 
-        
-        workspace.addEventListener('mousedown', (event) => {
-            
-            const middle_mouse = event.button === 1 
-            
+        workspace.addEventListener('mousedown', event => {
+            const middle_mouse = event.button === 1
+
             const target = event.target
             // @ts-ignore
-            const is_tab = target && target.closest(".plc-tab")
+            const is_tab = target && target.closest('.plc-tab')
 
             if (middle_mouse && is_tab) {
                 event.preventDefault()
@@ -655,20 +660,20 @@ export default class WindowManager {
         })
 
         workspace.addEventListener('mousemove', this.onMouseMove)
-
     }
 
-    onMouseMove = (event) => {
+    onMouseMove = event => {
         this.#on_debug_hover(event)
     }
 
-    #on_debug_hover = (event) => {
+    #on_debug_hover = event => {
         if (this.#editor.debug_hover) {
             this.footer = this.footer || this.#editor.workspace.querySelector('.plc-workspace-footer p')
             const footer = this.footer
             if (!footer) throw new Error('Footer not found')
             const path = getEventPath(event, 'plc-workspace')
-            if (!path || !path.length) { // @ts-ignore
+            if (!path || !path.length) {
+                // @ts-ignore
                 footer.innerText = ''
                 return
             }

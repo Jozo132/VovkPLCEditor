@@ -204,7 +204,9 @@ export default class ProjectManager {
                         if (block.type === 'asm' && block.code) {
                             asm += block.code + '\n'
                         } else if (block.type !== 'asm') {
-                            console.log(`Block type ${block.type} in file ${file.name} not yet supported for compilation`)
+                            const msg = `${file.full_path} -> ${block.name || '?'}: Block type '${block.type}'  not yet supported for compilation`
+                            console.log(msg)
+                            this.#editor.window_manager.logToConsole(msg, 'warning')
                         }
                     }
                 }
