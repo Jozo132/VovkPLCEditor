@@ -65,6 +65,9 @@ export default class SetupUI {
              if (this.master.device_manager.deviceInfo) {
                  deviceInfo = this.master.device_manager.deviceInfo
              }
+        } else if (this.master.device_manager && this.master.device_manager.deviceInfo) {
+             // Retain old info if available
+             deviceInfo = this.master.device_manager.deviceInfo
         }
 
         // Default to placeholders if no info
@@ -111,13 +114,13 @@ export default class SetupUI {
                             </tr>
                         </thead>
                         <tbody>
-                            ${this.renderCompareRow('Device Type', info.type || '-', dInfo.device)}
-                            ${this.renderCompareRow('Architecture', info.arch || '-', dInfo.arch)}
-                            ${this.renderCompareRow('Firmware Ver', info.version || '-', dInfo.version)}
-                            ${this.renderCompareRow('Built Date', info.date || '-', dInfo.date)}
-                            ${this.renderCompareRow('Capacity', (info.capacity || 0) + ' bytes', dInfo.program !== '-' ? (parseInt(dInfo.program) || 0) + ' bytes' : '-')}
-                            ${this.renderCompareRow('IO Inputs', `${offsets.input.size}B @ ${offsets.input.offset}`, dInfo.input_size !== '-' ? `${dInfo.input_size}B @ ${dInfo.input_offset}` : '-')}
-                            ${this.renderCompareRow('IO Outputs', `${offsets.output.size}B @ ${offsets.output.offset}`, dInfo.output_size !== '-' ? `${dInfo.output_size}B @ ${dInfo.output_offset}` : '-')}
+                            ${this.renderCompareRow('Device Type', info.type || '-', dInfo.device, connected)}
+                            ${this.renderCompareRow('Architecture', info.arch || '-', dInfo.arch, connected)}
+                            ${this.renderCompareRow('Firmware Ver', info.version || '-', dInfo.version, connected)}
+                            ${this.renderCompareRow('Built Date', info.date || '-', dInfo.date, connected)}
+                            ${this.renderCompareRow('Capacity', (info.capacity || 0) + ' bytes', dInfo.program !== '-' ? (parseInt(dInfo.program) || 0) + ' bytes' : '-', connected)}
+                            ${this.renderCompareRow('IO Inputs', `${offsets.input.size}B @ ${offsets.input.offset}`, dInfo.input_size !== '-' ? `${dInfo.input_size}B @ ${dInfo.input_offset}` : '-', connected)}
+                            ${this.renderCompareRow('IO Outputs', `${offsets.output.size}B @ ${offsets.output.offset}`, dInfo.output_size !== '-' ? `${dInfo.output_size}B @ ${dInfo.output_offset}` : '-', connected)}
                         </tbody>
                     </table>
 
@@ -170,10 +173,10 @@ export default class SetupUI {
         this.bindEvents()
     }
 
-    renderCompareRow(label, projVal, devVal) {
+    renderCompareRow(label, projVal, devVal, connected = true) {
         const isDiff = projVal !== devVal && devVal !== '-' && projVal !== '-'
         const style = isDiff ? 'color: #fce9a6;' : 'color: #ccc;'
-        const devStyle = isDiff ? 'color: #f48771;' : 'color: #aaa;'
+        const devStyle = connected ? (isDiff ? 'color: #f48771;' : 'color: #aaa;') : 'color: #666;'
         
         return `
             <tr style="border-bottom: 1px solid #333;">

@@ -103,6 +103,13 @@ export default class TabManager {
     }
 
 
+    getOpenTabsOrdered() {
+        if (!this._tabBar) return []
+        return Array.from(this._tabBar.children)
+            .map(el => this.findProgramIdByTab(el))
+            .filter(id => id !== null) // Filter out any elements that aren't tabs or failed lookup
+    }
+
     findProgramIdByTab(tabEl) {
         if (!tabEl) return null
         const closest = tabEl.closest(".plc-tab")

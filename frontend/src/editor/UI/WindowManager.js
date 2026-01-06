@@ -257,6 +257,14 @@ export default class WindowManager {
         this.active_device = value
     }
 
+    /** @param {string} value */
+    setActiveDevice(value) {
+        if (!this.device_select_element) return
+        this.device_select_element.value = value
+        this.active_device = value
+        // Trigger generic change handling if any exists beyond just setting the var
+    }
+
     // Console Helpler
     consoleAutoOpened = false
 
@@ -572,6 +580,17 @@ export default class WindowManager {
         // Set active device to first option
         this.active_device = options[0].key // @ts-ignore
         device_select_element.value = this.active_device
+    }
+
+    setActiveDevice(device) {
+        const select = this.#editor.workspace.querySelector('.plc-device-dropdown select')
+        if (!select) return
+        // Check if device exists in options
+        const option = select.querySelector(`option[value="${device}"]`)
+        if (option && !option.disabled) {
+            this.active_device = device
+            select.value = device
+        }
     }
 
     get_focusable_elements = () => {

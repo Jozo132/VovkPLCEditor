@@ -76,7 +76,7 @@ export default class ProjectManager {
         if (project) {
           console.log('[ProjectManager] Restoring project from localStorage')
           this.ensureSystemSymbols(project)
-          this.#editor.openProject(project)
+          this.load(project) // Use the new load method which includes UI restore
           // Disable default initial program since we restored one
           this.#editor.initial_program = null
           this.last_saved_state = saved
@@ -165,15 +165,68 @@ export default class ProjectManager {
       .filter(item => item.type === 'folder')
       .map(item => item.full_path)
 
+    // Collect UI State
+    /** @type {import('./UI/Elements/TabManager.js').default} */
+    const tabManager = this.#editor.window_manager.tab_manager
+    const openTabs = tabManager.getOpenTabsOrdered()
+    const activeTab = tabManager.active
+    const activeDevice = this.#editor.window_manager.active_device
+
     // Update project
     this.#editor.project.files = files
     this.#editor.project.folders = folders
+    this.#editor.project._ui_state = {
+        open_tabs: openTabs,
+        active_tab: activeTab,
+        active_device: activeDevice
+    }
   }
 
   /** Load a project and initialize editor state */
   /** @param {PLC_Project} project */
   load(project) {
-    this.#editor.project = project
+    this.#editor.openProject(project) // This handles _prepareProject and window_manager.openProject
+    this.restoreUIState(project)
+  }
+
+  restoreUIState(project) {
+    if (!project || !project._ui_state) return
+
+    try {
+        const { open_tabs, active_tab, active_device } = project._ui_state
+        const wm = this.#editor.window_manager
+        
+        // Restore Device
+        if (active_device && wm.setActiveDevice) {
+            wm.setActiveDevice(active_device)
+        }
+
+        // Restore Tabs
+        if (open_tabs && Array.isArray(open_tabs)) {
+            // Close existing tabs first? Or assume fresh load.
+            // On fresh load, tabs map is empty.
+            open_tabs.forEach(id => {
+                // Check if file still exists in project
+                // The openTab method needs the file to exist in the tree/project structure
+                // We assume openProject has already populated the tree
+                try {
+                     // Check if it exists
+                     const exists = this.#editor.findProgram(id)
+                     if (exists) {
+                         wm.openProgram(id)
+                     }
+                } catch(e) { console.warn('Failed to restore tab', id, e) }
+            })
+        }
+
+        // Set Active Tab
+        if (active_tab) {
+             wm.tab_manager.switchTo(active_tab)
+        }
+
+    } catch (e) {
+        console.error('Failed to restore UI state', e)
+    }
   }
 
   /** Save current project to JSON */
