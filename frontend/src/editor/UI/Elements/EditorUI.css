@@ -184,3 +184,10 @@
     margin-left: 5px;
     color: #007fd4;
 }
+
+/* Generic Button Styles */
+.plc-btn:disabled {
+    opacity: 0.5;
+    cursor: default !important;
+    pointer-events: none;
+}

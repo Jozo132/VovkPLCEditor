@@ -137,8 +137,8 @@ export default class WindowManager {
         const compileBtn = workspace.querySelector('#footer-compile')
         const downloadBtn = workspace.querySelector('#footer-download')
 
-        compileBtn.onclick = () => this.handleFooterCompile()
-        downloadBtn.onclick = () => this.handleFooterDownload()
+        compileBtn.onclick = () => this.handleCompile()
+        downloadBtn.onclick = () => this.handleDownload()
 
         const consoleHeader = workspace.querySelector('.plc-console-header')
         const consoleBody = workspace.querySelector('.plc-console')
@@ -233,6 +233,14 @@ export default class WindowManager {
                 downloadBtn.style.opacity = connected ? '1' : '0.5'
                 downloadBtn.style.pointerEvents = connected ? 'all' : 'none'
             }
+
+            // Update Setup Window if active/exists
+            const setupWin = this.windows.get('setup')
+            // @ts-ignore
+            if (setupWin && typeof setupWin.updateConnectionStatus === 'function') {
+                // @ts-ignore
+                setupWin.updateConnectionStatus(connected)
+            }
         }, 500)
 
         const navigation = this.workspace.querySelector('.plc-navigation')
@@ -317,7 +325,7 @@ export default class WindowManager {
         body.scrollTop = body.scrollHeight
     }
 
-    async handleFooterCompile() {
+    async handleCompile() {
         if (!this.#editor.runtime_ready) {
             this.logToConsole('WASM Runtime is not ready yet.', 'error')
             this.logToConsole('----------------------------------------', 'info')
@@ -388,7 +396,7 @@ export default class WindowManager {
         }
     }
 
-    async handleFooterDownload() {
+    async handleDownload() {
         const compiledBytecode = this.#editor.project.compiledBytecode
         const compiledSize = this.#editor.project.compiledSize
 
@@ -415,6 +423,7 @@ export default class WindowManager {
             if (deviceInfo.arch && projectInfo.arch && deviceInfo.arch !== projectInfo.arch) {
                 mismatches.push(`Architecture: Device (<b>${deviceInfo.arch}</b>) vs Project (<b>${projectInfo.arch}</b>)`)
             }
+            deviceInfo.type = deviceInfo.type || deviceInfo.device
             if (deviceInfo.type && projectInfo.type && deviceInfo.type !== projectInfo.type) {
                 mismatches.push(`Type: Device (<b>${deviceInfo.type}</b>) vs Project (<b>${projectInfo.type}</b>)`)
             }
@@ -424,7 +433,8 @@ export default class WindowManager {
             }
 
             if (mismatches.length > 0) {
-                const description = `The connected device details do not match the project configuration:<br><br>${mismatches.join('<br>')}<br><br>Upload anyway?`
+                const details = `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${deviceInfo.type  || '?'}</b> ${deviceInfo.arch ? ('(' + deviceInfo.arch + ')') : ''} <span style="opacity: 0.7">${deviceInfo.version ? 'v' + deviceInfo.version : ''}</span></span>`
+                const description = `The connected device details do not match the project configuration:<br><br>${mismatches.join('<br>')}<br><br>Upload anyway?${details}`
                 const confirm = await Popup.confirm({
                     title: 'Device Mismatch',
                     description: description,
@@ -438,6 +448,34 @@ export default class WindowManager {
                     this.logToConsole('----------------------------------------', 'info')
                     return
                 }
+            } else {
+                const details = `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${deviceInfo.type || '?'}</b> ${deviceInfo.arch ? ('(' + deviceInfo.arch + ')') : ''} <span style="opacity: 0.7">${deviceInfo.version ? 'v' + deviceInfo.version : ''}</span></span>`
+                const confirm = await Popup.confirm({
+                    title: 'Upload Program',
+                    description: `Upload ${compiledSize} bytes to the device? This will overwrite the current program.${details}`,
+                    confirm_text: 'Upload',
+                    cancel_text: 'Cancel',
+                })
+                if (!confirm) {
+                    this.logToConsole('Upload cancelled.', 'info')
+                    this.logToConsole('----------------------------------------', 'info')
+                    return
+                }
+            }
+        } else {
+             const dInfo = deviceInfo || this.#editor.device_manager.deviceInfo
+             const details = dInfo ? `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${dInfo.type || '?'}</b> ${dInfo.arch ? ('(' + dInfo.arch + ')') : ''} <span style="opacity: 0.7">${dInfo.version ? 'v' + dInfo.version : ''}</span></span>` : ''
+             
+             const confirm = await Popup.confirm({
+                title: 'Upload Program',
+                description: `Upload ${compiledSize} bytes to the device? This will overwrite the current program.${details}`,
+                confirm_text: 'Upload',
+                cancel_text: 'Cancel',
+            })
+            if (!confirm) {
+                this.logToConsole('Upload cancelled.', 'info')
+                this.logToConsole('----------------------------------------', 'info')
+                return
             }
         }
 

@@ -92,7 +92,7 @@ export default class SetupUI {
                 <div style="${cardStyle}">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                         <h3 style="margin:0; color: #fff; font-size: 15px;">Configuration & Status</h3>
-                        <div style="padding: 2px 8px; border-radius: 3px; font-weight: bold; font-size: 10px; letter-spacing: 0.5px; ${connected ? 'background: #0e639c; color: #fff;' : 'background: #3a1d1d; color: #f48771; border: 1px solid #5a1d1d;'}">
+                        <div id="setup-device-status-badge" style="padding: 2px 8px; border-radius: 3px; font-weight: bold; font-size: 10px; letter-spacing: 0.5px; ${connected ? 'background: #0e639c; color: #fff;' : 'background: #3a1d1d; color: #f48771; border: 1px solid #5a1d1d;'}">
                             ${connected ? 'DEVICE CONNECTED' : 'NO DEVICE'}
                         </div>
                     </div>
@@ -253,52 +253,15 @@ export default class SetupUI {
 
         if (compileBtn) {
             compileBtn.onclick = async () => {
-                if (!this.master.runtime_ready) {
-                     await Popup.confirm({ title: 'Compiler Error', description: 'WASM Runtime is not ready yet.' })
-                     return
-                }
-
-                try {
-                    console.log('Compiling...')
-                    const result = this.master.project_manager.compile()
-                    
-                    this.master.project.compiledBytecode = result.output
-                    this.master.project.compiledSize = result.size
-                    
-                    console.log('Compilation successful', result)
-                    await Popup.confirm({ title: 'Compilation Successful', description: `Compiled ${result.size} bytes.` })
-                } catch (e) {
-                    console.error('Compilation failed', e)
-                    await Popup.confirm({ title: 'Compilation Failed', description: e.message })
-                }
+                // Delegate to centralized handler
+                await this.master.window_manager.handleCompile()
             }
         }
 
         if (downloadPlcBtn) {
              downloadPlcBtn.onclick = async () => {
-                 if (!this.master.device_manager.connected) return
-
-                 const compiledBytecode = this.master.project.compiledBytecode
-                 const compiledSize = this.master.project.compiledSize
-
-                 if (!compiledBytecode) {
-                      await Popup.confirm({ title: 'Download to PLC', description: 'No compiled program found. Please Compile first.' })
-                      return
-                 }
-                 
-                 const confirm = await Popup.confirm({
-                    title: 'Download to PLC',
-                    description: `Download ${compiledSize} bytes to the device? This will overwrite the running program.`
-                 })
-                 if (!confirm) return
-
-                 try {
-                     await this.master.device_manager.connection.downloadProgram(compiledBytecode)
-                     await Popup.confirm({ title: 'Success', description: 'Program downloaded successfully.' })
-                 } catch (e) {
-                      console.error('Write failed', e)
-                      await Popup.confirm({ title: 'Download Failed', description: e.message })
-                 }
+                 // Delegate to centralized handler
+                 await this.master.window_manager.handleDownload()
              }
         }
     }
@@ -321,6 +284,37 @@ export default class SetupUI {
         }
         
         this.render() // Refresh UI
+    }
+
+    updateConnectionStatus(connected) {
+        // Update badge
+        const badge = this.div.querySelector('#setup-device-status-badge')
+        if (badge) {
+            if (connected) {
+                badge.style.background = '#0e639c'
+                badge.style.color = '#fff'
+                badge.style.border = 'none'
+                badge.innerText = 'DEVICE CONNECTED'
+            } else {
+                badge.style.background = '#3a1d1d'
+                badge.style.color = '#f48771'
+                badge.style.border = '1px solid #5a1d1d'
+                badge.innerText = 'NO DEVICE'
+            }
+        }
+
+        // Update Buttons
+        const btns = ['#setup-read-config', '#setup-upload-plc', '#setup-download-plc']
+        btns.forEach(sel => {
+            const btn = this.div.querySelector(sel)
+            if (btn) {
+                if (connected) {
+                    btn.removeAttribute('disabled')
+                } else {
+                    btn.setAttribute('disabled', 'disabled')
+                }
+            }
+        })
     }
     
     hide() {
