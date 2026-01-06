@@ -348,10 +348,10 @@ export default class WindowManager {
                     // }
                     this.lastCompiledChecksum = checksum
 
-                    // Preview first 64 bytes
-                    const subset = bytes.slice(0, 64)
+                    // Preview first 24 bytes
+                    const subset = bytes.slice(0, 24)
                     hexPreview = subset.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
-                    if (bytes.length > 64) hexPreview += '...'
+                    if (bytes.length > 24) hexPreview += '...'
                 } catch (e) {
                     console.warn('Checksum calculation failed', e)
                 }
