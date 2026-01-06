@@ -357,6 +357,7 @@ export default class SetupUI {
     updateProjectConfig(info) {
         const project = this.master.project
         if (info.device) project.info.type = info.device
+        if (info.arch) project.info.arch = info.arch
         if (info.version) project.info.version = info.version
         if (info.program) project.info.capacity = info.program
         if (info.date) project.info.date = info.date

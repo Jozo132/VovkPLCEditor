@@ -274,6 +274,12 @@ end:                      // Label to jump to
         system: { offset: 64, size: 16 }
       },
       symbols: [...SYSTEM_SYMBOLS],
+      info: {
+        type: 'Device',
+        arch: 'avr',
+        version: '0.0.1',
+        capacity: 1024
+      },
       folders: [],
       files: []
     }

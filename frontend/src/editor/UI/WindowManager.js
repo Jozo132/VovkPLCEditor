@@ -1,5 +1,6 @@
 import {PLC_Project, PLCEditor} from '../../utils/types.js'
 import {ElementSynthesisMany, getEventPath, isVisible} from '../../utils/tools.js'
+import {Popup} from './Elements/components/popup.js'
 import NavigationTreeManager from './Elements/NavigationTreeManager.js'
 import TabManager from './Elements/TabManager.js'
 import EditorUI from './Elements/EditorUI.js'
@@ -276,6 +277,7 @@ export default class WindowManager {
         line.innerHTML = `<span style="color: #666; margin-right: 8px;">[${timestamp}]</span>`
 
         const content = document.createElement('span')
+        content.style.whiteSpace = 'pre-wrap'
         content.innerText = typeof msg === 'string' ? msg : JSON.stringify(msg)
 
         const consoleEl = this.workspace.querySelector('.plc-console')
@@ -321,6 +323,13 @@ export default class WindowManager {
             this.compiledBytecode = result.output
             this.compiledSize = result.size
 
+            const MAX_PROGRAM_SIZE = 1024 // 1KB limit for now
+            const percent = Math.min(100, Math.round((result.size / MAX_PROGRAM_SIZE) * 100))
+            const total_bars = 10
+            const filled_bars = Math.round((percent / 100) * total_bars)
+            const empty_bars = total_bars - filled_bars
+            const bar = '[' + '='.repeat(filled_bars) + ' '.repeat(empty_bars) + ']'
+
             // Calculate Checksum
             let checksumMsg = ''
             let hexPreview = ''
@@ -347,6 +356,8 @@ export default class WindowManager {
             }
 
             this.logToConsole(`Compilation successful. Size: ${result.size} bytes.${checksumMsg}`, 'success')
+            this.logToConsole(`${bar} ${result.size}/${MAX_PROGRAM_SIZE} bytes (${percent}%)`, result.size > MAX_PROGRAM_SIZE ? 'error' : 'info')
+
             if (hexPreview) this.logToConsole('Bytecode: ' + hexPreview)
 
             // Show size in footer
@@ -371,6 +382,35 @@ export default class WindowManager {
             this.logToConsole('No compiled program found. Please Compile first.', 'error')
             this.logToConsole('----------------------------------------', 'info')
             return
+        }
+
+        const MAX_PROGRAM_SIZE = 1024
+        if (this.compiledSize > MAX_PROGRAM_SIZE) {
+            this.logToConsole(`Program too large! ${this.compiledSize} > ${MAX_PROGRAM_SIZE} bytes.`, 'error')
+            this.logToConsole('Upload aborted.', 'error')
+            this.logToConsole('----------------------------------------', 'info')
+            return
+        }
+
+        const deviceInfo = this.#editor.device_manager.deviceInfo
+        const projectInfo = this.#editor.project.info
+
+        if (deviceInfo && projectInfo && deviceInfo.arch && projectInfo.arch) {
+            if (deviceInfo.arch !== projectInfo.arch) {
+                const confirm = await Popup.confirm({
+                    title: 'Architecture Mismatch',
+                    description: `Device architecture (<b>${deviceInfo.arch}</b>) does not match project architecture (<b>${projectInfo.arch}</b>).<br><br>Upload anyway?`,
+                    confirm_text: 'Upload',
+                    cancel_text: 'Cancel',
+                    confirm_button_color: '#d1852e',
+                    confirm_text_color: '#FFF'
+                })
+                if (!confirm) {
+                    this.logToConsole('Upload aborted due to architecture mismatch.', 'warning')
+                    this.logToConsole('----------------------------------------', 'info')
+                    return
+                }
+            }
         }
 
         try {
