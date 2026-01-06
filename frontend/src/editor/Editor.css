@@ -591,3 +591,8 @@ ul {
 .plc-workspace *::-webkit-scrollbar-thumb:hover {
     background: #CCC;
 }
+
+/* Console Actions Visibility */
+.plc-console.minimized .plc-console-actions {
+    display: none;
+}

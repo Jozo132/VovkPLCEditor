@@ -143,7 +143,13 @@ export default class SymbolsUI {
     deleteSelected() {
         if (this.selectedSymbols.size === 0) return
         
-        this.master.project.symbols = this.master.project.symbols.filter(s => !this.selectedSymbols.has(s))
+        // delete only non-readonly symbols
+        this.master.project.symbols = this.master.project.symbols.filter(s => {
+            if (this.selectedSymbols.has(s)) {
+                return !!s.readonly
+            }
+            return true
+        })
         this.deselectAll()
         this.renderTable()
     }
@@ -330,8 +336,10 @@ export default class SymbolsUI {
                         if (this.selectedSymbols.has(symbol)) {
                             this.deleteSelected()
                         } else {
-                            this.master.project.symbols.splice(index, 1)
-                            this.renderTable()
+                            if (!symbol.readonly) {
+                                this.master.project.symbols.splice(index, 1)
+                                this.renderTable()
+                            }
                         }
                     }
                 }
@@ -344,37 +352,39 @@ export default class SymbolsUI {
             tr.appendChild(tdIcon)
             
             // Name
-            tr.appendChild(this.createCell('input', symbol.name, val => symbol.name = val))
+            tr.appendChild(this.createCell('input', symbol.name, val => symbol.name = val, [], 'text', symbol.readonly))
 
             // Location
-            tr.appendChild(this.createCell('select', symbol.location, val => symbol.location = val, ['input', 'output', 'memory', 'system']))
+            tr.appendChild(this.createCell('select', symbol.location, val => symbol.location = val, ['control', 'input', 'output', 'memory', 'system'], 'text', symbol.readonly))
 
             // Type
-            tr.appendChild(this.createCell('select', symbol.type, val => symbol.type = val, ['bit', 'byte', 'int', 'float']))
+            tr.appendChild(this.createCell('select', symbol.type, val => symbol.type = val, ['bit', 'byte', 'int', 'dint', 'real'], 'text', symbol.readonly))
 
             // Address
             let addressValue = symbol.address
             if (symbol.type === 'bit') {
                 addressValue = (parseFloat(symbol.address) || 0).toFixed(1)
             }
-            tr.appendChild(this.createCell('input', addressValue, val => symbol.address = parseFloat(val) || 0, null, 'number'))
+            tr.appendChild(this.createCell('input', addressValue, val => symbol.address = parseFloat(val) || 0, null, 'number', symbol.readonly))
 
             // Initial Value
-            tr.appendChild(this.createCell('input', symbol.initial_value, val => symbol.initial_value = parseFloat(val) || 0, null, 'number'))
+            tr.appendChild(this.createCell('input', symbol.initial_value, val => symbol.initial_value = parseFloat(val) || 0, null, 'number', symbol.readonly))
 
             // Comment
-            tr.appendChild(this.createCell('input', symbol.comment, val => symbol.comment = val))
+            tr.appendChild(this.createCell('input', symbol.comment, val => symbol.comment = val, [], 'text', symbol.readonly))
 
             // Delete
             const tdDel = document.createElement('td')
-            const btnDel = document.createElement('button')
-            btnDel.innerText = 'x'
-            btnDel.classList.add('symbol-delete-btn')
-            btnDel.addEventListener('click', () => {
-                this.master.project.symbols.splice(index, 1)
-                this.renderTable()
-            })
-            tdDel.appendChild(btnDel)
+            if (!symbol.readonly) {
+                const btnDel = document.createElement('button')
+                btnDel.innerText = 'x'
+                btnDel.classList.add('symbol-delete-btn')
+                btnDel.addEventListener('click', () => {
+                    this.master.project.symbols.splice(index, 1)
+                    this.renderTable()
+                })
+                tdDel.appendChild(btnDel)
+            }
             tr.appendChild(tdDel)
 
             this.tbody.appendChild(tr)
@@ -399,7 +409,7 @@ export default class SymbolsUI {
         }
     }
 
-    createCell(type, value, onChange, options = [], inputType = 'text') {
+    createCell(type, value, onChange, options = [], inputType = 'text', readonly = false) {
         const td = document.createElement('td')
         
         if (type === 'input') {
@@ -410,8 +420,18 @@ export default class SymbolsUI {
             input.setAttribute('name', 'sbl_' + Math.random().toString(36).substr(2, 9))
             
             input.value = value !== undefined ? value : ''
+
+            if (readonly) {
+                input.readOnly = true
+                input.disabled = true
+                input.style.color = '#888'
+                // input.style.cursor = 'not-allowed'
+            }
             
-            input.addEventListener('change', (e) => onChange(e.target.value))
+            if (!readonly) {
+                input.addEventListener('change', (e) => onChange(e.target.value))
+            }
+
             input.addEventListener('focus', () => {
                 const tr = input.closest('tr')
                 if (tr) {
@@ -425,6 +445,11 @@ export default class SymbolsUI {
             select.setAttribute('autocomplete', 'off')
             select.setAttribute('name', 'sbl_sel_' + Math.random().toString(36).substr(2, 9))
 
+            if (readonly) {
+                select.disabled = true
+                // select.style.cursor = 'not-allowed'
+            }
+
             options.forEach(opt => {
                 const option = document.createElement('option')
                 option.value = opt
@@ -433,7 +458,10 @@ export default class SymbolsUI {
                 select.appendChild(option)
             })
             
-            select.addEventListener('change', (e) => onChange(e.target.value))
+            if (!readonly) {
+                select.addEventListener('change', (e) => onChange(e.target.value))
+            }
+
             select.addEventListener('focus', () => {
                 const tr = select.closest('tr')
                 if (tr) {

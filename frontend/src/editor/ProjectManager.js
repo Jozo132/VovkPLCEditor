@@ -1,5 +1,55 @@
 import { PLC_Program, PLC_Project, PLCEditor } from '../utils/types.js'
 
+const SYSTEM_SYMBOLS = [
+    { name: 'P_100ms', location: 'control', type: 'bit', address: 2.0, initial_value: 0, comment: '100ms pulse' },
+    { name: 'P_200ms', location: 'control', type: 'bit', address: 2.1, initial_value: 0, comment: '200ms pulse' },
+    { name: 'P_300ms', location: 'control', type: 'bit', address: 2.2, initial_value: 0, comment: '300ms pulse' },
+    { name: 'P_500ms', location: 'control', type: 'bit', address: 2.3, initial_value: 0, comment: '500ms pulse' },
+    { name: 'P_1s', location: 'control', type: 'bit', address: 2.4, initial_value: 0, comment: '1 second pulse' },
+    { name: 'P_2s', location: 'control', type: 'bit', address: 2.5, initial_value: 0, comment: '2 second pulse' },
+    { name: 'P_5s', location: 'control', type: 'bit', address: 2.6, initial_value: 0, comment: '5 second pulse' },
+    { name: 'P_10s', location: 'control', type: 'bit', address: 2.7, initial_value: 0, comment: '10 second pulse' },
+    { name: 'P_30s', location: 'control', type: 'bit', address: 3.0, initial_value: 0, comment: '30 second pulse' },
+    { name: 'P_1min', location: 'control', type: 'bit', address: 3.1, initial_value: 0, comment: '1 minute pulse' },
+    { name: 'P_2min', location: 'control', type: 'bit', address: 3.2, initial_value: 0, comment: '2 minute pulse' },
+    { name: 'P_5min', location: 'control', type: 'bit', address: 3.3, initial_value: 0, comment: '5 minute pulse' },
+    { name: 'P_10min', location: 'control', type: 'bit', address: 3.4, initial_value: 0, comment: '10 minute pulse' },
+    { name: 'P_15min', location: 'control', type: 'bit', address: 3.5, initial_value: 0, comment: '15 minute pulse' },
+    { name: 'P_30min', location: 'control', type: 'bit', address: 3.6, initial_value: 0, comment: '30 minute pulse' },
+    { name: 'P_1hr', location: 'control', type: 'bit', address: 3.7, initial_value: 0, comment: '1 hour pulse' },
+    { name: 'P_2hr', location: 'control', type: 'bit', address: 4.0, initial_value: 0, comment: '2 hour pulse' },
+    { name: 'P_3hr', location: 'control', type: 'bit', address: 4.1, initial_value: 0, comment: '3 hour pulse' },
+    { name: 'P_4hr', location: 'control', type: 'bit', address: 4.2, initial_value: 0, comment: '4 hour pulse' },
+    { name: 'P_5hr', location: 'control', type: 'bit', address: 4.3, initial_value: 0, comment: '5 hour pulse' },
+    { name: 'P_6hr', location: 'control', type: 'bit', address: 4.4, initial_value: 0, comment: '6 hour pulse' },
+    { name: 'P_12hr', location: 'control', type: 'bit', address: 4.5, initial_value: 0, comment: '12 hour pulse' },
+    { name: 'P_1day', location: 'control', type: 'bit', address: 4.6, initial_value: 0, comment: '1 day pulse' },
+
+    { name: 'S_100ms', location: 'control', type: 'bit', address: 5.0, initial_value: 0, comment: '100ms square wave' },
+    { name: 'S_200ms', location: 'control', type: 'bit', address: 5.1, initial_value: 0, comment: '200ms square wave' },
+    { name: 'S_300ms', location: 'control', type: 'bit', address: 5.2, initial_value: 0, comment: '300ms square wave' },
+    { name: 'S_500ms', location: 'control', type: 'bit', address: 5.3, initial_value: 0, comment: '500ms square wave' },
+    { name: 'S_1s', location: 'control', type: 'bit', address: 5.4, initial_value: 0, comment: '1 second square wave' },
+    { name: 'S_2s', location: 'control', type: 'bit', address: 5.5, initial_value: 0, comment: '2 second square wave' },
+    { name: 'S_5s', location: 'control', type: 'bit', address: 5.6, initial_value: 0, comment: '5 second square wave' },
+    { name: 'S_10s', location: 'control', type: 'bit', address: 5.7, initial_value: 0, comment: '10 second square wave' },
+    { name: 'S_30s', location: 'control', type: 'bit', address: 6.0, initial_value: 0, comment: '30 second square wave' },
+    { name: 'S_1min', location: 'control', type: 'bit', address: 6.1, initial_value: 0, comment: '1 minute square wave' },
+    { name: 'S_2min', location: 'control', type: 'bit', address: 6.2, initial_value: 0, comment: '2 minute square wave' },
+    { name: 'S_5min', location: 'control', type: 'bit', address: 6.3, initial_value: 0, comment: '5 minute square wave' },
+    { name: 'S_10min', location: 'control', type: 'bit', address: 6.4, initial_value: 0, comment: '10 minute square wave' },
+    { name: 'S_15min', location: 'control', type: 'bit', address: 6.5, initial_value: 0, comment: '15 minute square wave' },
+    { name: 'S_30min', location: 'control', type: 'bit', address: 6.6, initial_value: 0, comment: '30 minute square wave' },
+    { name: 'S_1hr', location: 'control', type: 'bit', address: 6.7, initial_value: 0, comment: '1 hour square wave' },
+
+    { name: 'elapsed_days', location: 'control', type: 'byte', address: 8.0, initial_value: 0, comment: 'Elapsed days' },
+    { name: 'elapsed_hours', location: 'control', type: 'byte', address: 9.0, initial_value: 0, comment: 'Elapsed hours' },
+    { name: 'elapsed_minutes', location: 'control', type: 'byte', address: 10.0, initial_value: 0, comment: 'Elapsed minutes' },
+    { name: 'elapsed_seconds', location: 'control', type: 'byte', address: 11.0, initial_value: 0, comment: 'Elapsed seconds' },
+
+    { name: 'system_uptime', location: 'control', type: 'dint', address: 12.0, initial_value: 0, comment: 'System uptime in seconds' },
+].map(s => ({ ...s, readonly: true }))
+
 const LOCAL_STORAGE_KEY = 'vovk_plc_project_autosave'
 
 
@@ -25,6 +75,7 @@ export default class ProjectManager {
         const project = JSON.parse(saved)
         if (project) {
           console.log('[ProjectManager] Restoring project from localStorage')
+          this.ensureSystemSymbols(project)
           this.#editor.openProject(project)
           // Disable default initial program since we restored one
           this.#editor.initial_program = null
@@ -36,13 +87,31 @@ export default class ProjectManager {
     }
   }
 
+  ensureSystemSymbols(project) {
+    if (!project.symbols) project.symbols = []
+    
+    // Split user symbols from existing system symbols (to re-add them in correct order)
+    const userSymbols = project.symbols.filter(s => !s.readonly)
+    // Actually we can just filter out any existing system symbols by name to be safe
+    const systemNames = new Set(SYSTEM_SYMBOLS.map(s => s.name))
+    const cleanUserSymbols = userSymbols.filter(s => !systemNames.has(s.name))
+    
+    project.symbols = [...SYSTEM_SYMBOLS, ...cleanUserSymbols]
+  }
+
   checkAndSave() {
     if (!this.#editor.project) return
 
     this.collectProjectState()
 
     try {
-      const current_state = JSON.stringify(this.#editor.project)
+      // Filter out system symbols before saving
+      const projectToSave = { ...this.#editor.project }
+      if (projectToSave.symbols) {
+          projectToSave.symbols = projectToSave.symbols.filter(s => !s.readonly)
+      }
+
+      const current_state = JSON.stringify(projectToSave)
       if (current_state !== this.last_saved_state) {
         localStorage.setItem(LOCAL_STORAGE_KEY, current_state)
         this.last_saved_state = current_state
@@ -66,7 +135,7 @@ export default class ProjectManager {
         const source = item.item.item
         const blocks = (source.blocks || []).map(block => {
           const copy = { ...block }
-          delete copy.id
+          // delete copy.id
           delete copy.div // Remove DOM reference
           // delete copy.props // Remove rendering props
           if (copy.props) {
@@ -81,6 +150,7 @@ export default class ProjectManager {
         
         // Create a clean copy to avoid circular references (like .host added by EditorUI)
         return {
+          id: source.id,
           type: source.type,
           name: source.name,
           path: source.path,
@@ -108,7 +178,86 @@ export default class ProjectManager {
 
   /** Save current project to JSON */
   save() {
-    return JSON.stringify(this.#editor.project, null, 2)
+    const projectToSave = { ...this.#editor.project }
+    if (projectToSave.symbols) {
+        projectToSave.symbols = projectToSave.symbols.filter(s => !s.readonly)
+    }
+    return JSON.stringify(projectToSave, null, 2)
+  }
+
+  /**
+   * Compiles the current project
+   * @returns {{size: number, output: string}}
+   */
+  compile() {
+    // Ensure project state is up to date before compiling
+    this.checkAndSave()
+
+    let asm = ''
+    try {
+        const project = this.#editor.project
+        // Iterate over all files in the project
+        if (project.files) {
+            for (const file of project.files) {
+                if (file.blocks) {
+                    for (const block of file.blocks) {
+                        if (block.type === 'asm' && block.code) {
+                            asm += block.code + '\n'
+                        } else if (block.type !== 'asm') {
+                            console.log(`Block type ${block.type} in file ${file.name} not yet supported for compilation`)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Symbol Replacement
+        if (asm && project.symbols) {
+             project.symbols.forEach(symbol => {
+                if (!symbol.name) return
+                const name = symbol.name
+                
+                // Calculate absolute address based on location offset
+                let base_offset = 0
+                if (symbol.location && project.offsets && project.offsets[symbol.location]) {
+                    base_offset = project.offsets[symbol.location].offset || 0
+                }
+
+                let addressStr = ''
+                
+                if (symbol.type === 'bit') {
+                    const val = parseFloat(symbol.address) || 0
+                    const byte = Math.floor(val)
+                    // Extract bit index from decimal part (e.g. 2.4 -> 4)
+                    const bit = Math.round((val - byte) * 10)
+                    
+                    addressStr = (base_offset + byte) + '.' + bit
+                } else {
+                     const val = parseFloat(symbol.address) || 0
+                     addressStr = (base_offset + Math.floor(val)).toString()
+                }
+
+                // Replace whole words only
+                const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                const regex = new RegExp(`\\b${escapedName}\\b`, 'g')
+                asm = asm.replace(regex, addressStr)
+            })
+        }
+
+    } catch(e) { console.warn('Could not extract ASM from project', e) }
+
+    if (!asm) {
+        // Fallback or empty?
+        // Reuse the fallback logic if desired, or throw error
+         asm = `
+    u8.readBit     2.4    // Read bit 2.4 which is 1s pulse
+    jump_if_not    end    // Jump to the label 'end' if the bit is OFF
+    u8.writeBitInv 32.0   // Invert bit 32.0
+end:                      // Label to jump to
+`
+    }
+    
+    return this.#editor.runtime.compile(asm)
   }
 
   /** Create a new empty project structure */
@@ -122,7 +271,7 @@ export default class ProjectManager {
         memory: { offset: 48, size: 16 },
         system: { offset: 64, size: 16 }
       },
-      symbols: [],
+      symbols: [...SYSTEM_SYMBOLS],
       folders: [],
       files: []
     }

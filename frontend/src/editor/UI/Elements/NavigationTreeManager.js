@@ -510,7 +510,14 @@ export default class NavigationTreeManager {
             if (item && item.full_path === '/main') {  // @ts-ignore
                 exists.item.item.blocks = item.blocks // @ts-ignore
                 exists.item.item.comment = item.comment
-                exists.item.item.id = this.#editor._generateID(exists.item.item.id)
+                if (item.id) {
+                     exists.item.item.id = item.id
+                     if (this.#editor && !this.#editor.reserved_ids.includes(item.id)) {
+                        this.#editor.reserved_ids.push(item.id)
+                     }
+                } else {
+                     exists.item.item.id = this.#editor._generateID(exists.item.item.id)
+                }
             }
             return
         }

@@ -297,36 +297,9 @@ export default class SetupUI {
                      return
                 }
 
-                let asm = ''
                 try {
-                    const project = this.master.project
-                    const mainProgram = project.files.find(f => f.name === 'main' && f.type === 'program')
-                    if (mainProgram && mainProgram.blocks) {
-                         // Find first ASM block
-                         const asmBlock = mainProgram.blocks.find(b => b.type === 'asm')
-                         if (asmBlock && asmBlock.code) {
-                             asm = asmBlock.code
-                             console.log('Using ASM code from main program')
-                         }
-                    }
-                } catch(e) { console.warn('Could not extract ASM from project', e) }
-
-                if (!asm) {
-                    console.log('Using fallback blinky ASM')
-                    asm = `
-    u8.readBit     2.4    // Read bit 2.4 which is 1s pulse
-    jump_if_not    end    // Jump to the label 'end' if the bit is OFF
-    u8.writeBitInv 32.0   // Invert bit 32.0
-end:                      // Label to jump to
-`
-                }
-                
-                try {
-                    console.log('Compiling...', asm)
-                    const result = this.master.runtime.compile(asm)
-                    // result is { size: number, output: string (hex/binary chars) }
-                    // We need to convert output string to bytecode array if needed, or pass as is depending on connection
-                    // VovkPLC.js extractProgram returns output as string from readStream.
+                    console.log('Compiling...')
+                    const result = this.master.project_manager.compile()
                     
                     this.compiledBytecode = result.output
                     this.compiledSize = result.size

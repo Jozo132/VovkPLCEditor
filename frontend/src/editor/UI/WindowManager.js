@@ -40,7 +40,7 @@ export default class WindowManager {
 
         this.workspace_body = ElementSynthesisMany(/*HTML*/`
             <div class="plc-workspace-header">
-                <p>VovkPLC Editor</p>
+                <p></p>
             </div>
             <div class="plc-workspace-body">
                 <div class="plc-navigation no-select resizable" style="width: 220px">
@@ -70,10 +70,32 @@ export default class WindowManager {
                         <span class="thick text-rotate" style="margin: auto auto; margin-top: 5px; font-size: 0.6em;">Navigation</span>
                     </div>
                 </div>
-                <div class="plc-window">
-                    <div class="plc-window-tabs"></div>
-                    <div class="plc-window-frame"></div>
+                
+                <div class="plc-center-column" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; position: relative;">
+                    <div class="plc-window" style="flex: 1; min-height: 0;"> <!-- min-height: 0 is important for flex scrolling -->
+                        <div class="plc-window-tabs"></div>
+                        <div class="plc-window-frame"></div>
+                    </div>
+                    
+                    <div class="resizer-console-top" style="height: 4px; background: #333; cursor: ns-resize; z-index: 10;"></div>
+                    
+                    <div class="plc-console minimized" style="height: 25px; min-height: 25px; background: #1e1e1e; border-top: 1px solid #333; display: flex; flex-direction: column;">
+                        <div class="plc-console-header" style="height: 25px; background: #252526; display: flex; align-items: center; padding: 0 10px; cursor: pointer;">
+                            <span class="codicon codicon-chevron-right" style="margin-right: 5px;"></span>
+                            <span style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #ccc;">Output</span>
+                            <div style="flex: 1;"></div>
+                            <div class="plc-console-actions">
+                                <button class="icon-btn clear-console" title="Clear Console" style="background:none; border: 1px solid #444; border-radius: 2px; padding: 0 5px; color:#ccc; cursor:pointer; font-size: 11px;">
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        <div class="plc-console-body" style="flex: 1; overflow: auto; padding: 5px 10px; font-family: monospace; font-size: 12px; color: #ddd;">
+                            <!-- Console Output -->
+                        </div>
+                    </div>
                 </div>
+
                 <div class="plc-tools no-select resizable minimized" style="width: 200px">
                     <div class="plc-tools-bar">
                         <div class="menu-button">+</div>
@@ -85,8 +107,21 @@ export default class WindowManager {
                     </div>
                 </div>
             </div>
-            <div class="plc-workspace-footer">
-                <p>Footer</p>
+            
+            <div class="plc-workspace-footer" style="height: 22px; background: #007acc; color: #fff; display: flex; align-items: center; padding: 0px; margin: 0px; font-size: 12px; justify-content: space-between;">
+                <div style="display: flex; gap: 10px; align-items: center; margin-left: 15px;">
+                    <div class="footer-item"><span class="codicon codicon-remote"></span> VovkPLC Editor</div>
+                    <button id="footer-compile" class="footer-btn" style="background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 5px; opacity: 0.5; pointer-events: none;">
+                        <span class="plc-icon plc-icon-gears"></span> Compile
+                    </button>
+                    <button id="footer-download" class="footer-btn" style="background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 5px; opacity: 0.5; pointer-events: none;">
+                        <span class="plc-icon plc-icon-upload"></span> Download
+                    </button>
+                    <span id="footer-compile-size" style="margin-left: 5px; opacity: 0.8;"></span>
+                </div>
+                <div style="display: flex; gap: 15px; margin-right: 15px">
+                     <span id="footer-device-status">Disconnected</span>
+                </div>
             </div>
         `)
 
@@ -99,6 +134,80 @@ export default class WindowManager {
         if (!tools_minimize_button) throw new Error('Tools minimize button not found')
         navigation_minimize_button.addEventListener('click', () => this.#on_navigation_minimize_toggle())
         tools_minimize_button.addEventListener('click', () => this.#on_tools_minimize_toggle())
+
+        // Footer Events
+        const compileBtn = workspace.querySelector('#footer-compile')
+        const downloadBtn = workspace.querySelector('#footer-download')
+        
+        compileBtn.onclick = () => this.handleFooterCompile()
+        downloadBtn.onclick = () => this.handleFooterDownload()
+        
+        const consoleHeader = workspace.querySelector('.plc-console-header')
+        const consoleBody = workspace.querySelector('.plc-console')
+        const clearConsoleBtn = workspace.querySelector('.clear-console')
+        const consoleResizer = workspace.querySelector('.resizer-console-top')
+        
+        consoleBody.style.height = '25px' // Start minimized
+        
+        // Initial console state management
+        let lastHeight = 150
+        
+        consoleHeader.onclick = (e) => {
+            if (e.target.closest('.plc-console-actions')) return 
+            const isMinimized = consoleBody.classList.contains('minimized')
+            if (isMinimized) {
+                consoleBody.classList.remove('minimized')
+                consoleBody.style.height = Math.max(lastHeight, 100) + 'px'
+            } else {
+                lastHeight = parseInt(getComputedStyle(consoleBody).height, 10)
+                consoleBody.classList.add('minimized')
+                consoleBody.style.height = '25px'
+            }
+        }
+        
+        clearConsoleBtn.onclick = () => {
+             const body = workspace.querySelector('.plc-console-body')
+             if (body) body.innerHTML = ''
+        }
+        
+        // Console Resizer Logic (Draggable Line)
+        let isResizingConsole = false
+        consoleResizer.addEventListener('mousedown', (e) => {
+            isResizingConsole = true
+            e.preventDefault()
+            document.body.style.cursor = 'ns-resize'
+        })
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizingConsole) return
+            
+            const centerCol = workspace.querySelector('.plc-center-column')
+            if (!centerCol) return
+            const rect = centerCol.getBoundingClientRect()
+            
+            // Calculate height from bottom of center column
+            let newHeight = rect.bottom - e.clientY
+            
+            // Constraints
+            if (newHeight < 25) newHeight = 25 // Minimum (header only)
+            if (newHeight > rect.height - 100) newHeight = rect.height - 100 // Max height
+            
+            consoleBody.style.height = newHeight + 'px'
+            
+            if (newHeight > 30) {
+                 consoleBody.classList.remove('minimized')
+                 lastHeight = newHeight
+            } else {
+                 consoleBody.classList.add('minimized')
+            }
+        })
+        
+        document.addEventListener('mouseup', () => {
+             if (isResizingConsole) {
+                 isResizingConsole = false
+                 document.body.style.cursor = ''
+             }
+        })
 
         const device_info = workspace.querySelector('.plc-device-info')
         if (!device_info) throw new Error('Device info element not found')
@@ -113,6 +222,23 @@ export default class WindowManager {
         if (!device_online_button) throw new Error('Device online button not found')
         device_online_button.addEventListener('click', async () => this.#on_device_online_click())
         this.device_online_button = device_online_button
+        
+        // Poll connection status for footer buttons
+        setInterval(() => {
+            const connected = this.#editor.device_manager && this.#editor.device_manager.connected
+            const status = workspace.querySelector('#footer-device-status')
+            if (status) status.innerText = connected ? 'Connected' : 'Disconnected'
+            
+            // Enable/Disable buttons based on connection
+            if (compileBtn) {
+                 compileBtn.style.opacity = '1'
+                 compileBtn.style.pointerEvents = 'all'
+            }
+            if (downloadBtn) {
+                 downloadBtn.style.opacity = connected ? '1' : '0.5'
+                 downloadBtn.style.pointerEvents = connected ? 'all' : 'none'
+            }
+        }, 500)
 
 
         const navigation = this.workspace.querySelector('.plc-navigation')
@@ -134,6 +260,127 @@ export default class WindowManager {
     #on_device_select_change = () => { // @ts-ignore
         const value = this.device_select_element.value
         this.active_device = value
+    }
+    
+    // Console Helpler
+    consoleAutoOpened = false
+    
+    logToConsole(msg, type = 'info') {
+        const body = this.workspace.querySelector('.plc-console-body')
+        if (!body) return
+        
+        const line = document.createElement('div')
+        line.style.borderBottom = '1px solid #333'
+        line.style.padding = '2px 0'
+        
+        const d = new Date()
+        const h = d.getHours().toString().padStart(2, '0')
+        const m = d.getMinutes().toString().padStart(2, '0')
+        const s = d.getSeconds().toString().padStart(2, '0')
+        const ms = d.getMilliseconds().toString().padStart(3, '0')
+        const timestamp = `${h}:${m}:${s}.${ms}`
+
+        line.innerHTML = `<span style="color: #666; margin-right: 8px;">[${timestamp}]</span>`
+        
+        const content = document.createElement('span')
+        content.innerText = typeof msg === 'string' ? msg : JSON.stringify(msg)
+        
+        const consoleEl = this.workspace.querySelector('.plc-console')
+        const openConsole = () => {
+            if (consoleEl && consoleEl.classList.contains('minimized')) {
+                 consoleEl.classList.remove('minimized')
+                 consoleEl.style.height = '150px'
+            }
+        }
+
+        if (type === 'error') {
+            content.style.color = '#f48771'
+            openConsole()
+        } else if (type === 'success') {
+             content.style.color = '#89d185'
+        }
+        
+        // Open console on first log of the session (usually compile/upload start)
+        if (!this.consoleAutoOpened) {
+            this.consoleAutoOpened = true
+            openConsole()
+        }
+        
+        line.appendChild(content)
+        body.appendChild(line)
+        body.scrollTop = body.scrollHeight
+    }
+    
+    async handleFooterCompile() {
+        if (!this.#editor.runtime_ready) {
+             this.logToConsole('WASM Runtime is not ready yet.', 'error')
+             return
+        }
+        
+        try {
+            this.logToConsole('Compiling project...', 'info')
+            const result = this.#editor.project_manager.compile()
+            
+            // Store result for download
+            this.compiledBytecode = result.output
+            this.compiledSize = result.size
+            
+            // Calculate Checksum
+            let checksumMsg = ''
+            let hexPreview = ''
+            if (this.#editor.runtime && this.#editor.runtime.parseHex && this.#editor.runtime.crc8) {
+                try {
+                    const bytes = this.#editor.runtime.parseHex(result.output)
+                    const checksum = this.#editor.runtime.crc8(bytes)
+                    
+                    if (this.lastCompiledChecksum === checksum) {
+                        checksumMsg = ' Bytecode didn\'t change.'
+                    } 
+                    // else {
+                    //    checksumMsg = ` Checksum: ${checksum.toString(16).toUpperCase().padStart(2, '0')}`
+                    // }
+                    this.lastCompiledChecksum = checksum
+                    
+                    // Preview first 64 bytes
+                    const subset = bytes.slice(0, 64)
+                    hexPreview = subset.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
+                    if (bytes.length > 64) hexPreview += '...'
+
+                } catch(e) { console.warn('Checksum calculation failed', e) }
+            }
+
+            this.logToConsole(`Compilation successful. Size: ${result.size} bytes.${checksumMsg}`, 'success')
+            if (hexPreview) this.logToConsole(hexPreview)
+            
+            // Show size in footer
+            const sizeLabel = this.workspace.querySelector('#footer-compile-size')
+            if (sizeLabel) sizeLabel.innerText = `(${result.size} bytes)`
+            
+            // Auto open console
+             const consoleEl = this.workspace.querySelector('.plc-console')
+             if (consoleEl && consoleEl.classList.contains('minimized')) {
+                 consoleEl.classList.remove('minimized')
+                 consoleEl.style.height = '150px'
+             }
+
+        } catch (e) {
+            this.logToConsole(`Compilation failed: ${e.message}`, 'error')
+        }
+    }
+    
+    async handleFooterDownload() {
+        if (!this.compiledBytecode) {
+             this.logToConsole('No compiled program found. Please Compile first.', 'error')
+             return
+        }
+        
+        try {
+            this.logToConsole(`Uploading ${this.compiledSize} bytes to device...`, 'info')
+            await this.#editor.device_manager.connection.downloadProgram(this.compiledBytecode)
+            this.logToConsole('Program uploaded successfully.', 'success')
+        } catch (e) {
+            this.logToConsole(`Upload failed: ${e.message}`, 'error')
+        }
     }
 
     #on_device_online_click = async () => {
@@ -443,6 +690,12 @@ export default class WindowManager {
         // this.tab_manager.draw_tabs()
         this.refreshDeviceOptions()
         // this.#editor.draw()
+
+        // Open main program
+        if (project.files) {
+            const main = project.files.find(f => f.name === 'main' && f.path === '/' && f.type === 'program')
+            if (main && main.id) this.openProgram(main.id)
+        }
     }
 
     /** @type { (id: string) => (WindowType | undefined) } */
