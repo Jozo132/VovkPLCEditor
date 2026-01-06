@@ -1,4 +1,4 @@
-import { PLC_Project, PLCEditor } from '../utils/types.js'
+import { PLC_Program, PLC_Project, PLCEditor } from '../utils/types.js'
 
 const LOCAL_STORAGE_KEY = 'vovk_plc_project_autosave'
 
@@ -64,6 +64,21 @@ export default class ProjectManager {
       .map(item => {
         /** @type {PLC_Program} */
         const source = item.item.item
+        const blocks = (source.blocks || []).map(block => {
+          const copy = { ...block }
+          delete copy.id
+          delete copy.div // Remove DOM reference
+          // delete copy.props // Remove rendering props
+          if (copy.props) {
+            const props_copy = { ...copy.props }
+            delete props_copy.ctx // Remove canvas context
+            delete props_copy.canvas // Remove canvas element
+            delete props_copy.text_editor // Remove code editor instance
+            copy.props = props_copy
+          }
+          return copy
+        })
+        
         // Create a clean copy to avoid circular references (like .host added by EditorUI)
         return {
           type: source.type,
@@ -71,7 +86,7 @@ export default class ProjectManager {
           path: source.path,
           full_path: source.full_path,
           comment: source.comment,
-          blocks: source.blocks // Assumes blocks don't have circular references
+          blocks: blocks
         }
       }) // PLC_File -> item (PLC_ProjectItem)
 

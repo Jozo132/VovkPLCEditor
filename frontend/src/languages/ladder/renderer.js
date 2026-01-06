@@ -452,6 +452,8 @@ export const ladderRenderer = {
 
   render(editor, block) {
     if (block.type !== 'ladder') return
+    block.blocks = block.blocks || []
+    block.connections = block.connections || []
     const { div, props, blocks, connections } = block
     if (!props.ctx) {
       if (!div) throw new Error('Block div not found')

@@ -14,6 +14,12 @@ export const ladderRenderer = {
     if (!div) throw new Error('Block div not found')
     const block_container = div.querySelector('.plc-program-block-code')
     if (!block_container) throw new Error('Block code not found')
+    
+    // If loaded from JSON, props.text_editor might be a plain object
+    if (props.text_editor && !(props.text_editor instanceof MiniCodeEditor)) {
+        props.text_editor = null
+    }
+
     if (!props.text_editor) {
       const updateBlockSize = () => {
         const height = text_editor.getScrollHeight()
