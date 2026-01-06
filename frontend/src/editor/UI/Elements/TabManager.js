@@ -38,6 +38,10 @@ export default class TabManager {
 
         // @ts-ignore
         tabEl.onclick = () => this.switchTo(id);
+        
+        // Setup Drag and Drop
+        this.setupDragHandlers(tabEl, id);
+
         this._tabBar.appendChild(tabEl);
 
         // @ts-ignore
@@ -113,5 +117,44 @@ export default class TabManager {
     isTabElement(element) {
         if (!element) return false
         return element.classList.contains("plc-tab")
+    }
+
+    setupDragHandlers(tabEl, id) {
+        tabEl.addEventListener('dragstart', (e) => {
+            this.draggedTab = tabEl;
+            this.draggedId = id;
+            e.dataTransfer.effectAllowed = 'move';
+            tabEl.classList.add('dragging');
+            // Required for Firefox
+            e.dataTransfer.setData('text/plain', id);
+        });
+
+        tabEl.addEventListener('dragend', () => {
+             tabEl.classList.remove('dragging');
+             this.draggedTab = null;
+             this.draggedId = null;
+        });
+
+        tabEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (!this.draggedTab || this.draggedTab === tabEl) return;
+
+            const container = this._tabBar;
+            const bounding = tabEl.getBoundingClientRect();
+            const midpoint = bounding.x + bounding.width / 2;
+            
+            // Check if we are to the left or right of the midpoint
+            if (e.clientX < midpoint) {
+                // Insert before the target if it's not already there
+                if (tabEl.previousSibling !== this.draggedTab) {
+                    container.insertBefore(this.draggedTab, tabEl);
+                }
+            } else {
+                // Insert after the target
+                if (tabEl.nextSibling !== this.draggedTab) {
+                    container.insertBefore(this.draggedTab, tabEl.nextSibling);
+                }
+            }
+        });
     }
 }

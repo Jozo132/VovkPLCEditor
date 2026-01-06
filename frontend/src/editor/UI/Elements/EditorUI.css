@@ -41,7 +41,7 @@
 
 /* Symbols Table */
 .symbols-table {
-    width: 100%;
+    width: fit-content;
     border-collapse: collapse;
     color: var(--font-color);
     font-size: 13px;

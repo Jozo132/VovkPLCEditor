@@ -46,12 +46,12 @@ export default class SymbolsUI {
                     <thead>
                         <tr>
                             <th style="width: 30px;"></th>
-                            <th data-sort="name">Name <span class="sort-icon"></span></th>
+                            <th data-sort="name" style="width: 320px; max-width: 320px;">Name <span class="sort-icon"></span></th>
                             <th data-sort="location" style="width: 120px;">Location <span class="sort-icon"></span></th>
                             <th data-sort="type" style="width: 100px;">Type <span class="sort-icon"></span></th>
                             <th data-sort="address" style="width: 100px;">Address <span class="sort-icon"></span></th>
                             <th data-sort="initial_value" style="width: 100px;">Initial Value <span class="sort-icon"></span></th>
-                            <th data-sort="comment">Comment <span class="sort-icon"></span></th>
+                            <th data-sort="comment" style="width: 440px;">Comment <span class="sort-icon"></span></th>
                             <th style="width: 30px;"></th>
                         </tr>
                     </thead>
