@@ -115,6 +115,14 @@ const download_icon_source = {
     `
 }
 
+const upload_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <path fill="#ddd" d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>
+    `
+}
+
 await icon_dealer.importIcon({ type: 'folder', name: 'plc-icon-folder', image: `url('${ImageRenderer.renderSVG(folder_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'program', name: 'plc-icon-gears', image: `url('${ImageRenderer.renderSVG(program_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'symbols', name: 'plc-icon-symbols', image: `url('${ImageRenderer.renderSVG(symbols_icon_source)}')` })
@@ -122,3 +130,4 @@ await icon_dealer.importIcon({ type: 'setup', name: 'plc-icon-setup', image: `ur
 await icon_dealer.importIcon({ type: 'add', name: 'plc-icon-add', image: `url('${ImageRenderer.renderSVG(plus_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'delete', name: 'plc-icon-delete', image: `url('${ImageRenderer.renderSVG(delete_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'download', name: 'plc-icon-download', image: `url('${ImageRenderer.renderSVG(download_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'upload', name: 'plc-icon-upload', image: `url('${ImageRenderer.renderSVG(upload_icon_source)}')` })

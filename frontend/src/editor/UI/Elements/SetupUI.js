@@ -59,12 +59,12 @@ export default class SetupUI {
         
         let deviceInfo = null
         let connected = false
-        if (this.master.device_manager && this.master.device_manager.connected) {
+        if (this.master.device_manager && this.master.device_manager.connected && this.master.device_manager.connection) {
              connected = true
-             try {
-                // Fetch latest info if connected
-                deviceInfo = await this.master.device_manager.connection.getInfo(true)
-             } catch(e) { console.error('Error fetching device info', e) }
+             // Use cached device info if available, otherwise it will show placeholders until next update
+             if (this.master.device_manager.deviceInfo) {
+                 deviceInfo = this.master.device_manager.deviceInfo
+             }
         }
 
         // Default to placeholders if no info
@@ -109,10 +109,25 @@ export default class SetupUI {
                             <span class="plc-icon plc-icon-download" style="margin-right: 6px;"></span> Read Config
                         </button>
                          <button id="setup-read-program" class="plc-btn" ${!connected ? 'disabled' : ''} style="${btnStyle} background: #3c3c3c; color: #fff; border: 1px solid #555;">
-                            Read Program
+                            <span class="plc-icon plc-icon-download" style="margin-right: 6px;"></span> Read Program
                         </button>
-                         <button id="setup-download-all" class="plc-btn" ${!connected ? 'disabled' : ''} style="${btnStyle} background: #0078d4; color: white; border: 1px solid #0078d4;">
-                            Download Project
+                         <button id="setup-read-project" class="plc-btn" ${!connected ? 'disabled' : ''} style="${btnStyle} background: #3c3c3c; color: #fff; border: 1px solid #555;">
+                            <span class="plc-icon plc-icon-download" style="margin-right: 6px;"></span> Read Project
+                        </button>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;">
+                        <button id="setup-compile" class="plc-btn" style="${btnStyle} background: #3c3c3c; color: #fff; border: 1px solid #555;">
+                            <span class="plc-icon plc-icon-gears" style="margin-right: 6px;"></span> Compile
+                        </button>
+                        <button id="setup-write-config" class="plc-btn" ${!connected ? 'disabled' : ''} style="${btnStyle} background: #3a3d41; color: #fff; border: 1px solid #454545;">
+                            <span class="plc-icon plc-icon-upload" style="margin-right: 6px;"></span> Write Config
+                        </button>
+                        <button id="setup-write-program" class="plc-btn" ${!connected ? 'disabled' : ''} style="${btnStyle} background: #3a3d41; color: #fff; border: 1px solid #454545;">
+                            <span class="plc-icon plc-icon-upload" style="margin-right: 6px;"></span> Write Program
+                        </button>
+                        <button id="setup-write-project" class="plc-btn" ${!connected ? 'disabled' : ''} style="${btnStyle} background: #0078d4; color: white; border: 1px solid #0078d4;">
+                            <span class="plc-icon plc-icon-upload" style="margin-right: 6px;"></span> Write Project
                         </button>
                     </div>
 
@@ -235,7 +250,12 @@ export default class SetupUI {
 
         const readConfigBtn = this.div.querySelector('#setup-read-config')
         const readProgramBtn = this.div.querySelector('#setup-read-program')
-        const downloadAllBtn = this.div.querySelector('#setup-download-all')
+        const readProjectBtn = this.div.querySelector('#setup-read-project')
+
+        const compileBtn = this.div.querySelector('#setup-compile')
+        const writeConfigBtn = this.div.querySelector('#setup-write-config')
+        const writeProgramBtn = this.div.querySelector('#setup-write-program')
+        const writeProjectBtn = this.div.querySelector('#setup-write-project')
 
         if (readConfigBtn) {
             readConfigBtn.onclick = async () => {
@@ -247,53 +267,137 @@ export default class SetupUI {
                 })
                 if (!confirm1) return
 
-                const confirm2 = await Popup.confirm({
-                    title: 'Double Confirmation',
-                    description: 'This action cannot be undone. Any local changes to the setup will be lost.\n\nProceed?'
-                })
-                if (!confirm2) return
-
                 try {
-                    const info = await this.master.device_manager.connection.getInfo(true)
-                    // Map info to project
-                    if (info) {
-                        // Logic to map Simulator/Device info to Project structure
-                        if (info.device) project.info.type = info.device
-                        if (info.version) project.info.version = info.version
-                        if (info.program) project.info.capacity = info.program
-                        if (info.date) project.info.date = info.date
-                        if (info.stack) project.info.stack = info.stack
-                        
-                        // Map known offsets if available in info, otherwise keep defaults or infer
-                        // Info has: input_offset, input_size, output_offset, output_size
-                        if (typeof info.input_offset !== 'undefined') {
-                            project.offsets.input = { offset: info.input_offset, size: info.input_size }
-                        }
-                        if (typeof info.output_offset !== 'undefined') {
-                            project.offsets.output = { offset: info.output_offset, size: info.output_size }
-                        }
-                        
-                        this.render() // Refresh UI
-                    }
+                     // Force refresh info
+                     const info = await this.master.device_manager.connection.getInfo(true)
+                     // If fresh info obtained, update
+                     if (info) this.updateProjectConfig(info)
                 } catch (e) {
                     console.error('Failed to read config', e)
                 }
             }
         }
         
-        // Placeholders for future functionality
         if (readProgramBtn) {
-             readProgramBtn.onclick = () => {
-                 // Logic to read program blocks would go here
+             readProgramBtn.onclick = async () => {
                  console.log('Read program clicked')
+                 // Only log for now
              }
         }
-        if (downloadAllBtn) {
-             downloadAllBtn.onclick = () => {
-                 // Logic to download full project would go here
-                 console.log('Download full project clicked')
+        if (readProjectBtn) {
+             readProjectBtn.onclick = async () => {
+                 console.log('Read project clicked')
              }
         }
+
+        if (compileBtn) {
+            compileBtn.onclick = async () => {
+                if (!this.master.runtime_ready) {
+                     await Popup.confirm({ title: 'Compiler Error', description: 'WASM Runtime is not ready yet.' })
+                     return
+                }
+
+                let asm = ''
+                try {
+                    const project = this.master.project
+                    const mainProgram = project.files.find(f => f.name === 'main' && f.type === 'program')
+                    if (mainProgram && mainProgram.blocks) {
+                         // Find first ASM block
+                         const asmBlock = mainProgram.blocks.find(b => b.type === 'asm')
+                         if (asmBlock && asmBlock.code) {
+                             asm = asmBlock.code
+                             console.log('Using ASM code from main program')
+                         }
+                    }
+                } catch(e) { console.warn('Could not extract ASM from project', e) }
+
+                if (!asm) {
+                    console.log('Using fallback blinky ASM')
+                    asm = `
+    u8.readBit     2.4    // Read bit 2.4 which is 1s pulse
+    jump_if_not    end    // Jump to the label 'end' if the bit is OFF
+    u8.writeBitInv 32.0   // Invert bit 32.0
+end:                      // Label to jump to
+`
+                }
+                
+                try {
+                    console.log('Compiling...', asm)
+                    const result = this.master.runtime.compile(asm)
+                    // result is { size: number, output: string (hex/binary chars) }
+                    // We need to convert output string to bytecode array if needed, or pass as is depending on connection
+                    // VovkPLC.js extractProgram returns output as string from readStream.
+                    
+                    this.compiledBytecode = result.output
+                    this.compiledSize = result.size
+                    
+                    console.log('Compilation successful', result)
+                    await Popup.confirm({ title: 'Compilation Successful', description: `Compiled ${result.size} bytes.` })
+                } catch (e) {
+                    console.error('Compilation failed', e)
+                    await Popup.confirm({ title: 'Compilation Failed', description: e.message })
+                }
+            }
+        }
+
+        if (writeConfigBtn) {
+            writeConfigBtn.onclick = async () => {
+                 console.log('Write config clicked')
+                 await Popup.confirm({ title: 'Write Config', description: 'Writing configuration is not supported by the current firmware protocol.' })
+            }
+        }
+
+        if (writeProgramBtn) {
+             writeProgramBtn.onclick = async () => {
+                 if (!this.master.device_manager.connected) return
+                 if (!this.compiledBytecode) {
+                      await Popup.confirm({ title: 'Write Program', description: 'No compiled program found. Please Compile first.' })
+                      return
+                 }
+                 
+                 const confirm = await Popup.confirm({
+                    title: 'Write Program',
+                    description: `Upload ${this.compiledSize} bytes to the device? This will stop the current program.`
+                 })
+                 if (!confirm) return
+
+                 try {
+                     // Pass the HEX string directly. 
+                     // The runtime (Simulation) and buildCommand (Serial) both handle hex strings or plain arrays better than Uint8Array.
+                     await this.master.device_manager.connection.downloadProgram(this.compiledBytecode)
+                     await Popup.confirm({ title: 'Success', description: 'Program uploaded successfully.' })
+                 } catch (e) {
+                      console.error('Write failed', e)
+                      await Popup.confirm({ title: 'Upload Failed', description: e.message })
+                 }
+             }
+        }
+
+        if (writeProjectBtn) {
+             writeProjectBtn.onclick = async () => {
+                 console.log('Write project clicked')
+                  await Popup.confirm({ title: 'Write Project', description: 'Write Program + Config.' })
+             }
+        }
+    }
+
+    updateProjectConfig(info) {
+        const project = this.master.project
+        if (info.device) project.info.type = info.device
+        if (info.version) project.info.version = info.version
+        if (info.program) project.info.capacity = info.program
+        if (info.date) project.info.date = info.date
+        if (info.stack) project.info.stack = info.stack
+        
+        // Map known offsets if available in info
+        if (typeof info.input_offset !== 'undefined') {
+            project.offsets.input = { offset: info.input_offset, size: info.input_size }
+        }
+        if (typeof info.output_offset !== 'undefined') {
+            project.offsets.output = { offset: info.output_offset, size: info.output_size }
+        }
+        
+        this.render() // Refresh UI
     }
     
     hide() {

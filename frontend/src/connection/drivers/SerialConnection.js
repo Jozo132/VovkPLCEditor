@@ -85,7 +85,7 @@ export default class SerialConnection extends ConnectionBase {
 
     async getInfo(initial = false) {
         if (initial) {
-            this.serial.write('?');
+            await this.serial.write('?');
             await this._waitForReply(5000);
             while (this.serial.available()) {
                 this.serial.readAll();
@@ -95,7 +95,7 @@ export default class SerialConnection extends ConnectionBase {
         const command = "PI";
         const cmdHex = this.plc.stringToHex(command);
         const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0');
-        this.serial.write(command + checksum.toUpperCase() + "\n");
+        await this.serial.write(command + checksum.toUpperCase() + "\n");
 
         const available = await this._waitForReply(5000);
         if (!available) throw new Error("No response from device");

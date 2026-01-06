@@ -70,8 +70,8 @@ export default class DeviceManager {
       await this.disconnect()
       this.options = options || this.options
       if (!this.options) throw new Error("Connection options required")
-      this.connected = true
       this.connection = await initializeConnection(this.options, this.#editor)
+      this.connected = true
       try {
         this.deviceInfo = await this.connection.getInfo(true)
         if (this.options && this.options.debug) {

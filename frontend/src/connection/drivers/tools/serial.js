@@ -14,6 +14,7 @@ export default class SerialCLASS {
         this._maxBufferLength = maxBufferLength;
         this._readingLoopPromise = null;
         this._closing = false;
+        this._writeMutex = Promise.resolve();
     }
 
     /**
@@ -254,36 +255,52 @@ export default class SerialCLASS {
      */
     async write(data) {
         if (this.debug) console.log('Serial write:', data);
-        if (!this.isOpen || !this.port) {
-            throw new Error('Cannot write: serial port is not open.');
-        }
-        // Prepare data as Uint8Array
-        let buffer;
-        if (data instanceof Uint8Array) {
-            buffer = data;
-        } else if (data instanceof ArrayBuffer) {
-            buffer = new Uint8Array(data);
-        } else if (typeof data === 'number') {
-            // If number is within byte range, send as single byte; otherwise send its string representation
-            if (data >= 0 && data < 256 && Number.isInteger(data)) {
-                buffer = new Uint8Array([data]);
+        
+        // Use a mutex to prevent concurrent writes from trying to lock the stream simultaneously
+        const currentWrite = this._writeMutex.then(async () => {
+            if (!this.isOpen || !this.port) {
+                throw new Error('Cannot write: serial port is not open.');
+            }
+            // Prepare data as Uint8Array
+            let buffer;
+            if (data instanceof Uint8Array) {
+                buffer = data;
+            } else if (data instanceof ArrayBuffer) {
+                buffer = new Uint8Array(data);
+            } else if (typeof data === 'number') {
+                // If number is within byte range, send as single byte; otherwise send its string representation
+                if (data >= 0 && data < 256 && Number.isInteger(data)) {
+                    buffer = new Uint8Array([data]);
+                } else {
+                    const text = String(data);
+                    buffer = new TextEncoder().encode(text);
+                }
             } else {
+                // Convert other types (string, etc.) to bytes
                 const text = String(data);
                 buffer = new TextEncoder().encode(text);
             }
-        } else {
-            // Convert other types (string, etc.) to bytes
-            const text = String(data);
-            buffer = new TextEncoder().encode(text);
-        }
-        // Write to the serial output stream
-        const writer = this.port.writable.getWriter();
-        try {
-            await writer.write(buffer);
-        } finally {
-            // Release the lock so other writes or closure can happen&#8203;:contentReference[oaicite:13]{index=13}
-            writer.releaseLock();
-        }
+            
+            // Check if locked before trying to get writer (optional, but good for debugging)
+            if (this.port.writable.locked) {
+                // This shouldn't happen with the mutex unless something else locked it
+                if (this.debug) console.warn('Stream locked, waiting in mutex...');
+            }
+
+            // Write to the serial output stream
+            const writer = this.port.writable.getWriter();
+            try {
+                await writer.write(buffer);
+            } finally {
+                // Release the lock so other writes or closure can happen
+                writer.releaseLock();
+            }
+        });
+
+        // Update mutex to wait for this write
+        this._writeMutex = currentWrite.catch(() => {});
+        
+        return currentWrite;
     }
 
     /**
