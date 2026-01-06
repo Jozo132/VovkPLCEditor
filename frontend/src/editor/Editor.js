@@ -91,6 +91,8 @@ export class VovkPLCEditor {
         if (debug_css) this.workspace.classList.add('debug')
 
         this.runtime.initialize('/wasm/VovkPLC.wasm').then(() => {
+            // Compile 'exit' to flush out any initial runtime logs
+            try { this.runtime.compile('exit') } catch (e) { }
             this.runtime_ready = true
         })
 

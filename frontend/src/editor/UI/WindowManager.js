@@ -326,9 +326,9 @@ export default class WindowManager {
             this.compiledSize = result.size
 
             const MAX_PROGRAM_SIZE = 1024 // 1KB limit for now
-            const percent = Math.min(100, Math.round((result.size / MAX_PROGRAM_SIZE) * 100))
-            const total_bars = 10
-            const filled_bars = Math.round((percent / 100) * total_bars)
+            const percent = +((result.size / MAX_PROGRAM_SIZE) * 100).toFixed(1)
+            const total_bars = 16
+            const filled_bars = Math.round((Math.min(100, percent) / 100) * total_bars)
             const empty_bars = total_bars - filled_bars
             const bar = '[' + '='.repeat(filled_bars) + ' '.repeat(empty_bars) + ']'
 
@@ -341,7 +341,7 @@ export default class WindowManager {
                     const checksum = this.#editor.runtime.crc8(bytes)
 
                     if (this.lastCompiledChecksum === checksum) {
-                        checksumMsg = " Bytecode didn't change."
+                        checksumMsg = " No changes."
                     }
                     // else {
                     //    checksumMsg = ` Checksum: ${checksum.toString(16).toUpperCase().padStart(2, '0')}`
@@ -357,8 +357,7 @@ export default class WindowManager {
                 }
             }
 
-            this.logToConsole(`Compilation successful. Size: ${result.size} bytes.${checksumMsg}`, 'success')
-            this.logToConsole(`Compilation took ${(endTime - startTime).toFixed(2)}ms`, 'info')
+            this.logToConsole(`Compilation finished in ${(endTime - startTime).toFixed(2)}ms${checksumMsg}`, 'success')
             this.logToConsole(`${bar} ${result.size}/${MAX_PROGRAM_SIZE} bytes (${percent}%)`, result.size > MAX_PROGRAM_SIZE ? 'error' : 'info')
 
             if (hexPreview) this.logToConsole('Bytecode: ' + hexPreview)
@@ -398,18 +397,32 @@ export default class WindowManager {
         const deviceInfo = this.#editor.device_manager.deviceInfo
         const projectInfo = this.#editor.project.info
 
-        if (deviceInfo && projectInfo && deviceInfo.arch && projectInfo.arch) {
-            if (deviceInfo.arch !== projectInfo.arch) {
+        if (deviceInfo && projectInfo) {
+            const mismatches = []
+
+            if (deviceInfo.arch && projectInfo.arch && deviceInfo.arch !== projectInfo.arch) {
+                mismatches.push(`Architecture: Device (<b>${deviceInfo.arch}</b>) vs Project (<b>${projectInfo.arch}</b>)`)
+            }
+            if (deviceInfo.type && projectInfo.type && deviceInfo.type !== projectInfo.type) {
+                mismatches.push(`Type: Device (<b>${deviceInfo.type}</b>) vs Project (<b>${projectInfo.type}</b>)`)
+            }
+            // Strict version check might be too aggressive if we just want compatibility, but the user asked for "any details"
+            if (deviceInfo.version && projectInfo.version && deviceInfo.version !== projectInfo.version) {
+                 mismatches.push(`Version: Device (<b>${deviceInfo.version}</b>) vs Project (<b>${projectInfo.version}</b>)`)
+            }
+
+            if (mismatches.length > 0) {
+                const description = `The connected device details do not match the project configuration:<br><br>${mismatches.join('<br>')}<br><br>Upload anyway?`
                 const confirm = await Popup.confirm({
-                    title: 'Architecture Mismatch',
-                    description: `Device architecture (<b>${deviceInfo.arch}</b>) does not match project architecture (<b>${projectInfo.arch}</b>).<br><br>Upload anyway?`,
+                    title: 'Device Mismatch',
+                    description: description,
                     confirm_text: 'Upload',
                     cancel_text: 'Cancel',
                     confirm_button_color: '#d1852e',
                     confirm_text_color: '#FFF'
                 })
                 if (!confirm) {
-                    this.logToConsole('Upload aborted due to architecture mismatch.', 'warning')
+                    this.logToConsole('Upload aborted due to device mismatch.', 'warning')
                     this.logToConsole('----------------------------------------', 'info')
                     return
                 }
