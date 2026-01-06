@@ -317,7 +317,9 @@ export default class WindowManager {
 
         try {
             this.logToConsole('Compiling project...', 'info')
+            const startTime = performance.now()
             const result = this.#editor.project_manager.compile()
+            const endTime = performance.now()
 
             // Store result for download
             this.compiledBytecode = result.output
@@ -356,6 +358,7 @@ export default class WindowManager {
             }
 
             this.logToConsole(`Compilation successful. Size: ${result.size} bytes.${checksumMsg}`, 'success')
+            this.logToConsole(`Compilation took ${(endTime - startTime).toFixed(2)}ms`, 'info')
             this.logToConsole(`${bar} ${result.size}/${MAX_PROGRAM_SIZE} bytes (${percent}%)`, result.size > MAX_PROGRAM_SIZE ? 'error' : 'info')
 
             if (hexPreview) this.logToConsole('Bytecode: ' + hexPreview)
@@ -415,8 +418,11 @@ export default class WindowManager {
 
         try {
             this.logToConsole(`Uploading ${this.compiledSize} bytes to device...`, 'info')
+            const startTime = performance.now()
             await this.#editor.device_manager.connection.downloadProgram(this.compiledBytecode)
+            const endTime = performance.now()
             this.logToConsole('Program uploaded successfully.', 'success')
+            this.logToConsole(`Upload took ${(endTime - startTime).toFixed(0)}ms`, 'info')
             this.logToConsole('----------------------------------------', 'info')
         } catch (e) {
             this.logToConsole(`Upload failed: ${e.message}`, 'error')
