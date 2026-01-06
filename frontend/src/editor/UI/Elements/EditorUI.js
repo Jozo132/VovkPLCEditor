@@ -83,6 +83,8 @@ export default class EditorUI {
                 if (selected === 'add_block') this.addBlock()
                 if (selected === 'add_above') this.addBlock(this._contextTargetIndex)
                 if (selected === 'add_below') this.addBlock(this._contextTargetIndex + 1)
+                if (selected === 'delete') this.deleteBlock(this._contextTargetIndex)
+                if (selected === 'edit') this.editBlock(this._contextTargetIndex)
             }
         })
         this.reloadProgram()
@@ -140,7 +142,7 @@ export default class EditorUI {
             if (!block.div) {
                 block.div = ElementSynthesis(/*HTML*/`
                     <div class="plc-program-block">
-                        <div class="plc-program-block-header">
+                        <div class="plc-program-block-header" draggable="true">
                             <div class="plc-program-block-header-content">
                                 <div class="plc-program-block-header-title">
                                     <div class="plc-program-block-header-icon">
@@ -165,14 +167,88 @@ export default class EditorUI {
                 `)
                 // this.body.appendChild(block.div) // Deferred to ensure order
                 const minimize_button = block.div.querySelector('.minimize')
+                const header = block.div.querySelector('.plc-program-block-header')
+
                 if (!minimize_button) throw new Error('Minimize button not found')
-                minimize_button.addEventListener('click', () => {
-                    const { div } = block
-                    if (!div) throw new Error('Block div not found')
-                    // div.classList.toggle('minimized')
-                    const is_minimized = div.classList.contains('minimized')
-                    div.classList.toggle('minimized') // @ts-ignore
-                    minimize_button.innerText = is_minimized ? '-' : '+'
+                if (!header) throw new Error('Header not found')
+
+                let clickTimeout = null
+
+                const toggleMinimize = () => {
+                     const is_minimized = block.div.classList.contains('minimized')
+                     if (is_minimized) block.div.classList.remove('minimized')
+                     else block.div.classList.add('minimized')
+                     minimize_button.innerText = !is_minimized ? '+' : '-'
+                }
+
+                minimize_button.addEventListener('click', (e) => {
+                    e.stopPropagation()
+                    toggleMinimize()
+                })
+
+                header.addEventListener('click', (e) => {
+                    if (e.target.closest('.menu-button')) return
+                    // Don't toggle if we were dragging
+                     if (block.div.classList.contains('dragging')) return
+
+                     if (clickTimeout) clearTimeout(clickTimeout)
+                     clickTimeout = setTimeout(() => {
+                         toggleMinimize()
+                         clickTimeout = null
+                     }, 220)
+                })
+
+                header.addEventListener('dblclick', (e) => {
+                    if (e.target.closest('.menu-button')) return
+                    
+                    if (clickTimeout) {
+                        clearTimeout(clickTimeout)
+                        clickTimeout = null
+                    }
+                    this.editBlock(this.program.blocks.indexOf(block))
+                })
+
+                // Drag and Drop
+                header.addEventListener('dragstart', (e) => {
+                    this._draggingBlock = block
+                    block.div.classList.add('dragging')
+                    e.dataTransfer.effectAllowed = 'move'
+                    // e.dataTransfer.setDragImage(block.div, 0, 0)
+                })
+
+                header.addEventListener('dragend', (e) => {
+                     block.div.classList.remove('dragging')
+                     this._draggingBlock = null
+                     
+                     // Helper to rebuild array order based on DOM order
+                     const newBlocks = []
+                     const children = Array.from(this.body.children)
+                     children.forEach(child => {
+                         const b = this.program.blocks.find(bk => bk.div === child)
+                         if (b) newBlocks.push(b)
+                     })
+                     this.program.blocks = newBlocks
+                })
+
+                block.div.addEventListener('dragover', (e) => {
+                     e.preventDefault()
+                     const dragging = this._draggingBlock
+                     if (!dragging || dragging === block) return
+                     
+                     const rect = block.div.getBoundingClientRect()
+                     const midpoint = rect.top + rect.height / 2
+                     
+                     if (e.clientY < midpoint) {
+                         // Insert before
+                         if (block.div.previousElementSibling !== dragging.div) {
+                             this.body.insertBefore(dragging.div, block.div)
+                         }
+                     } else {
+                         // Insert after
+                         if (block.div.nextElementSibling !== dragging.div) {
+                             this.body.insertBefore(dragging.div, block.div.nextSibling)
+                         }
+                     }
                 })
             }
             
@@ -188,48 +264,259 @@ export default class EditorUI {
         })
     }
 
+    async editBlock(index) {
+        if (!this.program.blocks || !this.program.blocks[index]) return
+        const block = this.program.blocks[index]
+        
+        const data = await Popup.form({
+            title: 'Edit Block',
+            inputs: [
+                { name: 'name', label: 'Name', type: 'text', value: block.name },
+                { name: 'comment', label: 'Comment', type: 'text', value: block.comment }
+            ],
+            buttons: [
+                { text: 'Save', value: 'save', color: 'blue' },
+                { text: 'Cancel', value: 'cancel' }
+            ]
+        })
+        
+        if (!data) return
+        
+        block.name = data.name
+        block.comment = data.comment
+        
+        if (block.div) {
+            const title = block.div.querySelector('.plc-program-block-title')
+            const simple = block.div.querySelector('.plc-comment-simple')
+            const detailed = block.div.querySelector('.plc-comment-detailed')
+            if (title) title.innerText = block.name
+            if (simple) simple.innerText = block.comment
+            if (detailed) detailed.innerText = block.comment
+        }
+    }
+
     async addBlock(index = undefined) {
-        const type = await new Promise(resolve => {
+        const result = await new Promise(resolve => {
             const container = document.createElement('div')
             container.style.display = 'flex'
-            container.style.gap = '10px'
-            container.style.justifyContent = 'center'
+            container.style.flexDirection = 'column'
+            container.style.gap = '15px'
             container.style.marginTop = '10px'
             
-            const types = [
-                { id: 'ladder', label: 'Ladder Diagram (LAD)' },
-                { id: 'asm', label: 'Assembly (ASM)' }
-            ]
+            // Name Input
+            const nameContainer = document.createElement('div')
+            nameContainer.style.display = 'flex'
+            nameContainer.style.flexDirection = 'column'
+            nameContainer.style.gap = '5px'
             
-            let popup = null
+            const nameLabel = document.createElement('label')
+            nameLabel.innerText = 'Name'
+            nameLabel.style.fontSize = '12px'
+            nameLabel.style.fontWeight = 'bold'
+            nameLabel.style.color = '#333'
+            
+            const nameInput = document.createElement('input')
+            nameInput.type = 'text'
+            nameInput.value = 'Network ' + ((this.program.blocks ? this.program.blocks.length : 0) + 1)
+            nameInput.style.padding = '5px'
+            nameInput.style.backgroundColor = '#fff'
+            nameInput.style.border = '1px solid #ccc'
+            nameInput.style.color = '#333'
+            nameInput.style.borderRadius = '3px'
+            
+            nameContainer.appendChild(nameLabel)
+            nameContainer.appendChild(nameInput)
+            container.appendChild(nameContainer)
+            
+            // Comment Input
+            const commentContainer = document.createElement('div')
+            commentContainer.style.display = 'flex'
+            commentContainer.style.flexDirection = 'column'
+            commentContainer.style.gap = '5px'
+            
+            const commentLabel = document.createElement('label')
+            commentLabel.innerText = 'Description'
+            commentLabel.style.fontSize = '12px'
+            commentLabel.style.fontWeight = 'bold'
+            commentLabel.style.color = '#333'
+            
+            const commentInput = document.createElement('input')
+            commentInput.type = 'text'
+            commentInput.placeholder = 'Optional description'
+            commentInput.style.padding = '5px'
+            commentInput.style.backgroundColor = '#fff'
+            commentInput.style.border = '1px solid #ccc'
+            commentInput.style.color = '#333'
+            commentInput.style.borderRadius = '3px'
+            
+            commentContainer.appendChild(commentLabel)
+            commentContainer.appendChild(commentInput)
+            container.appendChild(commentContainer)
+            
+            // Type Selection
+            const typeContainer = document.createElement('div')
+            typeContainer.style.display = 'flex'
+            typeContainer.style.flexDirection = 'column'
+            typeContainer.style.gap = '5px'
 
-            types.forEach(t => {
+            const typeLabel = document.createElement('div')
+            typeLabel.innerText = 'Select Type:'
+            typeLabel.style.fontSize = '12px'
+            typeLabel.style.fontWeight = 'bold'
+            typeLabel.style.color = '#333'
+            typeContainer.appendChild(typeLabel)
+            
+            // New Button Group (Radio-like behavior)
+            const buttonGroup = document.createElement('div')
+            buttonGroup.style.display = 'flex'
+            buttonGroup.style.gap = '10px'
+            buttonGroup.style.justifyContent = 'center'
+            
+            let selectedType = 'ladder' // Default selection
+            const typeButtons = []
+
+            const updateButtonVisuals = () => {
+                typeButtons.forEach(b => {
+                    const isSelected = b.dataset.type === selectedType
+                    // Reset to base styles
+                    b.className = 'plc-btn' 
+                    b.style.flex = '1'
+                    b.style.userSelect = 'none' // Disable text select
+                    b.style.display = 'flex'
+                    b.style.alignItems = 'center'
+                    b.style.justifyContent = 'center'
+                    b.style.gap = '8px'
+                    
+                     // Compensate for border width difference to prevent layout shift
+                    // Selected: 2px border + 9px padding = 11px
+                    // Unselected: 1px border + 10px padding = 11px
+                    b.style.padding = isSelected ? '9px 19px' : '10px 20px'
+                    b.style.border = isSelected ? '2px solid #007bff' : '1px solid #ccc' 
+                    b.style.backgroundColor = isSelected ? '#e6f0ff' : '#f9f9f9'
+                    b.style.color = isSelected ? '#0056b3' : '#333'
+                    b.style.fontWeight = '600'
+                })
+            }
+
+            const createTypeBtn = (id, label) => {
                 const btn = document.createElement('button')
-                btn.className = 'plc-btn'
-                btn.innerText = t.label
-                btn.style.padding = '15px 25px'
-                btn.onclick = () => popup && popup.close(t.id)
-                container.appendChild(btn)
-            })
+                btn.dataset.type = id
+                
+                // Icon (First 3 chars)
+                const icon = document.createElement('span')
+                icon.innerText = id.toUpperCase().substring(0, 3)
+                icon.style.color = '#60a8da'
+                // Replicate header icon style
+                icon.style.fontSize = '12px' 
+                icon.style.fontWeight = 'bold'
+                
+                const text = document.createElement('span')
+                text.innerText = label
+                
+                btn.appendChild(icon)
+                btn.appendChild(text)
+                
+                btn.onclick = () => {
+                   selectedType = id
+                   updateButtonVisuals()
+                }
+                return btn
+            }
+            
+            const btnLadder = createTypeBtn('ladder', 'Ladder Diagram (LAD)')
+            const btnAsm = createTypeBtn('asm', 'Assembly (ASM)')
+            
+            typeButtons.push(btnLadder, btnAsm)
+            updateButtonVisuals() // Initial state
+            
+            buttonGroup.appendChild(btnLadder)
+            buttonGroup.appendChild(btnAsm)
+            typeContainer.appendChild(buttonGroup)
+
+            /*
+            const radioGroup = document.createElement('div')
+            radioGroup.style.display = 'flex'
+            radioGroup.style.gap = '15px'
+            
+            const createRadio = (id, label, checked = false) => {
+                const wrapper = document.createElement('div')
+                wrapper.style.display = 'flex'
+                wrapper.style.alignItems = 'center'
+                wrapper.style.gap = '5px'
+                
+                const radio = document.createElement('input')
+                radio.type = 'radio'
+                radio.name = 'block_type'
+                radio.value = id
+                radio.id = 'radio_' + id
+                radio.checked = checked
+                
+                const lbl = document.createElement('label')
+                lbl.innerText = label
+                lbl.setAttribute('for', 'radio_' + id)
+                lbl.style.color = '#333'
+                lbl.style.cursor = 'pointer'
+
+                wrapper.appendChild(radio)
+                wrapper.appendChild(lbl)
+                return { wrapper, radio }
+            }
+
+            const r1 = createRadio('ladder', 'Ladder Diagram (LAD)', true)
+            const r2 = createRadio('asm', 'Assembly (ASM)')
+            
+            radioGroup.appendChild(r1.wrapper)
+            radioGroup.appendChild(r2.wrapper)
+            typeContainer.appendChild(radioGroup)
+            */
+            container.appendChild(typeContainer)
+
+            let popup = null
 
             popup = new Popup({
                 title: 'Add Program Block',
-                description: 'Select the language for the new block:',
+                description: 'Enter details and select language:',
                 content: container,
-                buttons: [ { text: 'Cancel', value: 'cancel' } ],
-                onClose: (val) => resolve(val === 'cancel' || !val ? null : val)
+                buttons: [
+                    { 
+                        text: 'Add', 
+                        value: 'confirm', 
+                        background: '#007bff',
+                        color: 'white',
+                        verify: () => {
+                            if (!nameInput.value.trim()) {
+                                nameInput.style.borderColor = 'red'
+                                return false
+                            }
+                            return true
+                        }
+                    },
+                    { text: 'Cancel', value: 'cancel' } 
+                ],
+                onClose: (val) => {
+                    if (val === 'confirm') {
+                        // Use the selectedType variable instead of querying radios
+                        resolve({ 
+                            type: selectedType, 
+                            name: nameInput.value, 
+                            comment: commentInput.value 
+                        })
+                    } else {
+                        resolve(null)
+                    }
+                }
             })
         })
 
-        if (!type) return
+        if (!result) return
 
         if (!this.program.blocks) this.program.blocks = []
         
         const newBlock = {
             id: this.master._generateID(),
-            type: type, 
-            name: 'Network ' + (this.program.blocks.length + 1),
-            comment: '',
+            type: result.type, 
+            name: result.name || ('Network ' + (this.program.blocks.length + 1)),
+            comment: result.comment || '',
         }
         
         if (typeof index === 'undefined') {
