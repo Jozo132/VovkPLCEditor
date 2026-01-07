@@ -847,9 +847,11 @@ export default class WindowManager {
         if (!id) throw new Error('Program ID not found')
         // Remove highlight from the tree
         this.#editor.window_manager.removeHighlight()
-        this.windows.delete(id)
+        
         const exists = this.windows.get(id)
         exists?.close()
+        this.windows.delete(id)
+        
         const active_program = this.#editor.findProgram(id)
         if (active_program) active_program.host = undefined
         const next_id = this.#editor.window_manager.tab_manager.closeTab(id)

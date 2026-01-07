@@ -23,14 +23,23 @@ export default class SetupUI {
         const frame = master.workspace.querySelector('.plc-window-frame')
         if (!frame) throw new Error('Frame not found')
         this.frame = frame
-        frame.appendChild(div)
+        this.frame.appendChild(div)
 
         this.render()
         
+        this._handleDeviceUpdate = () => {
+             if (!this.hidden) this.render()
+        }
+
         // Listen for device updates (connection status, info loaded, etc)
-        this.master.workspace.addEventListener('plc-device-update', () => {
-            if (!this.hidden) this.render()
-        })
+        this.master.workspace.addEventListener('plc-device-update', this._handleDeviceUpdate)
+    }
+
+    close() {
+        if (this.div) this.div.remove()
+        if (this._handleDeviceUpdate) {
+            this.master.workspace.removeEventListener('plc-device-update', this._handleDeviceUpdate)
+        }
     }
 
     async render() {
