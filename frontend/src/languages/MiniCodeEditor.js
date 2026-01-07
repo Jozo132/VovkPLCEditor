@@ -6,6 +6,7 @@ export class MiniCodeEditor {
      *          liveProvider?:(symbol:string)=>any,
      *          autocompleteProvider?:(prefix:string)=>string[],
      *          symbolProvider?:(type?:string)=>string[],
+     *          hoverProvider?:(word:string)=>Promise<string|null>|string|null,
      *          lintProvider?:(code:string)=>Promise<{type:'error'|'warning',start:number,end:number,message:string}[]>,
      *          onDiagnosticsChange?:(diagnostics:any[])=>void,
      *          onChange?:(value:string)=>void}} options
@@ -62,7 +63,12 @@ export class MiniCodeEditor {
     background: #252526; color: #ccc; border: 1px solid #454545;
     padding: 4px 8px; font-size: 12px; white-space: nowrap; z-index: 10;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none;
-}`;
+}
+.mce-hover{position:fixed;background:#252526;border:1px solid #454545;box-shadow:0 4px 8px rgba(0,0,0,0.4);color:#ccc;font-size:13px;z-index:100000;padding:0;max-width:400px;display:none;font-family:var(--f,monospace);line-height:1.4}
+.mce-hover-def{font-family:monospace;border-bottom:1px solid #454545;padding:6px 10px;background:#1e1e1e;color:#b4b4b4;font-weight:600}
+.mce-hover-desc{padding:8px 10px 4px 10px;}
+.mce-hover-ex{padding:4px 10px 8px 10px;font-family:monospace;font-size:0.9em;color:#ce9178;white-space:pre-wrap}
+`;
             document.head.appendChild(s)
         }
         m.style.setProperty('--f', o.font || `${cs.fontSize} ${cs.fontFamily}`)
@@ -75,7 +81,10 @@ export class MiniCodeEditor {
             // Append tooltip to body to avoid overflow issues
             ac = document.body.appendChild(document.createElement('ul')),
             ov = m.appendChild(document.createElement('div')),
-            hint = document.body.appendChild(document.createElement('div'))
+            hint = document.body.appendChild(document.createElement('div')),
+            hov = document.body.appendChild(document.createElement('div'))
+        
+        hov.className = 'mce-hover'
         ln.className = 'ln'
         pr.className = 'code'
         ac.className = 'ac hide'
@@ -92,6 +101,218 @@ export class MiniCodeEditor {
         // Save references for cleanup
         this._ac = ac
         this._hint = hint
+        this._hov = hov
+
+        const hideHover = () => {
+             hov.style.display = 'none'
+             hov.innerHTML = ''
+        }
+        
+        // Font measuring for hover calculations
+        let textMetrics = null
+        const measureText = () => {
+            if (textMetrics) return textMetrics
+            
+            const d = document.createElement('div')
+            const s = getComputedStyle(ta)
+            // Use same robust styling as caretPx but stripped of layout offsets
+            d.style.cssText = `position:absolute;white-space:pre;visibility:hidden;overflow:hidden;
+            font-family:${s.fontFamily};font-size:${s.fontSize};font-weight:${s.fontWeight};
+            font-style:${s.fontStyle};font-variant:${s.fontVariant};font-stretch:${s.fontStretch};
+            letter-spacing:${s.letterSpacing};line-height:${s.lineHeight};
+            padding:0;border:0;box-sizing:content-box;
+            text-transform:${s.textTransform};text-indent:0;
+            tab-size:${s.tabSize};-moz-tab-size:${s.tabSize};
+            width:auto;top:0;left:0;margin:0;`
+
+            d.textContent = 'M'
+            // Append to parent to ensure correct inheritance
+            ta.parentNode.appendChild(d)
+            const rect = d.getBoundingClientRect()
+            ta.parentNode.removeChild(d)
+            
+            textMetrics = { w: rect.width || 8, h: rect.height || 18 }
+            return textMetrics
+        }
+
+        // Hover Handlers
+        let hoverTimer = null
+        const handleHover = (e) => {
+             if (hoverTimer) clearTimeout(hoverTimer)
+             if (!lang.definitions) return
+             
+             hoverTimer = setTimeout(() => {
+                 showHover(e.clientX, e.clientY)
+             }, 400)
+        }
+        
+        const showHover = (x, y) => {
+             const r = ta.getBoundingClientRect()
+             const style = getComputedStyle(ta)
+             
+             const tm = measureText()
+             const lh = tm.h
+
+             const pl = parseFloat(style.paddingLeft) + (parseFloat(style.borderLeftWidth) || 0)
+             const pt = parseFloat(style.paddingTop) + (parseFloat(style.borderTopWidth  ) || 0)
+             
+             // Check if within bounds
+             if (x < r.left || x > r.right || y < r.top || y > r.bottom) return hideHover()
+
+             const relY = y - r.top - pt + ta.scrollTop
+             const relX = x - r.left - pl + ta.scrollLeft
+             
+             if (relY < 0) return hideHover()
+             
+             const row = Math.floor(relY / lh)
+             const lines = ta.value.split('\n')
+             if (row < 0 || row >= lines.length) return hideHover()
+             
+             const line = lines[row]
+             if (line === undefined) return hideHover()
+
+             // Approximate col
+             const cw = tm.w
+             const col = Math.floor(relX / cw)
+             
+             // Extract word at col
+             // Accounting for tabs is tricky without robust measurement.
+             // We can assume 4 spaces for now as we set tab-size: 4
+             let currX = 0
+             let idx = 0
+             let found = false
+             for (let i = 0; i < line.length; i++) {
+                 const w = (line[i] === '\t' ? 4 : 1) * cw
+                 if (relX >= currX && relX < currX + w) {
+                     idx = i
+                     found = true
+                     break
+                 }
+                 currX += w
+             }
+             if (!found && relX > currX) {
+                 // Cursor past end of line
+                 return hideHover()
+             }
+             
+             // Find word boundaries
+             if (!/[a-zA-Z0-9_.]/.test(line[idx])) return hideHover()
+                 
+             let start = idx
+             while (start > 0 && /[a-zA-Z0-9_.]/.test(line[start - 1])) start--
+             
+             let end = idx
+             while (end < line.length && /[a-zA-Z0-9_.]/.test(line[end])) end++
+             
+             const fullWord = line.slice(start, end)
+             if (!fullWord) return hideHover()
+             
+             // Lookup definition
+             // Try strict match first
+             let def = lang.definitions[fullWord]
+             let label = fullWord
+             
+             // Namespace lookup
+             if (!def && fullWord.includes('.')) {
+                 const [ns, key] = fullWord.split('.')
+                 const parent = Object.entries(lang.definitions).find(([k]) => k.toLowerCase() === ns.toLowerCase())
+                 // parent is [key, val]
+                 if (parent) {
+                    if (parent[1][key]) {
+                        def = parent[1][key]
+                        label = fullWord
+                    } else if (parent[1][key.toLowerCase()]) {
+                        def = parent[1][key.toLowerCase()]
+                         label = `${parent[0]}.${key}`
+                    }
+                 }
+             }
+             
+             // Try searching just the leaf if no match?
+             if (!def && fullWord.includes('.')) {
+                  // If hovering "u8.add" and "u8" is not a namespace but just a prefix?
+                  // Should already be handled.
+             }
+             
+             if (!def && !fullWord.includes('.')) {
+                  // Maybe case insensitive
+                  const match = Object.keys(lang.definitions).find(k => k.toLowerCase() === fullWord.toLowerCase())
+                  if (match) {
+                      def = lang.definitions[match]
+                      label = match
+                  }
+             }
+
+             // Check external hover provider
+             let externalHover = null
+             if (o.hoverProvider) {
+                 try {
+                     const res = o.hoverProvider(fullWord)
+                     // Handle both async and sync (though handleHover timer is short, async might lag)
+                     // For now assume sync or fast async?
+                     // If async, we can't await here easily inside showHover which is synchronous-ish context.
+                     // But let's support string return.
+                     if (typeof res === 'string') externalHover = res
+                     else if (res && typeof res.then === 'function') {
+                         // Async handling complicates things as we are already in a timer callback
+                         // For now, let's assume sync for symbols.
+                         // If we need async, we'd need to handle promise resolution and re-check bounds.
+                     }
+                 } catch (e) { console.error(e) }
+             }
+
+             if (def || externalHover) {
+                 // Found instructions?
+                 let html = ''
+                 
+                 if (def) {
+                     // Def is array of args.
+                     // Check if it has description
+                     const desc = def.description || ''
+                     const example = def.example || ''
+                     
+                     let sig = label
+                     if (Array.isArray(def)) {
+                         sig += '(' + def.map(a => `${a.name}${a.type?': '+a.type:''}`).join(', ') + ')'
+                     }
+                     
+                     html = `<div class="mce-hover-def">${sig}</div>`
+                     if (desc) html += `<div class="mce-hover-desc">${desc}</div>`
+                     if (example) html += `<div class="mce-hover-ex">${example}</div>`
+                 } else if (externalHover) {
+                     html = externalHover
+                 }
+                 
+                 hov.innerHTML = html
+                 hov.style.display = 'block'
+                 
+                 // Position at bottom of line?
+                 // Use client coordinates or fixed?
+                 // hov is fixed
+                 
+                 // Smart positioning (avoid offscreen)
+                 hov.style.left = (x + 10) + 'px'
+                 hov.style.top = (y + 10) + 'px'
+                 
+                 // Adjust if close to edge
+                 const box = hov.getBoundingClientRect()
+                 const winW = window.innerWidth
+                 const winH = window.innerHeight
+                 
+                 if (box.right > winW) hov.style.left = (x - box.width - 10) + 'px'
+                 if (box.bottom > winH) hov.style.top = (y - box.height - 10) + 'px'
+
+             } else {
+                 hideHover()
+             }
+        }
+        
+        ta.addEventListener('mousemove', handleHover)
+        ta.addEventListener('mouseleave', () => {
+            if (hoverTimer) clearTimeout(hoverTimer)
+            hideHover()
+        })
+        ta.addEventListener('scroll', hideHover)
 
 
         /* language */
@@ -768,12 +989,19 @@ asmTypes.forEach(t => {
     }
 })
 
+const doc = (args, desc, ex) => {
+    const a = args || []
+    a.description = desc
+    a.example = ex
+    return a
+}
+
 const asmInstructions = {
     // Pointer operations
     ptr: {
-        const: [{name: 'address', type: 'symbol'}],
-        copy: [],
-        load: [], // Indirect load?
+        const: doc([{name: 'address', type: 'symbol'}], 'Load address of a symbol into pointer register', 'ptr.const symbol1'),
+        copy: doc([], 'Copy pointer value', 'ptr.copy'),
+        load: doc([], 'Load value from address pointed to by register', 'ptr.load'), // Indirect load?
     },
     
     // Type operations (Cascading definitions)
@@ -782,41 +1010,35 @@ const asmInstructions = {
     // u8 specific extensions from snippet
     u8: {
         ...typeOps.u8,
-        readBit: [{name: 'addr.bit', type: 'bit_symbol'}],
-        writeBit: [{name: 'addr.bit', type: 'bit_symbol'}],
-        writeBitInv: [{name: 'addr.bit', type: 'bit_symbol'}],
+        readBit: doc([{name: 'addr.bit', type: 'bit_symbol'}], 'Read a single bit from a byte variable or input/output.', 'u8.readBit input1'),
+        writeBit: doc([{name: 'addr.bit', type: 'bit_symbol'}], 'Write the accumulator LSB to a target bit.', 'u8.writeBit output1'),
+        writeBitInv: doc([{name: 'addr.bit', type: 'bit_symbol'}], 'Write the inverted accumulator LSB to a target bit.', 'u8.writeBitInv output1'),
+        add: doc([], 'Add value to accumulator.', 'u8.add'),
     },
 
     // Control Flow
-    jmp: [{name: 'label', type: 'label'}],
-    jump: [{name: 'label', type: 'label'}],
-    jmp_if: [{name: 'label', type: 'label'}],
-    jmp_if_not: [{name: 'label', type: 'label'}],
-    jump_if: [{name: 'label', type: 'label'}],
-    jump_if_not: [{name: 'label', type: 'label'}],
+    jmp: doc([{name: 'label', type: 'label'}], 'Jump unconditionally to label', 'jmp skip_label'),
+    jump: doc([{name: 'label', type: 'label'}], 'Jump unconditionally to label', 'jump target'),
+    jmp_if: doc([{name: 'label', type: 'label'}], 'Jump if accumulator is non-zero (true)', 'jmp_if cond_true'),
+    jmp_if_not: doc([{name: 'label', type: 'label'}], 'Jump if accumulator is zero (false)', 'jmp_if_not cond_false'),
     
-    call: [{name: 'label', type: 'label'}],
-    call_if: [{name: 'label', type: 'label'}],
-    call_if_not: [{name: 'label', type: 'label'}],
+    call: doc([{name: 'label', type: 'label'}], 'Call subroutine at label', 'call subroutine1'),
     
-    ret: [],
-    ret_if: [],
-    ret_if_not: [],
-    exit: [],
-    nop: [],
-    loop: [], // Usually a label def but sometimes a keyword
+    ret: doc([], 'Return from subroutine', 'ret'),
+    exit: doc([], 'End program execution', 'exit'),
+    nop: doc([], 'No Operation', 'nop'),
     
     // Conversion
-    cvt: [
+    cvt: doc([
         {name: 'from', type: 'type'},
         {name: 'to', type: 'type'},
-    ],
+    ], 'Convert value between types', 'cvt u8 f32'),
     
     // Global Const
-    const: [
+    const: doc([
         {name: 'name', type: 'text'},
         {name: 'value', type: 'number'},
-    ],
+    ], 'Define a global constant', 'const MAX_VAL 100'),
 }
 
 MiniCodeEditor.registerLanguage('asm', {
