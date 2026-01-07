@@ -1,0 +1,26 @@
+
+/* Active/Focused Row Emphasis */
+.symbols-table tbody tr.active-row {
+    background-color: #2a2d3e; /* Slight blue tint */
+    border-top: 1px solid #37373d;
+    border-bottom: 1px solid #37373d;
+}
+
+/* Base styles for select coloring */
+.symbol-cell-select {
+    font-weight: 500;
+}
+
+/* Location Colors - Distinct from Types */
+.symbol-cell-select.val-input { color: #89d185 !important; } /* Green */
+.symbol-cell-select.val-output { color: #d68d5e !important; } /* Orange */
+.symbol-cell-select.val-memory { color: #c586c0 !important; } /* Purple */
+.symbol-cell-select.val-control { color: #4fc1ff !important; } /* Light Blue */
+.symbol-cell-select.val-system { color: #a0a0a0 !important; } /* Grey */
+
+/* Type Colors */
+.symbol-cell-select.val-bit { color: #569cd6 !important; }
+.symbol-cell-select.val-byte { color: #4ec9b0 !important; }
+.symbol-cell-select.val-int { color: #b5cea8 !important; } /* Green */
+.symbol-cell-select.val-dint { color: #dcdcaa !important; }
+.symbol-cell-select.val-real { color: #ce9178 !important; }

@@ -4,6 +4,7 @@ import { getIconType } from "./components/icons.js"
 const importCSS = CSSimporter(import.meta.url)
 // Reuse EditorUI css for now or create new one
 await importCSS('./EditorUI.css')
+await importCSS('./SymbolsUI_Color.css')
 
 export default class SymbolsUI {
     id = 'symbols'
@@ -41,7 +42,7 @@ export default class SymbolsUI {
                     <p>Global Variable Table</p>
                 </div>
             </div>
-            <div class="plc-editor-body" style="padding: 10px; overflow: auto; display: flex; flex-direction: column; justify-content: space-between; max-width: 1200px;">
+            <div class="plc-editor-body" style="padding: 10px; overflow: auto; flex: 1; max-width: 1200px;">
                 <table class="symbols-table">
                     <thead>
                         <tr>
@@ -59,8 +60,10 @@ export default class SymbolsUI {
                         <!-- Rows -->
                     </tbody>
                 </table>
-                <div class="symbols-toolbar">
-                    <button class="plc-btn add-symbol-btn" style="width: 100%">+ Add Symbol</button>
+            </div>
+            <div class="plc-editor-bottom" style="padding: 0px; background-color: #2A2A2A; max-width: 1200px;">
+                <div class="symbols-toolbar" style="padding: 10px;">
+                    <button class="plc-btn add-symbol-btn" style="width: auto; padding-right: 20px;">+ Add Symbol</button>
                     <!-- <button class="plc-btn delete-symbol-btn">Remove Selected</button> -->
                 </div>
             </div>
@@ -347,7 +350,12 @@ export default class SymbolsUI {
             
             const icon = document.createElement('div')
             icon.classList.add('symbol-icon')
-            icon.textContent = '{}' // Icon representing a symbol variable
+            // icon.textContent = '{}' 
+            icon.style.width = '16px'
+            icon.style.height = '16px'
+            icon.style.backgroundImage = "url('data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><path fill=\"%2344AA77\" d=\"M14 4h-2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2h2v-2h-2V6h2V4zM4 12V4h6v8H4z\"/></svg>')"
+            icon.style.backgroundRepeat = 'no-repeat'
+            icon.style.backgroundPosition = 'center'
             tdIcon.appendChild(icon)
             tr.appendChild(tdIcon)
             
@@ -365,7 +373,19 @@ export default class SymbolsUI {
             if (symbol.type === 'bit') {
                 addressValue = (parseFloat(symbol.address) || 0).toFixed(1)
             }
-            tr.appendChild(this.createCell('input', addressValue, val => symbol.address = parseFloat(val) || 0, null, 'number', symbol.readonly))
+            // Use text input to avoid locale-specific comma formatting
+            tr.appendChild(this.createCell('input', addressValue, (val, inputEl) => {
+                const num = parseFloat(String(val).replace(',', '.')) || 0
+                symbol.address = num
+                // Reformat display immediately
+                if (inputEl) {
+                     if (symbol.type === 'bit') {
+                         inputEl.value = num.toFixed(1)
+                     } else {
+                         inputEl.value = num
+                     }
+                }
+            }, null, 'text', symbol.readonly))
 
             // Initial Value
             tr.appendChild(this.createCell('input', symbol.initial_value, val => symbol.initial_value = parseFloat(val) || 0, null, 'number', symbol.readonly))
@@ -420,6 +440,8 @@ export default class SymbolsUI {
             input.setAttribute('name', 'sbl_' + Math.random().toString(36).substr(2, 9))
             
             input.value = value !== undefined ? value : ''
+            input.style.paddingTop = '0px'
+            input.style.paddingBottom = '0px'
 
             if (readonly) {
                 input.readOnly = true
@@ -429,14 +451,23 @@ export default class SymbolsUI {
             }
             
             if (!readonly) {
-                input.addEventListener('change', (e) => onChange(e.target.value))
+                input.addEventListener('change', (e) => onChange(e.target.value, e.target))
             }
 
             input.addEventListener('focus', () => {
                 const tr = input.closest('tr')
                 if (tr) {
+                    const old = this.tbody.querySelector('tr.active-row')
+                    if (old) old.classList.remove('active-row')
+                    tr.classList.add('active-row')
+
                     this.lastFocusedIndex = Array.from(this.tbody.children).indexOf(tr)
                 }
+            })
+            input.addEventListener('blur', () => {
+                // Optional: remove if you only want it while focused
+                // const tr = input.closest('tr')
+                // if (tr) tr.classList.remove('active-row')
             })
             td.appendChild(input)
         } else if (type === 'select') {
@@ -444,6 +475,16 @@ export default class SymbolsUI {
             // Ignore for autofill
             select.setAttribute('autocomplete', 'off')
             select.setAttribute('name', 'sbl_sel_' + Math.random().toString(36).substr(2, 9))
+            select.style.paddingTop = '0px'
+            select.style.paddingBottom = '0px'
+            
+            // Add class for coloring
+            select.classList.add('symbol-cell-select')
+            // Set initial color class
+            setTimeout(() => {
+                 const cls = 'val-' + String(value).toLowerCase()
+                 select.classList.add(cls)
+            }, 0)
 
             if (readonly) {
                 select.disabled = true
@@ -459,12 +500,23 @@ export default class SymbolsUI {
             })
             
             if (!readonly) {
-                select.addEventListener('change', (e) => onChange(e.target.value))
+                select.addEventListener('change', (e) => {
+                    const val = e.target.value
+                    // update class for coloring
+                    select.className = 'symbol-cell-select'
+                    select.classList.add('val-' + String(val).toLowerCase())
+                    onChange(val)
+                })
             }
 
             select.addEventListener('focus', () => {
                 const tr = select.closest('tr')
                 if (tr) {
+                    // Update active row class
+                    const old = this.tbody.querySelector('tr.active-row')
+                    if (old) old.classList.remove('active-row')
+                    tr.classList.add('active-row')
+                    
                     this.lastFocusedIndex = Array.from(this.tbody.children).indexOf(tr)
                 }
             })

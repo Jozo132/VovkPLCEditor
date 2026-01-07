@@ -98,6 +98,15 @@
      background: #2d2d2d;
 }
 
+.symbols-table select:disabled {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    opacity: 0.9;
+    cursor: default;
+    padding-left: 7px; /* Compensate for text shift */
+}
+
 /* Symbol Icon Column */
 .symbol-icon-cell {
     width: 30px;

@@ -30,6 +30,21 @@ export const ladderRenderer = {
         language: 'asm',
         value: block.code,
         font: '12px Consolas, monospace',
+        symbolProvider: (type) => {
+            if (type === 'label') {
+                const matches = block.code.matchAll(/^\s*([A-Za-z_]\w+):/gm)
+                return [...matches].map(m => ({name: m[1], type: 'Label'}))
+            }
+            if (!editor.project || !editor.project.symbols) return []
+            
+            let symbols = editor.project.symbols
+            if (type === 'bit_symbol') {
+                 symbols = symbols.filter(s => s.type === 'bit')
+            }
+            
+            // Return full symbol objects
+            return symbols.map(s => ({name: s.name, type: s.type}))
+        },
         onChange: (value) => {
           block.code = value
           updateBlockSize()
