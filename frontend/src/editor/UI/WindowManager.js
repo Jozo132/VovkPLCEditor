@@ -812,10 +812,10 @@ export default class WindowManager {
         // this.#editor.draw()
 
         // Open main program
-        if (project.files) {
-            const main = project.files.find(f => f.name === 'main' && f.path === '/' && f.type === 'program')
-            if (main && main.id) this.openProgram(main.id)
-        }
+        // if (project.files) {
+        //     const main = project.files.find(f => f.name === 'main' && f.path === '/' && f.type === 'program')
+        //     if (main && main.id) this.openProgram(main.id)
+        // }
     }
 
     /** @type { (id: string) => (WindowType | undefined) } */
@@ -858,6 +858,13 @@ export default class WindowManager {
         } else {
             this.#editor.window_manager.active_program = undefined
         }
+    }
+
+    /** @param {string} id */
+    restoreLazyTab(id) {
+         const prog = this.#editor.findProgram(id)
+         if (!prog) return
+         this.tab_manager.addLazyTab(id)
     }
 
     /** @param { string | null | undefined } id */

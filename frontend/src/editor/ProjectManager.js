@@ -190,42 +190,55 @@ export default class ProjectManager {
   }
 
   restoreUIState(project) {
-    if (!project || !project._ui_state) return
+    let restoredTabs = false;
+    if (project && project._ui_state) {
+        try {
+            const { open_tabs, active_tab, active_device } = project._ui_state
+            const wm = this.#editor.window_manager
+            
+            // Restore Device
+            if (active_device && wm.setActiveDevice) {
+                wm.setActiveDevice(active_device)
+            }
 
-    try {
-        const { open_tabs, active_tab, active_device } = project._ui_state
-        const wm = this.#editor.window_manager
-        
-        // Restore Device
-        if (active_device && wm.setActiveDevice) {
-            wm.setActiveDevice(active_device)
+            // Restore Tabs
+            if (open_tabs && Array.isArray(open_tabs)) {
+                open_tabs.forEach(id => {
+                    // Check if file still exists in project
+                    // The openTab method needs the file to exist in the tree/project structure
+                    // We assume openProject has already populated the tree
+                    try {
+                        // Check if it exists
+                        const exists = this.#editor.findProgram(id)
+                        if (exists) {
+                            // Restore as lazy tab initially
+                            // The active tab will be fully loaded by switchTo below
+                            // @ts-ignore
+                            wm.restoreLazyTab(id)
+                            restoredTabs = true;
+                        }
+                    } catch(e) { console.warn('Failed to restore tab', id, e) }
+                })
+            }
+
+            // Set Active Tab
+            if (active_tab) {
+                wm.tab_manager.switchTo(active_tab)
+            } else if (restoredTabs) {
+                 // Nothing specific active, but tabs restored
+                 const first = wm.tab_manager.tabs.keys().next().value;
+                 if(first) wm.tab_manager.switchTo(first)
+            }
+
+        } catch (e) {
+            console.error('Failed to restore UI state', e)
         }
+    }
 
-        // Restore Tabs
-        if (open_tabs && Array.isArray(open_tabs)) {
-            // Close existing tabs first? Or assume fresh load.
-            // On fresh load, tabs map is empty.
-            open_tabs.forEach(id => {
-                // Check if file still exists in project
-                // The openTab method needs the file to exist in the tree/project structure
-                // We assume openProject has already populated the tree
-                try {
-                     // Check if it exists
-                     const exists = this.#editor.findProgram(id)
-                     if (exists) {
-                         wm.openProgram(id)
-                     }
-                } catch(e) { console.warn('Failed to restore tab', id, e) }
-            })
-        }
-
-        // Set Active Tab
-        if (active_tab) {
-             wm.tab_manager.switchTo(active_tab)
-        }
-
-    } catch (e) {
-        console.error('Failed to restore UI state', e)
+    if (!restoredTabs && project && project.files) {
+        // Fallback: Default to opening 'main' if no state restored
+        const main = project.files.find(f => f.name === 'main' && f.path === '/' && f.type === 'program')
+        if (main && main.id) this.#editor.window_manager.openProgram(main.id)
     }
   }
 

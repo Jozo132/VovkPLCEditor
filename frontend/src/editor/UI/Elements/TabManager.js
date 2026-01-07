@@ -19,44 +19,69 @@ export default class TabManager {
         if (!this._editorHost) throw new Error("Editor host not found")
     }
 
-    /** @type { (id: string, host: EditorUI) => void } */
-    openTab(id, host) {
-
-        if (this.tabs.has(id)) {
-            this.switchTo(id);
-            return;
-        }
-
+    _createTabElement(id) {
         const program = this.#editor.findProgram(id);
         if (!program) throw new Error(`Program not found: ${id}`)
-        const { name, comment } = program
+        const { name } = program
 
         const tabEl = ElementSynthesis(/*HTML*/`<div class="plc-tab" tabindex="0" draggable="true"><div class="plc-tab-title plc-icon ${getIconType(program.type)}">${name}</div><div class="plc-tab-close">×</div></div>`)
         const closeEl = tabEl.querySelector(".plc-tab-close");
-        if (!tabEl) throw new Error("Tab title not found")
-        if (!closeEl) throw new Error("Tab close button not found")
+        if (!tabEl || !closeEl) throw new Error("Failed to create tab element")
 
         // @ts-ignore
         tabEl.onclick = () => this.switchTo(id);
         
         // Setup Drag and Drop
         this.setupDragHandlers(tabEl, id);
-
-        this._tabBar.appendChild(tabEl);
-
+        
         // @ts-ignore
         closeEl.onclick = (e) => {
             e.stopPropagation();
             this.closeTab(id);
         }
+        
+        return tabEl
+    }
 
+    /** @type { (id: string, host: EditorUI) => void } */
+    openTab(id, host) {
+
+        if (this.tabs.has(id)) {
+            const entry = this.tabs.get(id)
+            if (entry && !entry.host) {
+                 entry.host = host;
+            }
+            this.switchTo(id);
+            return;
+        }
+
+        const tabEl = this._createTabElement(id);
+        this._tabBar.appendChild(tabEl);
         this.tabs.set(id, { tabEl, host });
         this.switchTo(id);
+    }
+
+    addLazyTab(id) {
+        if (this.tabs.has(id)) return;
+        try {
+            const tabEl = this._createTabElement(id)
+            this._tabBar.appendChild(tabEl);
+            this.tabs.set(id, { tabEl, host: null });
+        } catch (e) {
+            console.error("Failed to add lazy tab", e)
+        }
     }
 
     /** @type { (id: string) => void } */
     switchTo(id) {
         if (!this.tabs.has(id)) return;
+
+        // Lazy Load
+        const entry = this.tabs.get(id);
+        if (!entry.host) {
+            this.#editor.window_manager.openProgram(id)
+            return
+        }
 
         const program = this.#editor.findProgram(id);
         if (!program) throw new Error(`Program not found: ${id}`)
@@ -67,8 +92,10 @@ export default class TabManager {
             const isActive = path === id;
             tabEl.classList.toggle("active", isActive);
             // editorEl.style.display = isActive ? "block" : "none";
-            if (isActive) host.show();
-            else host.hide();
+            if (host) {
+                if (isActive) host.show();
+                else host.hide();
+            }
         }
 
         this.active = id;
@@ -80,7 +107,7 @@ export default class TabManager {
         if (!tab) return null;
         this.tabs.delete(id);
         this.#editor.window_manager.closeProgram(id)
-        tab.host.close();
+        if (tab.host) tab.host.close();
         tab.tabEl.remove();
         if (this.active === id) {
             const next = this.tabs.keys().next().value || null;
