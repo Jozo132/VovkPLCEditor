@@ -115,7 +115,6 @@ export default class WindowManager {
                     <button id="footer-download" class="footer-btn" style="background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; opacity: 0.5; pointer-events: none; font-size: 11px;">
                         <span style="display: flex; transform: translateY(-1.5px);"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5v5.793l2.146-2.147a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 1 1 .708-.708L7.5 10.293V4.5A.5.5 0 0 1 8 4z"/><path d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-6a.5.5 0 0 0-1 0v6z"/></svg></span> Download
                     </button>
-                    <span id="footer-compile-size" style="margin-left: 0px; opacity: 0.8; font-size: 11px;"></span>
                 </div>
 
                 <div style="display: flex; gap: 15px; margin-right: 15px">
@@ -378,10 +377,6 @@ export default class WindowManager {
             this.logToConsole(`${bar} ${result.size}/${MAX_PROGRAM_SIZE} bytes (${percent}%)`, result.size > MAX_PROGRAM_SIZE ? 'error' : 'info')
 
             if (hexPreview) this.logToConsole('Bytecode: ' + hexPreview)
-
-            // Show size in footer
-            const sizeLabel = this.workspace.querySelector('#footer-compile-size')
-            if (sizeLabel) sizeLabel.innerText = `(${result.size} bytes)`
 
             // Auto open console
             const consoleEl = this.workspace.querySelector('.plc-console')
