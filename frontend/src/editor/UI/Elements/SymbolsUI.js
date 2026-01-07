@@ -61,7 +61,7 @@ export default class SymbolsUI {
                     </tbody>
                 </table>
             </div>
-            <div class="plc-editor-bottom" style="padding: 0px; background-color: #2A2A2A; max-width: 1200px;">
+            <div class="plc-editor-bottom" style="padding: 0px; max-width: 1200px;">
                 <div class="symbols-toolbar" style="padding: 10px;">
                     <button class="plc-btn add-symbol-btn" style="width: auto; padding-right: 20px;">+ Add Symbol</button>
                     <!-- <button class="plc-btn delete-symbol-btn">Remove Selected</button> -->

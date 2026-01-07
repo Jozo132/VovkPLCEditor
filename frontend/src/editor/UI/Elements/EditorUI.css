@@ -144,23 +144,26 @@
 
 /* Add Symbol Button */
 .add-symbol-btn {
-    background-color: transparent;
-    border: 1px solid transparent;
-    color: #aaaaaa;
-    cursor: pointer;
-    padding: 6px 8px; /* Match left padding of table cells */
-    font-size: 13px;
-    border-radius: 0px;
-    text-align: left;
-    margin-top: 0px; /* Connect to table */
-    font-family: inherit;
-    transition: all 0.1s ease;
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding: 0 15px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 13px;
+    border: 1px solid #555;
+    outline: none;
+    box-sizing: border-box;
+    font-weight: 500;
+    transition: background 0.1s;
+    background-color: #3c3c3c;
+    color: #eee;
+    margin-top: 8px;
 }
 
 .add-symbol-btn:hover {
-    background-color: #2a2d2e;
+    background-color: #4a4a4a;
     color: #ffffff;
 }
 
