@@ -68,6 +68,7 @@ export class MiniCodeEditor {
 .mce-hover-def{font-family:monospace;border-bottom:1px solid #454545;padding:6px 10px;background:#1e1e1e;color:#b4b4b4;font-weight:600}
 .mce-hover-desc{padding:8px 10px 4px 10px;}
 .mce-hover-ex{padding:4px 10px 8px 10px;font-family:monospace;font-size:0.9em;color:#ce9178;white-space:pre-wrap}
+@media(max-width:768px){.mce{font-size:8px!important;line-height:12px!important}.mce>textarea{padding:4px 4px 4px 35px!important}.mce>pre.code{left:27px!important;width:calc(100% - 27px)!important;padding:4px!important}.mce>pre.ln{width:27px!important;padding-top:4px!important;padding-bottom:4px!important}.ac{font-size:9px!important;max-width:200px!important}.ac li{height:16px!important;line-height:16px!important;padding:0 4px!important}.ac li .icon{width:12px!important;height:12px!important;margin-right:4px!important}.mce-hover{font-size:9px!important;max-width:220px!important}.mce-hover-def{padding:3px 5px!important}.mce-hover-desc{padding:4px 5px 2px 5px!important}.mce-hover-ex{padding:2px 5px 4px 5px!important}}
 `;
             document.head.appendChild(s)
         }
