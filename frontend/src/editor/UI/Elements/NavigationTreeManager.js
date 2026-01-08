@@ -720,6 +720,14 @@ export default class NavigationTreeManager {
                 if (item.type === 'folder') {
                     // console.log('Adding folder', item)
                     const subfolder = item.item // @ts-ignore
+                    
+                    // Sync minimization state
+                    const minimized = this.minimized_folders[subfolder.path]
+                    if (minimized !== undefined) {
+                        if (minimized) subfolder.collapse()
+                        else subfolder.expand()
+                    }
+
                     folder.appendChild(subfolder)
                     renderFolder(subfolder, item.full_path)
                 } else if (item.type === 'file') {

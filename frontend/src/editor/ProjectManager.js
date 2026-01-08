@@ -171,6 +171,7 @@ export default class ProjectManager {
     const openTabs = tabManager.getOpenTabsOrdered()
     const activeTab = tabManager.active
     const activeDevice = this.#editor.window_manager.active_device
+    const treeState = this.#editor.window_manager.tree_manager.minimized_folders
 
     // Update project
     this.#editor.project.files = files
@@ -178,7 +179,8 @@ export default class ProjectManager {
     this.#editor.project._ui_state = {
         open_tabs: openTabs,
         active_tab: activeTab,
-        active_device: activeDevice
+        active_device: activeDevice,
+        tree_state: treeState
     }
   }
 
@@ -193,8 +195,14 @@ export default class ProjectManager {
     let restoredTabs = false;
     if (project && project._ui_state) {
         try {
-            const { open_tabs, active_tab, active_device } = project._ui_state
+            const { open_tabs, active_tab, active_device, tree_state } = project._ui_state
             const wm = this.#editor.window_manager
+            
+            // Restore Tree State
+            if (tree_state) {
+                 wm.tree_manager.minimized_folders = tree_state
+                 wm.tree_manager.draw_navigation_tree(true)
+            }
             
             // Restore Device
             if (active_device && wm.setActiveDevice) {

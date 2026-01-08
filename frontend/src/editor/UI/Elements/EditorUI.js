@@ -154,7 +154,7 @@ export default class EditorUI {
                                 <div class="plc-program-block-header-buttons">
                                     <!--div class="menu-button delete">x</div-->
                                     <!--div class="menu-button edit">/</div-->
-                                    <div class="menu-button minimize">-</div>
+                                    <div class="menu-button minimize">${block.minimized ? '+' : '-'}</div>
                                 </div>
                             </div>
                             <p class="plc-comment-detailed">${comment || ''}</p>
@@ -166,6 +166,11 @@ export default class EditorUI {
                     </div>
                 `)
                 // this.body.appendChild(block.div) // Deferred to ensure order
+                
+                if (block.minimized) {
+                    block.div.classList.add('minimized')
+                }
+                
                 const minimize_button = block.div.querySelector('.minimize')
                 const header = block.div.querySelector('.plc-program-block-header')
 
@@ -178,6 +183,8 @@ export default class EditorUI {
                      const is_minimized = block.div.classList.contains('minimized')
                      if (is_minimized) block.div.classList.remove('minimized')
                      else block.div.classList.add('minimized')
+                     
+                     block.minimized = !is_minimized
                      minimize_button.innerText = !is_minimized ? '+' : '-'
                 }
 
