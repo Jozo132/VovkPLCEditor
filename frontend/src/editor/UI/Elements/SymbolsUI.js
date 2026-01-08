@@ -42,18 +42,18 @@ export default class SymbolsUI {
                     <p>Global Variable Table</p>
                 </div>
             </div>
-            <div class="plc-editor-body" style="padding: 10px; overflow: auto; flex: 1; max-width: 1200px;">
+            <div class="plc-editor-body symbols-body">
                 <table class="symbols-table">
                     <thead>
                         <tr>
-                            <th style="width: 30px;"></th>
-                            <th data-sort="name" style="width: 320px; max-width: 320px;">Name <span class="sort-icon"></span></th>
-                            <th data-sort="location" style="width: 120px;">Location <span class="sort-icon"></span></th>
-                            <th data-sort="type" style="width: 100px;">Type <span class="sort-icon"></span></th>
-                            <th data-sort="address" style="width: 100px;">Address <span class="sort-icon"></span></th>
-                            <th data-sort="initial_value" style="width: 100px;">Initial Value <span class="sort-icon"></span></th>
-                            <th data-sort="comment" style="width: 440px;">Comment <span class="sort-icon"></span></th>
-                            <th style="width: 30px;"></th>
+                            <th class="col-mini"></th>
+                            <th data-sort="name" class="col-name">Name <span class="sort-icon"></span></th>
+                            <th data-sort="location" class="col-loc">Location <span class="sort-icon"></span></th>
+                            <th data-sort="type" class="col-type">Type <span class="sort-icon"></span></th>
+                            <th data-sort="address" class="col-addr">Address <span class="sort-icon"></span></th>
+                            <th data-sort="initial_value" class="col-init">Initial Value <span class="sort-icon"></span></th>
+                            <th data-sort="comment" class="col-comm">Comment <span class="sort-icon"></span></th>
+                            <th class="col-mini"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -61,9 +61,9 @@ export default class SymbolsUI {
                     </tbody>
                 </table>
             </div>
-            <div class="plc-editor-bottom" style="padding: 0px; max-width: 1200px;">
-                <div class="symbols-toolbar" style="padding: 10px;">
-                    <button class="plc-btn add-symbol-btn" style="width: auto; padding-right: 20px;">+ Add Symbol</button>
+            <div class="plc-editor-bottom symbols-bottom-panel">
+                <div class="symbols-toolbar symbols-toolbar-panel">
+                    <button class="plc-btn add-symbol-btn">+ Add Symbol</button>
                     <!-- <button class="plc-btn delete-symbol-btn">Remove Selected</button> -->
                 </div>
             </div>
@@ -440,8 +440,6 @@ export default class SymbolsUI {
             input.setAttribute('name', 'sbl_' + Math.random().toString(36).substr(2, 9))
             
             input.value = value !== undefined ? value : ''
-            input.style.paddingTop = '0px'
-            input.style.paddingBottom = '0px'
 
             if (readonly) {
                 input.readOnly = true
@@ -475,8 +473,6 @@ export default class SymbolsUI {
             // Ignore for autofill
             select.setAttribute('autocomplete', 'off')
             select.setAttribute('name', 'sbl_sel_' + Math.random().toString(36).substr(2, 9))
-            select.style.paddingTop = '0px'
-            select.style.paddingBottom = '0px'
             
             // Add class for coloring
             select.classList.add('symbol-cell-select')

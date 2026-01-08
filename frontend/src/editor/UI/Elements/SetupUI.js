@@ -80,9 +80,6 @@ export default class SetupUI {
             output_size: '-', output_offset: '-'
         }
         
-        const cardStyle = `background: #252526; padding: 15px; border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); margin-bottom: 25px; border: 1px solid #333; max-width: 800px;`
-        const btnStyle = `display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 15px; cursor: pointer; border-radius: 3px; font-size: 13px; border: none; outline: none; box-sizing: border-box; font-weight: 500; transition: background 0.1s;`
-
         // Custom SVG Icons
         const iconCompile = `<svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-6a.5.5 0 0 0-1 0v6z"/><path d="M3 11.5h2v2h-2zM7 11.5h2v2h-2zM11 11.5h2v2h-2zM5 8.5h2v2h-2zM9 8.5h2v2h-2z"/></svg>` // Tray with parts
         const iconUpload = `<svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 12a.5.5 0 0 1-.5-.5V5.707l-2.146 2.147a.5.5 0 0 1-.708-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 5.707V11.5a.5.5 0 0 1-.5.5z"/><path d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-6a.5.5 0 0 0-1 0v6z"/></svg>` // Arrow up
@@ -95,10 +92,10 @@ export default class SetupUI {
                     <p>System Settings and Memory Map</p>
                 </div>
             </div>
-            <div class="plc-editor-body" style="padding: 20px; overflow: auto; background: #1e1e1e; color: #ccc;">
+            <div class="plc-editor-body setup-body">
                 
                 <!-- Main Configuration Card -->
-                <div style="${cardStyle}">
+                <div class="setup-card">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                         <h3 style="margin:0; color: #fff; font-size: 15px;">Configuration & Status</h3>
                         <div id="setup-device-status-badge" style="padding: 2px 8px; border-radius: 3px; font-weight: bold; font-size: 10px; letter-spacing: 0.5px; ${connected ? 'background: #0e639c; color: #fff;' : 'background: #3a1d1d; color: #f48771; border: 1px solid #5a1d1d;'}">
@@ -107,12 +104,12 @@ export default class SetupUI {
                     </div>
 
                     <!-- Comparison Table -->
-                    <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 25px;">
+                    <table class="setup-comparison-table">
                         <thead>
                             <tr style="text-align: left; border-bottom: 1px solid #333; color: #888;">
-                                <th style="padding: 8px; width: 25%;">Property</th>
-                                <th style="padding: 8px; width: 37.5%; color: #4ec9b0;">Project</th>
-                                <th style="padding: 8px; width: 37.5%; color: #ce9178;">Device</th>
+                                <th style="width: 25%;">Property</th>
+                                <th style="width: 37.5%; color: #4ec9b0;">Project</th>
+                                <th style="width: 37.5%; color: #ce9178;">Device</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -128,35 +125,35 @@ export default class SetupUI {
 
                     <!-- Action Buttons -->
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
-                        <button id="setup-read-config" class="plc-btn" ${!connected ? 'disabled' : ''} style="${btnStyle} background: #3c3c3c; color: #eee; border: 1px solid #555;">
+                        <button id="setup-read-config" class="plc-btn setup-btn" ${!connected ? 'disabled' : ''} style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
                             <span style="margin-right: 8px; display: flex; transform: translateY(-1.5px);">${iconUpload}</span> Load PLC Configuration
                         </button>
                         
                         <div style="width: 1px; background: #444; margin: 0 5px;"></div>
 
-                        <button id="setup-upload-plc" title="Upload program from PLC to PC" class="plc-btn" ${!connected ? 'disabled' : ''} style="${btnStyle} background: #3c3c3c; color: #eee; border: 1px solid #555;">
+                        <button id="setup-upload-plc" title="Upload program from PLC to PC" class="plc-btn setup-btn" ${!connected ? 'disabled' : ''} style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
                             <span style="margin-right: 8px; display: flex; transform: translateY(-1.5px);">${iconUpload}</span> Upload from PLC
                         </button>
 
-                         <button id="setup-compile" class="plc-btn" style="${btnStyle} background: #3c3c3c; color: #eee; border: 1px solid #555;">
+                         <button id="setup-compile" class="plc-btn setup-btn" style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
                             <span style="margin-right: 8px; display: flex; transform: translateY(-1.5px);">${iconCompile}</span> Compile Project
                         </button>
 
-                        <button id="setup-download-plc" title="Download compiled program to PLC" class="plc-btn" ${!connected ? 'disabled' : ''} style="${btnStyle} background: #0078d4; color: white; border: 1px solid #0078d4;">
+                        <button id="setup-download-plc" title="Download compiled program to PLC" class="plc-btn setup-btn" ${!connected ? 'disabled' : ''} style="background: #0078d4; color: white; border: 1px solid #0078d4;">
                             <span style="margin-right: 8px; display: flex; transform: translateY(-1.5px);">${iconDownload}</span> Download to PLC
                         </button>
                     </div>
                 </div>
 
                 <!-- Memory Map -->
-                <div style="${cardStyle} border-top: 3px solid #3c3c3c;">
+                <div class="setup-card" style="border-top: 3px solid #3c3c3c;">
                     <h4 style="color: #fff; font-size: 13px; margin: 0 0 15px 0; font-weight: 600;">Memory Map Settings</h4>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                    <table class="setup-comparison-table">
                         <thead>
                             <tr style="text-align: left; border-bottom: 1px solid #333; color: #888;">
-                                <th style="padding: 8px;">Area</th>
-                                <th style="padding: 8px;">Start Offset (decimal)</th>
-                                <th style="padding: 8px;">Size (bytes)</th>
+                                <th>Area</th>
+                                <th>Start Offset (decimal)</th>
+                                <th>Size (bytes)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -196,15 +193,14 @@ export default class SetupUI {
     }
 
     renderOffsetRow(label, key, data) {
-        const inputStyle = `width: 120px; padding: 4px 6px; background: #3c3c3c; border: 1px solid #333; border-radius: 3px; color: #ccc; font-family: consolas, monospace; height: 24px; box-sizing: border-box;`
         return `
             <tr style="border-bottom: 1px solid #333;">
                 <td style="padding: 8px 10px; color: #bbb;">${label}</td>
                 <td style="padding: 4px 10px;">
-                    <input type="number" data-key="${key}" data-field="offset" value="${data ? data.offset : 0}" class="tc-input setup-offset-input" style="${inputStyle}">
+                    <input type="number" data-key="${key}" data-field="offset" value="${data ? data.offset : 0}" class="tc-input setup-offset-input">
                 </td>
                 <td style="padding: 4px 10px;">
-                    <input type="number" data-key="${key}" data-field="size" value="${data ? data.size : 0}" class="tc-input setup-offset-input" style="${inputStyle}">
+                    <input type="number" data-key="${key}" data-field="size" value="${data ? data.size : 0}" class="tc-input setup-offset-input">
                 </td>
             </tr>
         `

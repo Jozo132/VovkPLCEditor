@@ -203,3 +203,179 @@
     cursor: default !important;
     pointer-events: none;
 }
+
+/* Setup UI Styles */
+.setup-body {
+    padding: 20px;
+    overflow: auto;
+    background: #1e1e1e;
+    color: #ccc;
+}
+
+.setup-card {
+    background: #252526;
+    padding: 15px;
+    border-radius: 4px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    margin-bottom: 25px;
+    border: 1px solid #333;
+    max-width: 800px;
+}
+
+.setup-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding: 0 15px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 13px;
+    border: none;
+    outline: none;
+    box-sizing: border-box;
+    font-weight: 500;
+    transition: background 0.1s;
+}
+
+.setup-offset-input {
+    width: 120px;
+    padding: 4px 6px;
+    background: #3c3c3c;
+    border: 1px solid #333;
+    border-radius: 3px;
+    color: #ccc;
+    font-family: consolas, monospace;
+    height: 24px;
+    box-sizing: border-box;
+}
+
+.setup-comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 25px;
+}
+
+.setup-comparison-table th {
+    text-align: left;
+    border-bottom: 1px solid #333;
+    color: #888;
+    padding: 8px;
+}
+
+.setup-comparison-table td {
+    border-bottom: 1px solid #333;
+    padding: 8px;
+}
+
+/* Symbols UI Styles */
+.symbols-body {
+    padding: 10px;
+    overflow: auto;
+    flex: 1;
+    max-width: 1200px;
+}
+
+.symbols-bottom-panel {
+    padding: 0px;
+    max-width: 1200px;
+}
+
+.symbols-toolbar-panel {
+    padding: 10px;
+}
+
+.col-mini { width: 30px; }
+.col-name { width: 320px; max-width: 320px; }
+.col-loc { width: 120px; }
+.col-type { width: 100px; }
+.col-addr { width: 100px; }
+.col-init { width: 100px; }
+.col-comm { width: 440px; }
+
+@media (max-width: 768px) {
+    .setup-body {
+        padding: 5px;
+    }
+
+    .setup-card {
+        padding: 5px;
+        margin-bottom: 10px;
+    }
+    
+    .setup-card h3 {
+        font-size: 13px !important;
+    }
+    
+    .setup-comparison-table {
+        font-size: 9px !important;
+        margin-bottom: 10px;
+    }
+
+    .setup-comparison-table td, 
+    .setup-comparison-table th {
+        padding: 3px 2px !important;
+    }
+    
+    .setup-btn {
+        height: 28px !important;
+        font-size: 11px !important;
+        padding: 0 8px !important;
+    }
+    
+    .setup-offset-input {
+        width: 100% !important; 
+        min-width: 40px;
+        font-size: 10px !important;
+        padding: 2px !important;
+        height: 20px !important;
+    }
+    
+    .setup-editor .plc-editor-header h2 {
+        font-size: 16px;
+    }
+
+    /* Symbols Mobile Overrides */
+    .symbols-body {
+        padding: 5px;
+    }
+    
+    .symbols-toolbar-panel {
+        padding: 5px;
+    }
+    
+    .symbols-table th, 
+    .symbols-table td {
+        padding: 4px 2px !important;
+        font-size: 10px !important;
+    }
+
+    .symbols-table input,
+    .symbols-table select {
+        padding: 2px 2px !important;
+        font-size: 10px !important;
+        height: auto !important;
+        margin: 0 !important;
+    }
+    
+    .add-symbol-btn {
+        height: 28px !important;
+        font-size: 11px !important;
+        padding: 0 10px !important;
+        margin-top: 4px !important;
+    }
+    
+    /* Shrink columns for mobile */
+    .col-mini { width: 25px !important; }
+    .col-name { width: 120px !important; max-width: unset !important; }
+    .col-loc { width: 60px !important; }
+    .col-type { width: 60px !important; }
+    .col-addr { width: 60px !important; }
+    .col-init { width: 60px !important; }
+    .col-comm { width: 100px !important; }
+
+    .symbols-editor .plc-editor-header h2 {
+        font-size: 16px;
+    }
+}
