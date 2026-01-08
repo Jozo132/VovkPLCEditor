@@ -88,7 +88,7 @@ export default class WindowManager {
                                 </button>
                             </div>
                         </div>
-                        <div class="plc-console-body" style="flex: 1; overflow: auto; padding: 5px 10px; font-family: monospace; font-size: 12px; color: #ddd;">
+                        <div class="plc-console-body" style="flex: 1; overflow: auto; padding: 5px 10px; font-family: monospace; color: #ddd;">
                             <!-- Console Output -->
                         </div>
                     </div>
@@ -300,7 +300,7 @@ export default class WindowManager {
         const openConsole = () => {
             if (consoleEl && consoleEl.classList.contains('minimized')) {
                 consoleEl.classList.remove('minimized')
-                consoleEl.style.height = '150px'
+                consoleEl.style.height = '240px'
             }
         }
 
