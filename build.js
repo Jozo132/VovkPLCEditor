@@ -4,8 +4,8 @@ const isWindows = platform() === "win32"
 
 import { execSync } from "child_process"
 
-// Execute 'cd ./lib/VovkPLCRuntime && node ./wasm_build.js'
-execSync("cd ./lib/VovkPLCRuntime && node ./wasm_build.js", { stdio: "inherit" })
+// Execute 'cd ./lib/VovkPLCRuntime && npm run build'
+execSync("cd ./lib/VovkPLCRuntime && npm run build", { stdio: "inherit" })
 
 // Copy the dist folder './lib/VovkPLCRuntime/wasm/dist' to './frontend/src/wasm'
 console.log("Copying the WASM files to the frontend")
