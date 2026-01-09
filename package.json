@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "scripts": {
     "init": "git pull && git submodule update --init --recursive",
+    "update": "git pull && git submodule update --remote --recursive",
     "start": "node --experimental-strip-types ./backend/main.ts",
     "build": "node ./build.js"
   },
