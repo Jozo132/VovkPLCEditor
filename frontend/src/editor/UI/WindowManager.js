@@ -334,7 +334,7 @@ export default class WindowManager {
         try {
             this.logToConsole('Compiling project...', 'info')
             const startTime = performance.now()
-            const result = this.#editor.project_manager.compile()
+            const result = await this.#editor.project_manager.compile()
             const endTime = performance.now()
 
             // Store result for download

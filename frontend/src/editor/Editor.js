@@ -4,7 +4,7 @@ import {PLC_Program, PLC_Project} from '../utils/types.js'
 const importCSS = CSSimporter(import.meta.url)
 await importCSS('./Editor.css')
 
-import VovkPLC from '../wasm/VovkPLC.js'
+import VovkPLC, {VovkPLCWorker} from '../wasm/VovkPLC.js'
 import DeviceManager from './DeviceManager.js'
 import WindowManager from './UI/WindowManager.js'
 import ProjectManager from './ProjectManager.js'
@@ -20,7 +20,8 @@ export class VovkPLCEditor {
     /** @type {HTMLElement} */ workspace
 
     memory = new Array(100).fill(0)
-    runtime = new VovkPLC()
+    /** @type { VovkPLCWorker } */
+    runtime
     runtime_ready = false
 
     /** @type {Object | null} */
@@ -90,9 +91,16 @@ export class VovkPLCEditor {
         this.workspace.classList.add('plc-workspace')
         if (debug_css) this.workspace.classList.add('debug')
 
-        this.runtime.initialize('/wasm/VovkPLC.wasm').then(() => {
-            // Compile 'exit' to flush out any initial runtime logs
-            try { this.runtime.compile('exit') } catch (e) { }
+        // this.runtime.initialize('/wasm/VovkPLC.wasm').then(() => {
+        //     // Compile 'exit' to flush out any initial runtime logs
+        //     try { this.runtime.compile('exit') } catch (e) { }
+        //     this.runtime_ready = true
+        // })
+        VovkPLC.createWorker('/wasm/VovkPLC.wasm', {silent: true}).then(worker => {
+            this.runtime = worker
+            try {
+                this.runtime.compile('exit')
+            } catch (e) {}
             this.runtime_ready = true
         })
 

@@ -261,9 +261,9 @@ export default class ProjectManager {
 
   /**
    * Compiles the current project
-   * @returns {{size: number, output: string}}
+   * @returns {Promise<{size: number, output: string}>}
    */
-  compile() {
+  async compile() {
     // Ensure project state is up to date before compiling
     this.checkAndSave()
 
@@ -301,14 +301,14 @@ export default class ProjectManager {
 
                 let addressStr = ''
                 
-                if (symbol.type === 'bit') {
+                if (symbol.type === 'bit') { // @ts-ignore
                     const val = parseFloat(symbol.address) || 0
                     const byte = Math.floor(val)
                     // Extract bit index from decimal part (e.g. 2.4 -> 4)
                     const bit = Math.round((val - byte) * 10)
                     
                     addressStr = (base_offset + byte) + '.' + bit
-                } else {
+                } else { // @ts-ignore
                      const val = parseFloat(symbol.address) || 0
                      addressStr = (base_offset + Math.floor(val)).toString()
                 }
@@ -335,16 +335,17 @@ end:                      // Label to jump to
     
     // Hook up console locally to capture WASM output
     const runtime = this.#editor.runtime
-    const cleanup = () => {
-        runtime.onStdout(undefined)
-        runtime.onStderr(undefined)
+    if (!runtime) throw new Error('Runtime not initialized')
+    const cleanup = async() => {
+        await runtime.setSilent(true)
     }
-
-    runtime.onStdout((msg) => this.#editor.window_manager.logToConsole(msg, 'info'))
-    runtime.onStderr((msg) => this.#editor.window_manager.logToConsole(msg, 'error'))
+    await runtime.setSilent(false)
+    await runtime.onStdout((msg) => this.#editor.window_manager.logToConsole(msg, 'info'))
+    await runtime.onStderr((msg) => this.#editor.window_manager.logToConsole(msg, 'error'))
 
     try {
-        const result = runtime.compile(asm)
+        const result = await runtime.compile(asm)
+        console.log('Compilation result:', result)
         cleanup()
         return result
     } catch (e) {
