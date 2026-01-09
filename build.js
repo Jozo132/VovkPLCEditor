@@ -10,6 +10,6 @@ execSync("cd ./lib/VovkPLCRuntime && npm run build", { stdio: "inherit" })
 // Copy the dist folder './lib/VovkPLCRuntime/wasm/dist' to './frontend/src/wasm'
 console.log("Copying the WASM files to the frontend")
 if (isWindows) execSync("xcopy /E /I /Y .\\lib\\VovkPLCRuntime\\wasm\\dist .\\frontend\\src\\wasm", { stdio: "inherit" })
-else execSync("cp -rf ./lib/VovkPLCRuntime/wasm/dist/. ./frontend/src/wasm", { stdio: "inherit" })
+else execSync("cp -rfv ./lib/VovkPLCRuntime/wasm/dist/. ./frontend/src/wasm", { stdio: "inherit" })
 
 execSync("cd ./backend && npm install", { stdio: "inherit" }) // Install the dependencies for the backend
