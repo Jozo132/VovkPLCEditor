@@ -36,6 +36,11 @@ export const ladderRenderer = {
             editor.window_manager.setProblemHover(payload)
           }
         },
+        onGoToDefinition: payload => {
+          if (payload?.type === 'symbol' && editor.window_manager?.focusSymbolByName) {
+            editor.window_manager.focusSymbolByName(payload.name)
+          }
+        },
         symbolProvider: (type) => {
             if (type === 'label') {
                 const matches = block.code.matchAll(/^\s*([A-Za-z_]\w+):/gm)

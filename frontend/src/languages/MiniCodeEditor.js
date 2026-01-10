@@ -11,6 +11,7 @@ export class MiniCodeEditor {
      *          onDiagnosticsChange?:(diagnostics:any[])=>void,
      *          blockId?:string,
      *          onLintHover?:(payload:{state:'enter'|'leave',diagnostic:any,blockId?:string})=>void,
+     *          onGoToDefinition?:(payload:{type:'symbol',name:string,blockId?:string})=>void,
      *          onScroll?:(pos:{top:number,left:number})=>void,
      *          onChange?:(value:string)=>void}} options
      */
@@ -62,6 +63,7 @@ export class MiniCodeEditor {
 .mce-marker.err { text-decoration: underline wavy #f48771; }
 .mce-marker.warn { text-decoration: underline wavy #cca700; }
 .mce-hover-highlight { position: absolute; pointer-events: none; z-index: 4; background: rgba(216, 90, 112, 0.3); border-radius: 2px; }
+.mce-link-highlight { position: absolute; pointer-events: none; z-index: 4; height: 2px; background: #4daafc; border-radius: 1px; opacity: 0.9; }
 .mce-selection-highlight { position: absolute; pointer-events: none; z-index: 3; background: rgba(76, 141, 255, 0.28); border-radius: 2px; }
 .mce-marker:hover::after {
     content: attr(data-msg);
@@ -113,6 +115,7 @@ export class MiniCodeEditor {
 
         const hoverHighlights = []
         const selectedHighlights = []
+        const linkHighlights = []
         const clearHoverHighlight = () => {
             hoverHighlights.forEach(h => h.remove())
             hoverHighlights.length = 0
@@ -120,6 +123,10 @@ export class MiniCodeEditor {
         const clearSelectedHighlight = () => {
             selectedHighlights.forEach(h => h.remove())
             selectedHighlights.length = 0
+        }
+        const clearLinkHighlight = () => {
+            linkHighlights.forEach(h => h.remove())
+            linkHighlights.length = 0
         }
         const renderHoverHighlight = (range) => {
             clearHoverHighlight()
@@ -188,6 +195,41 @@ export class MiniCodeEditor {
                         h.style.width = Math.max(2, p2.x - p.x) + 'px'
                         ov.insertBefore(h, ov.firstChild)
                         selectedHighlights.push(h)
+                    }
+                }
+                offset += lines[i].length + 1
+            }
+        }
+        const renderLinkHighlight = (range) => {
+            clearLinkHighlight()
+            if (!range || typeof range.start !== 'number' || typeof range.end !== 'number') return
+            const text = ta.value || ''
+            if (!text.length) return
+
+            const maxLen = text.length
+            let start = Math.max(0, Math.min(range.start, maxLen))
+            let end = Math.max(start + 1, Math.min(range.end, maxLen))
+            if (end <= start) end = Math.min(maxLen, start + 1)
+
+            let offset = 0
+            const lines = text.split('\n')
+            for (let i = 0; i < lines.length; i++) {
+                const lineStart = offset
+                const lineEnd = offset + lines[i].length
+                if (end <= lineStart) break
+                if (start < lineEnd + 1 && end > lineStart) {
+                    const segStart = Math.max(start, lineStart)
+                    const segEnd = Math.min(end, lineEnd)
+                    if (segEnd > segStart) {
+                        const p = caretPx(segStart)
+                        const p2 = caretPx(segEnd)
+                        const h = document.createElement('div')
+                        h.className = 'mce-link-highlight'
+                        h.style.left = p.x + 'px'
+                        h.style.top = (p.y + p.h - 2) + 'px'
+                        h.style.width = Math.max(2, p2.x - p.x) + 'px'
+                        ov.insertBefore(h, ov.firstChild)
+                        linkHighlights.push(h)
                     }
                 }
                 offset += lines[i].length + 1
@@ -354,6 +396,125 @@ export class MiniCodeEditor {
              return { offset, row, idx, lines, line, relX, relY }
         }
 
+        const isWordChar = ch => /[A-Za-z0-9_.]/.test(ch)
+        const normalizeNames = list => (list || [])
+            .map(item => (typeof item === 'string' ? item : item?.name))
+            .filter(Boolean)
+
+        const getLabelDefinitions = () => {
+            const text = ta.value || ''
+            const defs = new Map()
+            const re = /^\s*([A-Za-z_]\w*):/gm
+            let match = null
+            while ((match = re.exec(text))) {
+                const label = match[1]
+                if (!label || defs.has(label)) continue
+                const labelOffset = match.index + match[0].indexOf(label)
+                defs.set(label, labelOffset)
+            }
+            return defs
+        }
+
+        const getWordAtInfo = info => {
+            if (!info || !info.line) return null
+            const line = info.line
+            if (!isWordChar(line[info.idx])) return null
+            let start = info.idx
+            let end = info.idx
+            while (start > 0 && isWordChar(line[start - 1])) start--
+            while (end < line.length && isWordChar(line[end])) end++
+            const lineStart = info.offset - info.idx
+            return {
+                word: line.slice(start, end),
+                start: lineStart + start,
+                end: lineStart + end,
+            }
+        }
+
+        const getWordAtIndex = index => {
+            const text = ta.value || ''
+            if (!text.length) return null
+            let idx = Math.max(0, Math.min(index || 0, text.length - 1))
+            if (!isWordChar(text[idx]) && idx > 0 && isWordChar(text[idx - 1])) {
+                idx -= 1
+            }
+            if (!isWordChar(text[idx])) return null
+            let start = idx
+            let end = idx
+            while (start > 0 && isWordChar(text[start - 1])) start--
+            while (end < text.length && isWordChar(text[end])) end++
+            return { word: text.slice(start, end), start, end }
+        }
+
+        const resolveDefinition = wordInfo => {
+            if (!wordInfo || !wordInfo.word) return null
+            const labelDefs = getLabelDefinitions()
+            if (labelDefs.has(wordInfo.word)) {
+                return { type: 'label', name: wordInfo.word, index: labelDefs.get(wordInfo.word), range: wordInfo }
+            }
+            const symbolList = normalizeNames(o.symbolProvider ? o.symbolProvider('symbol') : [])
+            if (symbolList.includes(wordInfo.word)) {
+                return { type: 'symbol', name: wordInfo.word, range: wordInfo }
+            }
+            return null
+        }
+
+        let linkHoverTarget = null
+        let lastMouse = null
+        let ctrlDown = false
+
+        const clearLinkHover = () => {
+            clearLinkHighlight()
+            linkHoverTarget = null
+            ta.style.cursor = ''
+        }
+
+        const updateLinkHover = (x, y) => {
+            const info = getHoverInfo(x, y)
+            if (!info) {
+                clearLinkHover()
+                return
+            }
+            const wordInfo = getWordAtInfo(info)
+            const target = resolveDefinition(wordInfo)
+            if (!target) {
+                clearLinkHover()
+                return
+            }
+            linkHoverTarget = target
+            renderLinkHighlight(target.range)
+            ta.style.cursor = 'pointer'
+        }
+
+        const goToDefinition = target => {
+            if (!target) return
+            if (target.type === 'label') {
+                const pos = typeof target.index === 'number' ? target.index : target.range?.start
+                if (typeof pos !== 'number') return
+                ta.focus()
+                ta.selectionStart = pos
+                ta.selectionEnd = pos
+                if (typeof this.revealRange === 'function') {
+                    this.revealRange({ start: pos, end: pos + 1 }, { ratio: 0.33, highlight: false })
+                }
+            } else if (target.type === 'symbol') {
+                if (typeof o.onGoToDefinition === 'function') {
+                    o.onGoToDefinition({ type: 'symbol', name: target.name, blockId: o.blockId })
+                }
+            }
+        }
+
+        const handleCtrlKey = e => {
+            const next = !!(e.ctrlKey || e.metaKey)
+            if (next === ctrlDown) return
+            ctrlDown = next
+            if (!ctrlDown) {
+                clearLinkHover()
+            } else if (lastMouse) {
+                updateLinkHover(lastMouse.x, lastMouse.y)
+            }
+        }
+
         const tryShowLintHoverAt = (x, y) => {
              if (!lintDiagnostics.length) return false
              const info = getHoverInfo(x, y)
@@ -366,6 +527,12 @@ export class MiniCodeEditor {
         }
 
         const handleHover = (e) => {
+             lastMouse = { x: e.clientX, y: e.clientY }
+             if (ctrlDown) {
+                 updateLinkHover(e.clientX, e.clientY)
+             } else {
+                 clearLinkHover()
+             }
              if (hoverTimer) clearTimeout(hoverTimer)
              if (lintHoverActive) return
              if (tryShowLintHoverAt(e.clientX, e.clientY)) return
@@ -545,8 +712,12 @@ export class MiniCodeEditor {
         ta.addEventListener('mouseleave', () => {
             if (hoverTimer) clearTimeout(hoverTimer)
             hideHover()
+            clearLinkHover()
         })
-        ta.addEventListener('scroll', hideHover)
+        ta.addEventListener('scroll', () => {
+            hideHover()
+            clearLinkHover()
+        })
 
 
         /* language */
@@ -1028,6 +1199,14 @@ export class MiniCodeEditor {
 
         // Manual Trigger (Ctrl+Space or Ctrl+Click)
         ta.addEventListener('keydown', e => {
+            if (e.key === 'F12') {
+                const target = resolveDefinition(getWordAtIndex(ta.selectionStart))
+                if (target) {
+                    e.preventDefault()
+                    goToDefinition(target)
+                }
+                return
+            }
             if (e.ctrlKey && e.code === 'Space') {
                  e.preventDefault()
                  triggerAC(true)
@@ -1067,7 +1246,14 @@ export class MiniCodeEditor {
         })
         
         ta.addEventListener('click', e => {
-            if (e.ctrlKey) {
+            if (e.ctrlKey || e.metaKey) {
+                const target = linkHoverTarget || resolveDefinition(getWordAtInfo(getHoverInfo(e.clientX, e.clientY)))
+                if (target) {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    goToDefinition(target)
+                    return
+                }
                 // Wait for caret to move
                 setTimeout(() => triggerAC(true), 0)
             } else {
@@ -1139,10 +1325,15 @@ export class MiniCodeEditor {
             tick()
             this._timer = setInterval(overlay, 200)
         }, 100)
+
+        document.addEventListener('keydown', handleCtrlKey)
+        document.addEventListener('keyup', handleCtrlKey)
         
         // Expose cleanup for destroy
         this._cleanup = () => {
              document.removeEventListener('mousedown', docClick)
+             document.removeEventListener('keydown', handleCtrlKey)
+             document.removeEventListener('keyup', handleCtrlKey)
              if (this._ac) this._ac.remove()
              if (this._hint) this._hint.remove()
         }

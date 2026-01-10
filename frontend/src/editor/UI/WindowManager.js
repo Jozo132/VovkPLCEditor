@@ -844,6 +844,16 @@ export default class WindowManager {
         // Trigger generic change handling if any exists beyond just setting the var
     }
 
+    focusSymbolByName(name) {
+        if (!name) return false
+        this.openProgram('symbols')
+        const symbolsUI = this.windows.get('symbols')
+        if (symbolsUI && typeof symbolsUI.focusSymbol === 'function') {
+            return symbolsUI.focusSymbol(name)
+        }
+        return false
+    }
+
     // Console Helpler
     consoleAutoOpened = false
 

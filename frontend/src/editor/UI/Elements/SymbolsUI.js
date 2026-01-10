@@ -303,6 +303,7 @@ export default class SymbolsUI {
         
         symbols.forEach((symbol, index) => {
             const tr = document.createElement('tr')
+            tr.dataset.symbolName = symbol.name || ''
             if (this.selectedSymbols.has(symbol)) {
                 tr.classList.add('selected')
             }
@@ -409,6 +410,24 @@ export default class SymbolsUI {
 
             this.tbody.appendChild(tr)
         })
+    }
+
+    focusSymbol(name) {
+        if (!name || !this.tbody) return false
+        const symbol = (this.master.project.symbols || []).find(s => s.name === name)
+        if (!symbol) return false
+        this.selectedSymbols.clear()
+        this.selectedSymbols.add(symbol)
+        this.renderTable()
+        const rows = Array.from(this.tbody.querySelectorAll('tr'))
+        const row = rows.find(r => r.dataset.symbolName === name)
+        if (row) {
+            row.classList.add('active-row')
+            row.scrollIntoView({ block: 'center' })
+            const input = row.querySelector('input')
+            if (input) input.focus()
+        }
+        return true
     }
     
     toggleSelection(symbol, event, tr) {
