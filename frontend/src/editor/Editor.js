@@ -105,7 +105,9 @@ const getGlobalNavState = () => {
         root.__vovkPlcNavState = {
             nextEditorId: 1,
             editors: new Map(),
+            workspaces: new Map(),
             activeEditorId: null,
+            hoverEditorId: null,
             hotkeysBound: false,
         }
     }
@@ -116,39 +118,179 @@ const bindGlobalNavHotkeys = state => {
     if (!state || state.hotkeysBound) return
     if (typeof document === 'undefined') return
     state.hotkeysBound = true
+    const browserHistory = window.history
+    const ensureNavIndex = () => {
+        if (!browserHistory) return 0
+        const current = browserHistory.state || {}
+        const index = typeof current.__vovkNavIndex === 'number' ? current.__vovkNavIndex : null
+        if (index === null) {
+            const nextState = { ...current, __vovkNavIndex: 0 }
+            browserHistory.replaceState(nextState, document.title)
+            state.navIndex = 0
+            return 0
+        }
+        state.navIndex = index
+        return index
+    }
+    const pushHoldState = () => {
+        if (!browserHistory) return
+        const currentIndex = ensureNavIndex()
+        const nextIndex = currentIndex + 1
+        const currentState = browserHistory.state || {}
+        browserHistory.pushState({ ...currentState, __vovkNavIndex: nextIndex }, document.title)
+        state.navIndex = nextIndex
+        state.trapHoldIndex = nextIndex
+    }
+    state.enableHistoryTrap = editorId => {
+        if (!editorId) return
+        if (state.trapEnabled && state.trapEditorId === editorId) return
+        state.trapEnabled = true
+        state.trapEditorId = editorId
+        pushHoldState()
+    }
+    state.disableHistoryTrap = editorId => {
+        if (!editorId) return
+        if (state.trapEditorId !== editorId) return
+        state.trapEnabled = false
+    }
+    if (!state.popstateBound && typeof window !== 'undefined') {
+        state.popstateBound = true
+        window.addEventListener('popstate', e => {
+            if (state.popstateHandling) return
+            state.popstateHandling = true
+            const newIndex = typeof e?.state?.__vovkNavIndex === 'number' ? e.state.__vovkNavIndex : null
+            const oldIndex = typeof state.navIndex === 'number' ? state.navIndex : newIndex
+            const dir = (newIndex !== null && oldIndex !== null && newIndex !== oldIndex)
+                ? (newIndex < oldIndex ? -1 : 1)
+                : 0
+            if (newIndex !== null) state.navIndex = newIndex
+            if (state.trapEnabled) {
+                const editorId = state.hoverEditorId ?? state.activeEditorId ?? state.trapEditorId
+                const editor = editorId ? state.editors.get(editorId) : null
+                const history = editor?._nav_history
+                const skipNav = state.navMouseTriggered && dir !== 0 && dir === state.navMouseDirection
+                if (history && !skipNav) {
+                    if (dir < 0) history.back()
+                    if (dir > 0) history.forward()
+                }
+                if (skipNav) {
+                    state.navMouseTriggered = false
+                    state.navMouseDirection = 0
+                }
+                pushHoldState()
+            } else if (state.trapHoldIndex !== null && dir < 0 && !state.suppressBrowserNav) {
+                state.suppressBrowserNav = true
+                browserHistory.back()
+                setTimeout(() => { state.suppressBrowserNav = false }, 0)
+            }
+            setTimeout(() => { state.popstateHandling = false }, 0)
+        })
+    }
     document.addEventListener('keydown', e => {
         const isBack = e.key === 'BrowserBack' || (e.altKey && e.key === 'ArrowLeft')
         const isForward = e.key === 'BrowserForward' || (e.altKey && e.key === 'ArrowRight')
         if (!isBack && !isForward) return
         e.preventDefault()
         e.stopPropagation()
-        const editor = state.editors.get(state.activeEditorId)
+        const editorId = state.hoverEditorId ?? state.activeEditorId
+        const editor = editorId ? state.editors.get(editorId) : null
         const history = editor?._nav_history
         if (!history) return
         if (isBack) history.back()
         if (isForward) history.forward()
     })
     let navMouseButton = null
-    const handleNavMouse = (e, isUp) => {
+    const resolveNavContext = e => {
+        const target = e?.target
+        const findWorkspace = node => (node && typeof node.closest === 'function') ? node.closest('.plc-workspace') : null
+        let workspace = findWorkspace(target)
+        if (!workspace && typeof e?.clientX === 'number' && typeof e?.clientY === 'number') {
+            const hit = document.elementFromPoint(e.clientX, e.clientY)
+            workspace = findWorkspace(hit)
+        }
+        if (!workspace && typeof e?.clientX === 'number' && typeof e?.clientY === 'number') {
+            const x = e.clientX
+            const y = e.clientY
+            for (const [el, id] of state.workspaces.entries()) {
+                const rect = el.getBoundingClientRect()
+                if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                    return { editorId: id, inWorkspace: true }
+                }
+            }
+        }
+        if (workspace) {
+            return { editorId: state.workspaces.get(workspace) || null, inWorkspace: true }
+        }
+        const fallbackId = state.hoverEditorId ?? state.activeEditorId
+        return { editorId: fallbackId || null, inWorkspace: false }
+    }
+    const handleNavMouseDown = e => {
         const isBack = e.button === 3
         const isForward = e.button === 4
         if (!isBack && !isForward) return
-        const editor = state.editors.get(state.activeEditorId)
+        const ctx = resolveNavContext(e)
+        const editor = ctx.editorId ? state.editors.get(ctx.editorId) : null
         const history = editor?._nav_history
-        if (!history) return
-        e.preventDefault()
-        e.stopPropagation()
-        if (!isUp) {
-            navMouseButton = e.button
-            return
+        if (ctx.inWorkspace) {
+            e.preventDefault()
+            e.stopPropagation()
+            e.stopImmediatePropagation()
         }
+        if (!history) return
+        navMouseButton = e.button
+    }
+    const handleNavMouseUp = e => {
+        const isBack = e.button === 3
+        const isForward = e.button === 4
+        if (!isBack && !isForward) return
+        const ctx = resolveNavContext(e)
+        const editor = ctx.editorId ? state.editors.get(ctx.editorId) : null
+        const history = editor?._nav_history
+        if (ctx.inWorkspace) {
+            e.preventDefault()
+            e.stopPropagation()
+            e.stopImmediatePropagation()
+        }
+        if (!history) return
         if (navMouseButton !== e.button) return
         navMouseButton = null
         if (isBack) history.back()
         if (isForward) history.forward()
+        state.navMouseTriggered = true
+        state.navMouseDirection = isBack ? -1 : 1
+        if (state.navMouseTriggerTimer) clearTimeout(state.navMouseTriggerTimer)
+        state.navMouseTriggerTimer = setTimeout(() => {
+            state.navMouseTriggered = false
+            state.navMouseDirection = 0
+        }, 200)
     }
-    document.addEventListener('mousedown', e => handleNavMouse(e, false))
-    document.addEventListener('mouseup', e => handleNavMouse(e, true))
+    const handleNavAuxClick = e => {
+        const isBack = e.button === 3
+        const isForward = e.button === 4
+        if (!isBack && !isForward) return
+        const ctx = resolveNavContext(e)
+        const editor = ctx.editorId ? state.editors.get(ctx.editorId) : null
+        const history = editor?._nav_history
+        if (ctx.inWorkspace) {
+            e.preventDefault()
+            e.stopPropagation()
+            e.stopImmediatePropagation()
+        }
+        if (!history) return
+        if (navMouseButton !== null) return
+        if (isBack) history.back()
+        if (isForward) history.forward()
+        state.navMouseTriggered = true
+        state.navMouseDirection = isBack ? -1 : 1
+        if (state.navMouseTriggerTimer) clearTimeout(state.navMouseTriggerTimer)
+        state.navMouseTriggerTimer = setTimeout(() => {
+            state.navMouseTriggered = false
+            state.navMouseDirection = 0
+        }, 200)
+    }
+    document.addEventListener('mousedown', handleNavMouseDown, true)
+    document.addEventListener('mouseup', handleNavMouseUp, true)
+    document.addEventListener('auxclick', handleNavAuxClick, true)
 }
 
 export class VovkPLCEditor {
@@ -240,13 +382,31 @@ export class VovkPLCEditor {
         this._nav_id = navState.nextEditorId++
         this._nav_history = createNavHistory(this)
         navState.editors.set(this._nav_id, this)
+        navState.workspaces.set(this.workspace, this._nav_id)
         bindGlobalNavHotkeys(navState)
 
         const markActive = () => {
             navState.activeEditorId = this._nav_id
         }
+        const markHover = () => {
+            navState.hoverEditorId = this._nav_id
+            if (typeof navState.enableHistoryTrap === 'function') {
+                navState.enableHistoryTrap(this._nav_id)
+            }
+        }
+        const clearHover = () => {
+            if (navState.hoverEditorId === this._nav_id) {
+                navState.hoverEditorId = null
+            }
+            if (typeof navState.disableHistoryTrap === 'function') {
+                navState.disableHistoryTrap(this._nav_id)
+            }
+        }
         this.workspace.addEventListener('mousedown', markActive)
         this.workspace.addEventListener('focusin', markActive)
+        this.workspace.addEventListener('mouseenter', markHover)
+        this.workspace.addEventListener('mouseleave', clearHover)
+        this.workspace.addEventListener('mousemove', markHover)
 
         // this.runtime.initialize('/wasm/VovkPLC.wasm').then(() => {
         //     // Compile 'exit' to flush out any initial runtime logs
