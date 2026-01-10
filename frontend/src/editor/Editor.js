@@ -12,12 +12,16 @@ import LanguageManager from './LanguageManager.js'
 import ContextManager from './ContextManager.js'
 import Actions from './Actions.js'
 import EditorUI from './UI/Elements/EditorUI.js'
+import VOVKPLC_VERSION_BUILD from './BuildNumber.js'
 
 Actions.initialize() // Enable global actions for all instances of VovkPLCEditor
 
 export class VovkPLCEditor {
     /** @type {PLC_Project} */ project
     /** @type {HTMLElement} */ workspace
+
+    version_build = VOVKPLC_VERSION_BUILD
+    static version_build = VOVKPLC_VERSION_BUILD
 
     memory = new Array(100).fill(0)
     /** @type { VovkPLCWorker } */
