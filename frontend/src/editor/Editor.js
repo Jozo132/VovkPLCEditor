@@ -251,33 +251,208 @@ export class VovkPLCEditor {
         return (this.project?.files || []).filter(file => file.type === 'program')
     }
 
-    _buildLintAssembly() {
-        /** @type {{ block: any, code: string, codeStart: number, codeEnd: number, program: any }[]} */
+    _hashString(value) {
+        const str = value || ''
+        let hash = 0
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i)
+            hash |= 0
+        }
+        return hash >>> 0
+    }
+
+    _buildSymbolCache() {
+        const project = this.project
+        const symbols = project?.symbols || []
+        const offsets = project?.offsets || {}
+        const map = new Map()
+        const signatureParts = []
+
+        symbols.forEach(symbol => {
+            if (!symbol || !symbol.name) return
+            const name = symbol.name
+            let baseOffset = 0
+            if (symbol.location && offsets[symbol.location]) {
+                baseOffset = offsets[symbol.location].offset || 0
+            }
+
+            let addressStr = ''
+            if (symbol.type === 'bit') {
+                const val = parseFloat(symbol.address) || 0
+                const byte = Math.floor(val)
+                const bit = Math.round((val - byte) * 10)
+                addressStr = `${baseOffset + byte}.${bit}`
+            } else {
+                const val = parseFloat(symbol.address) || 0
+                addressStr = (baseOffset + Math.floor(val)).toString()
+            }
+
+            map.set(name, addressStr)
+            signatureParts.push(`${name}|${symbol.type || ''}|${symbol.location || ''}|${symbol.address}|${baseOffset}`)
+        })
+
+        const signature = this._hashString(signatureParts.join('||')).toString()
+        return { map, signature }
+    }
+
+    _replaceSymbolsOnce(code, symbolMap) {
+        const src = code || ''
+        if (!symbolMap || symbolMap.size === 0) {
+            return { code: src, map: null }
+        }
+        const map = []
+        const re = /\b[A-Za-z_]\w*\b/g
+        let out = ''
+        let outIndex = 0
+        let last = 0
+        let match = null
+
+        while ((match = re.exec(src))) {
+            const token = match[0]
+            const start = match.index
+            const end = start + token.length
+
+            if (start > last) {
+                const chunk = src.slice(last, start)
+                out += chunk
+                map.push({
+                    outStart: outIndex,
+                    outEnd: outIndex + chunk.length,
+                    inStart: last,
+                    inEnd: start,
+                    replaced: false,
+                })
+                outIndex += chunk.length
+            }
+
+            const replacement = symbolMap.get(token)
+            if (replacement !== undefined) {
+                out += replacement
+                map.push({
+                    outStart: outIndex,
+                    outEnd: outIndex + replacement.length,
+                    inStart: start,
+                    inEnd: end,
+                    replaced: true,
+                })
+                outIndex += replacement.length
+            } else {
+                out += token
+                map.push({
+                    outStart: outIndex,
+                    outEnd: outIndex + token.length,
+                    inStart: start,
+                    inEnd: end,
+                    replaced: false,
+                })
+                outIndex += token.length
+            }
+            last = end
+        }
+
+        if (last < src.length) {
+            const chunk = src.slice(last)
+            out += chunk
+            map.push({
+                outStart: outIndex,
+                outEnd: outIndex + chunk.length,
+                inStart: last,
+                inEnd: src.length,
+                replaced: false,
+            })
+        }
+
+        return { code: out, map }
+    }
+
+    _ensureAsmCache(block, symbolsSignature, symbolMap) {
+        const code = block.code || ''
+        const checksum = this._hashString(code).toString()
+        if (block.cached_asm && block.cached_checksum === checksum && block.cached_symbols_checksum === symbolsSignature) {
+            return block.cached_asm
+        }
+        const replaced = this._replaceSymbolsOnce(code, symbolMap)
+        block.cached_asm = replaced.code
+        block.cached_checksum = checksum
+        block.cached_symbols_checksum = symbolsSignature
+        block.cached_asm_map = replaced.map
+        return block.cached_asm
+    }
+
+    _mapCachedRangeToSource(block, start, end) {
+        const map = block?.cached_asm_map
+        if (!map || !map.length) return { start, end }
+
+        const findSeg = offset => {
+            for (const seg of map) {
+                if (offset >= seg.outStart && offset < seg.outEnd) return seg
+            }
+            const last = map[map.length - 1]
+            if (last && offset >= last.outEnd) return last
+            return null
+        }
+
+        const lastOffset = Math.max(start, end - 1)
+        const startSeg = findSeg(start)
+        const endSeg = findSeg(lastOffset)
+
+        let mappedStart = start
+        let mappedEnd = end
+
+        if (startSeg) {
+            mappedStart = startSeg.replaced
+                ? startSeg.inStart
+                : startSeg.inStart + (start - startSeg.outStart)
+        }
+
+        if (endSeg) {
+            if (endSeg.replaced) {
+                mappedEnd = endSeg.inEnd
+            } else {
+                mappedEnd = endSeg.inStart + (lastOffset - endSeg.outStart) + 1
+            }
+        }
+
+        if (mappedEnd <= mappedStart) mappedEnd = mappedStart + 1
+        return { start: mappedStart, end: mappedEnd }
+    }
+
+    _buildAsmAssembly(options = {}) {
+        const includeHeaders = !!options.includeHeaders
+        const onUnsupported = typeof options.onUnsupported === 'function' ? options.onUnsupported : null
         const blocks = []
         let assembly = ''
         const programs = this._getLintPrograms()
+        const { map, signature } = this._buildSymbolCache()
+
         if (!programs.length) return { assembly, blocks }
 
         programs.forEach(file => {
             if (!file.blocks) return
             file.blocks.forEach(block => {
-                if (block.type !== 'asm') return
+                if (block.type !== 'asm') {
+                    if (onUnsupported) onUnsupported(file, block)
+                    return
+                }
                 if (!block.id) block.id = this._generateID(block.id)
 
-                const header = `# block:${block.id}\n`
+                const cached = this._ensureAsmCache(block, signature, map)
+                const header = includeHeaders ? `# block:${block.id}\n` : ''
                 assembly += header
                 const codeStart = assembly.length
-                const code = block.code || ''
+                const code = cached || ''
                 assembly += code
                 const codeEnd = assembly.length
-
                 if (!assembly.endsWith('\n')) assembly += '\n'
-
                 blocks.push({ block, code, codeStart, codeEnd, program: file })
             })
         })
 
         return { assembly, blocks }
+    }
+
+    _buildLintAssembly() {
+        return this._buildAsmAssembly({ includeHeaders: true })
     }
 
     _applyLintDiagnostics(blocks, diagnosticsByBlock) {
@@ -372,33 +547,39 @@ export class VovkPLCEditor {
                     if (localEnd <= localStart) {
                         localEnd = Math.min(target.code.length, localStart + 1)
                     }
+                    const sourceCode = target.block.code || ''
+                    const mapped = this._mapCachedRangeToSource(target.block, localStart, localEnd)
+                    const mappedStart = Math.max(0, Math.min(mapped.start, sourceCode.length))
+                    let mappedEnd = Math.max(mappedStart + 1, Math.min(mapped.end, sourceCode.length))
+                    if (mappedEnd <= mappedStart) mappedEnd = Math.min(sourceCode.length, mappedStart + 1)
 
                     const list = diagnosticsByBlock.get(target.block.id)
                     if (list) {
                         list.push({
                             type: problem.type || 'error',
-                            start: localStart,
-                            end: localEnd,
+                            start: mappedStart,
+                            end: mappedEnd,
                             message: problem.message || 'Lint error',
                         })
                     }
 
-                    const before = target.code.slice(0, localStart)
+                    const before = sourceCode.slice(0, mappedStart)
                     const localLine = before.split('\n').length
                     const lastNl = before.lastIndexOf('\n')
-                    const localColumn = localStart - (lastNl === -1 ? -1 : lastNl)
+                    const localColumn = mappedStart - (lastNl === -1 ? -1 : lastNl)
                     problemsList.push({
                         type: problem.type || 'error',
                         message: problem.message || 'Lint error',
                         token: problem.token_text || '',
                         line: localLine,
                         column: localColumn,
-                        start: localStart,
-                        end: localEnd,
+                        start: mappedStart,
+                        end: mappedEnd,
                         blockId: target.block.id,
                         blockName: target.block.name || '',
                         programName: target.program?.name || '',
                         programPath: target.program?.full_path || target.program?.path || '',
+                        programId: target.program?.id || '',
                     })
                 })
             }

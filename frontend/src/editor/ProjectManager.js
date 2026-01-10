@@ -137,6 +137,10 @@ export default class ProjectManager {
           const copy = { ...block }
           // delete copy.id
           delete copy.div // Remove DOM reference
+          delete copy.cached_asm
+          delete copy.cached_checksum
+          delete copy.cached_symbols_checksum
+          delete copy.cached_asm_map
           // delete copy.props // Remove rendering props
           if (copy.props) {
             const props_copy = { ...copy.props }
@@ -156,6 +160,7 @@ export default class ProjectManager {
           path: source.path,
           full_path: source.full_path,
           comment: source.comment,
+          scrollTop: source.scrollTop,
           blocks: blocks
         }
       }) // PLC_File -> item (PLC_ProjectItem)
@@ -277,57 +282,15 @@ export default class ProjectManager {
 
     let asm = ''
     try {
-        const project = this.#editor.project
-        // Iterate over all files in the project
-        if (project.files) {
-            for (const file of project.files) {
-                if (file.blocks) {
-                    for (const block of file.blocks) {
-                        if (block.type === 'asm' && block.code) {
-                            asm += block.code + '\n'
-                        } else if (block.type !== 'asm') {
-                            const msg = `${file.full_path} -> ${block.name || '?'}: Block type '${block.type}' not yet supported for compilation`
-                            console.log(msg)
-                            this.#editor.window_manager.logToConsole(msg, 'warning')
-                        }
-                    }
-                }
+        const { assembly } = this.#editor._buildAsmAssembly({
+            includeHeaders: false,
+            onUnsupported: (file, block) => {
+                const msg = `${file.full_path} -> ${block.name || '?'}: Block type '${block.type}' not yet supported for compilation`
+                console.log(msg)
+                this.#editor.window_manager.logToConsole(msg, 'warning')
             }
-        }
-
-        // Symbol Replacement
-        if (asm && project.symbols) {
-             project.symbols.forEach(symbol => {
-                if (!symbol.name) return
-                const name = symbol.name
-                
-                // Calculate absolute address based on location offset
-                let base_offset = 0
-                if (symbol.location && project.offsets && project.offsets[symbol.location]) {
-                    base_offset = project.offsets[symbol.location].offset || 0
-                }
-
-                let addressStr = ''
-                
-                if (symbol.type === 'bit') { // @ts-ignore
-                    const val = parseFloat(symbol.address) || 0
-                    const byte = Math.floor(val)
-                    // Extract bit index from decimal part (e.g. 2.4 -> 4)
-                    const bit = Math.round((val - byte) * 10)
-                    
-                    addressStr = (base_offset + byte) + '.' + bit
-                } else { // @ts-ignore
-                     const val = parseFloat(symbol.address) || 0
-                     addressStr = (base_offset + Math.floor(val)).toString()
-                }
-
-                // Replace whole words only
-                const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-                const regex = new RegExp(`\\b${escapedName}\\b`, 'g')
-                asm = asm.replace(regex, addressStr)
-            })
-        }
-
+        })
+        asm = assembly
     } catch(e) { console.warn('Could not extract ASM from project', e) }
 
     if (!asm) {

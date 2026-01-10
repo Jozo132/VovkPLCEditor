@@ -30,6 +30,12 @@ export const ladderRenderer = {
         language: 'asm',
         value: block.code,
         font: '12px Consolas, monospace',
+        blockId: block.id,
+        onLintHover: payload => {
+          if (editor.window_manager?.setProblemHover) {
+            editor.window_manager.setProblemHover(payload)
+          }
+        },
         symbolProvider: (type) => {
             if (type === 'label') {
                 const matches = block.code.matchAll(/^\s*([A-Za-z_]\w+):/gm)
@@ -91,6 +97,10 @@ export const ladderRenderer = {
             if (!block.id || !editor.lintBlock) return []
             return await editor.lintBlock(block.id)
         },
+        onScroll: pos => {
+          block.scrollTop = pos.top
+          block.scrollLeft = pos.left
+        },
         onChange: (value) => {
           block.code = value
           updateBlockSize()
@@ -99,6 +109,18 @@ export const ladderRenderer = {
       // console.log('ASM editor created')
       // console.log(text_editor)
       props.text_editor = text_editor
+      if (typeof text_editor.setScroll === 'function') {
+        requestAnimationFrame(() => {
+          const hasTop = typeof block.scrollTop === 'number'
+          const hasLeft = typeof block.scrollLeft === 'number'
+          if (hasTop || hasLeft) {
+            text_editor.setScroll({
+              top: hasTop ? block.scrollTop : undefined,
+              left: hasLeft ? block.scrollLeft : undefined
+            })
+          }
+        })
+      }
       setTimeout(updateBlockSize, 400) // Wait for the editor to be created
     }
   }

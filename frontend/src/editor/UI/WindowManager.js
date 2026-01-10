@@ -171,6 +171,12 @@ export default class WindowManager {
         this._problemsFlat = []
         this._selectedProblemIndex = -1
         this._selectedProblemKey = null
+        this._selectedProblemProgramId = null
+        this._selectedProblemShowTooltip = false
+        this._activeProblemHover = null
+        this._selectedProblemHighlight = null
+        this._problemsByHoverKey = new Map()
+        this._hoveredProblemKey = null
 
         const setActiveConsoleTab = tab => {
             activeConsoleTab = tab === 'problems' ? 'problems' : 'output'
@@ -199,14 +205,24 @@ export default class WindowManager {
             consoleBody.style.height = `${nextHeight}px`
         }
 
-        const clearActiveProblemHighlight = () => {
-            if (this._activeProblemHighlight?.editor?.setHoverHighlight) {
-                this._activeProblemHighlight.editor.setHoverHighlight(null)
+        const clearHoverHighlight = () => {
+            if (this._activeProblemHover?.editor?.setHoverHighlight) {
+                this._activeProblemHover.editor.setHoverHighlight(null)
             }
-            if (this._activeProblemHighlight?.editor?.showLintTooltip) {
-                this._activeProblemHighlight.editor.showLintTooltip(null)
+            if (this._activeProblemHover?.editor?.showLintTooltip) {
+                this._activeProblemHover.editor.showLintTooltip(null)
             }
-            this._activeProblemHighlight = null
+            this._activeProblemHover = null
+        }
+
+        const clearSelectedHighlight = (opts = {}) => {
+            if (this._selectedProblemHighlight?.editor?.setSelectedHighlight) {
+                this._selectedProblemHighlight.editor.setSelectedHighlight(null)
+            }
+            if (opts.hideTooltip && this._selectedProblemHighlight?.editor?.showLintTooltip) {
+                this._selectedProblemHighlight.editor.showLintTooltip(null)
+            }
+            this._selectedProblemHighlight = null
         }
 
         const clearProblemSelection = () => {
@@ -215,6 +231,10 @@ export default class WindowManager {
                 prev?.element?.classList.remove('selected')
             }
             this._selectedProblemIndex = -1
+            this._selectedProblemShowTooltip = false
+            this._selectedProblemKey = null
+            this._selectedProblemProgramId = null
+            clearSelectedHighlight({ hideTooltip: true })
         }
 
         const ensureProblemVisible = entry => {
@@ -230,22 +250,35 @@ export default class WindowManager {
             const max = this._problemsFlat.length - 1
             const nextIndex = Math.max(0, Math.min(index, max))
             if (this._selectedProblemIndex === nextIndex) {
-                if (opts.showTooltip) this._problemsFlat[nextIndex].show(opts.showTooltip)
+                if (opts.showTooltip) {
+                    this._selectedProblemShowTooltip = true
+                    this._problemsFlat[nextIndex].show({ showTooltip: true, focus: true, mode: 'selected' })
+                }
                 return
             }
             clearProblemSelection()
+            clearHoverHighlight()
             const entry = this._problemsFlat[nextIndex]
             if (!entry) return
             entry.element.classList.add('selected')
             this._selectedProblemIndex = nextIndex
             this._selectedProblemKey = entry.key
+            this._selectedProblemShowTooltip = !!opts.showTooltip
+            this._selectedProblemProgramId = entry.programId || null
             entry.ensureGroupOpen()
             ensureProblemVisible(entry)
-            entry.show({ showTooltip: !!opts.showTooltip, scroll: true })
+            entry.show({ showTooltip: !!opts.showTooltip, focus: true, mode: 'selected' })
         }
 
         this.setConsoleTab = setActiveConsoleTab
         this.openConsole = openConsole
+        const buildHoverKey = (blockId, diag) => {
+            if (!blockId || !diag) return ''
+            const start = typeof diag.start === 'number' ? diag.start : ''
+            const end = typeof diag.end === 'number' ? diag.end : ''
+            const msg = diag.message || ''
+            return `${blockId}:${start}:${end}:${msg}`
+        }
         this.getConsoleState = () => {
             if (!consoleBody) return null
             return {
@@ -270,12 +303,55 @@ export default class WindowManager {
                 openConsole(nextHeight, { force: true })
             }
         }
+        this.setProblemHover = payload => {
+            const map = this._problemsByHoverKey
+            if (!map) return
+            const clear = () => {
+                if (!this._hoveredProblemKey) return
+                const entries = map.get(this._hoveredProblemKey) || []
+                entries.forEach(entry => entry.element?.classList.remove('linked'))
+                this._hoveredProblemKey = null
+            }
+            if (!payload || payload.state === 'leave') {
+                clear()
+                return
+            }
+            const key = buildHoverKey(payload.blockId, payload.diagnostic)
+            if (!key) {
+                clear()
+                return
+            }
+            if (this._hoveredProblemKey && this._hoveredProblemKey !== key) {
+                clear()
+            }
+            const entries = map.get(key) || []
+            if (entries.length) {
+                entries.forEach(entry => entry.element?.classList.add('linked'))
+                this._hoveredProblemKey = key
+            } else {
+                clear()
+            }
+        }
+        this.clearProblemSelection = () => {
+            clearProblemSelection()
+            clearHoverHighlight()
+        }
         this._problemsCollapsed = this._problemsCollapsed || new Set()
         this.setConsoleProblems = input => {
             const list = Array.isArray(input) ? input : (input && Array.isArray(input.problems) ? input.problems : [])
             const status = !Array.isArray(input) && input && input.status ? input.status : 'idle'
             this._problemsFlat = []
+            const prevSelectedKey = this._selectedProblemKey
+            const prevSelectedProgramId = this._selectedProblemProgramId
+            const prevSelectedShowTooltip = this._selectedProblemShowTooltip
             clearProblemSelection()
+            this._selectedProblemKey = prevSelectedKey
+            this._selectedProblemProgramId = prevSelectedProgramId
+            this._selectedProblemShowTooltip = prevSelectedShowTooltip
+            clearHoverHighlight()
+            let activeHoverEntry = null
+            this._problemsByHoverKey = new Map()
+            this._hoveredProblemKey = null
 
             if (problemsTab) {
                 const countEl = problemsTab.querySelector('.plc-console-tab-count')
@@ -298,7 +374,8 @@ export default class WindowManager {
                 checking.className = 'plc-problems-status'
                 checking.textContent = 'Checking for problems ...'
                 problemsBody.appendChild(checking)
-                clearActiveProblemHighlight()
+                clearHoverHighlight()
+                clearSelectedHighlight({ hideTooltip: true })
                 return
             }
 
@@ -307,7 +384,8 @@ export default class WindowManager {
                 empty.className = 'plc-problems-status'
                 empty.textContent = 'No problems detected'
                 problemsBody.appendChild(empty)
-                clearActiveProblemHighlight()
+                clearHoverHighlight()
+                clearSelectedHighlight({ hideTooltip: true })
                 return
             }
 
@@ -392,40 +470,138 @@ export default class WindowManager {
 
                     const entryKey = `${problem.blockId || 'unknown'}:${problem.start || 0}:${problem.message || ''}:${problem.token || ''}`
                     const showProblem = (opts = {}) => {
-                        const { showTooltip = false, scroll = false } = opts
-                        if (this._activeProblemHighlight?.editor?.setHoverHighlight) {
-                            this._activeProblemHighlight.editor.setHoverHighlight(null)
-                        }
-                        if (this._activeProblemHighlight?.editor?.showLintTooltip) {
-                            this._activeProblemHighlight.editor.showLintTooltip(null)
+                        const normalized = typeof opts === 'object' && opts ? opts : { showTooltip: !!opts }
+                        const { showTooltip = false, focus = false, mode = 'hover' } = normalized
+                        const isSelected = mode === 'selected'
+
+                        if (!isSelected) {
+                            clearHoverHighlight()
+                        } else {
+                            clearSelectedHighlight({ hideTooltip: !showTooltip })
                         }
 
-                        if (!problem.blockId || typeof problem.start !== 'number' || typeof problem.end !== 'number') return
-                        const programs = this.#editor?._getLintPrograms?.() || []
-                        let targetBlock = null
-                        for (const program of programs) {
-                            const found = program?.blocks?.find(b => b.id === problem.blockId)
-                            if (found) {
-                                targetBlock = found
-                                break
+                        const run = async () => {
+                            if (!problem.blockId || typeof problem.start !== 'number' || typeof problem.end !== 'number') return
+                            const findTarget = () => {
+                                const programs = this.#editor?._getLintPrograms?.() || []
+                                for (const program of programs) {
+                                    const found = program?.blocks?.find(b => b.id === problem.blockId)
+                                    if (found) return { program, block: found }
+                                }
+                                return { program: null, block: null }
+                            }
+                            const waitForLayout = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+                            const waitForVisible = async block => {
+                                for (let i = 0; i < 6; i++) {
+                                    if (block?.div) {
+                                        const rect = block.div.getBoundingClientRect()
+                                        if (rect.width > 0 && rect.height > 0) return true
+                                    }
+                                    await waitForLayout()
+                                }
+                                return false
+                            }
+                            const waitForEditor = async block => {
+                                for (let i = 0; i < 6; i++) {
+                                    if (block?.props?.text_editor) return block.props.text_editor
+                                    await waitForLayout()
+                                }
+                                return block?.props?.text_editor || null
+                            }
+                            const scrollBlockIntoView = (blockDiv, ratio = 0.33) => {
+                                if (!blockDiv) return
+                                const body = blockDiv.closest('.plc-editor-body')
+                                if (!body) return
+                                const bodyRect = body.getBoundingClientRect()
+                                const blockRect = blockDiv.getBoundingClientRect()
+                                const blockTop = blockRect.top - bodyRect.top + body.scrollTop
+                                const targetTop = Math.max(0, blockTop - body.clientHeight * ratio)
+                                if (Math.abs(body.scrollTop - targetTop) > 1) {
+                                    body.scrollTop = targetTop
+                                }
+                                const nextBlockRect = blockDiv.getBoundingClientRect()
+                                if (nextBlockRect.top < bodyRect.top || nextBlockRect.bottom > bodyRect.bottom) {
+                                    blockDiv.scrollIntoView({ block: 'center' })
+                                }
+                            }
+                            const expandBlock = block => {
+                                if (!block?.div) return
+                                if (!block.div.classList.contains('minimized')) return
+                                block.div.classList.remove('minimized')
+                                block.minimized = false
+                                const minimizeBtn = block.div.querySelector('.menu-button.minimize')
+                                if (minimizeBtn) minimizeBtn.innerText = '-'
+                            }
+                            const scrollBodyToCode = (blockDiv, codeEditor, index, ratio = 0.33) => {
+                                if (!blockDiv || !codeEditor || typeof codeEditor.getCodePosition !== 'function') return
+                                const body = blockDiv.closest('.plc-editor-body')
+                                if (!body) return
+                                const bodyRect = body.getBoundingClientRect()
+                                const pos = codeEditor.getCodePosition(index)
+                                const delta = pos.viewportY - bodyRect.top
+                                const targetTop = Math.max(0, body.scrollTop + delta - body.clientHeight * ratio)
+                                if (Math.abs(body.scrollTop - targetTop) > 1) {
+                                    body.scrollTop = targetTop
+                                }
+                            }
+
+                            let { program: targetProgram, block: targetBlock } = findTarget()
+                            if (!targetBlock) return
+
+                            if (focus && targetProgram?.id) {
+                                this.openProgram(targetProgram.id)
+                                await waitForLayout()
+                                ;({ program: targetProgram, block: targetBlock } = findTarget())
+                                if (!targetBlock) return
+                                expandBlock(targetBlock)
+                                await waitForLayout()
+                            }
+
+                            if (!targetBlock?.div) return
+                            if (!focus && targetBlock.div.classList.contains('minimized')) return
+                            if (focus) expandBlock(targetBlock)
+
+                            await waitForVisible(targetBlock)
+
+                            if (focus) {
+                                scrollBlockIntoView(targetBlock.div, 0.33)
+                                await waitForLayout()
+                            }
+
+                            const editor = await waitForEditor(targetBlock)
+                            if (!editor) return
+
+                            const range = { start: problem.start, end: problem.end }
+                            if (focus && typeof editor.revealRange === 'function') {
+                                editor.revealRange(range, {
+                                    ratio: 0.33,
+                                    showTooltip: !!showTooltip,
+                                    highlight: !isSelected,
+                                    tooltipHighlight: !isSelected
+                                })
+                                await waitForLayout()
+                                scrollBodyToCode(targetBlock.div, editor, problem.start, 0.33)
+                            } else {
+                                if (!isSelected && typeof editor.setHoverHighlight === 'function') {
+                                    editor.setHoverHighlight(range)
+                                }
+                                if (isSelected && typeof editor.setSelectedHighlight === 'function') {
+                                    editor.setSelectedHighlight(range)
+                                }
+                                if (showTooltip && typeof editor.showLintTooltip === 'function') {
+                                    editor.showLintTooltip(range, { highlight: !isSelected })
+                                }
+                            }
+
+                            if (isSelected && typeof editor.setSelectedHighlight === 'function') {
+                                editor.setSelectedHighlight(range)
+                                this._selectedProblemHighlight = { editor }
+                            } else if (!isSelected && typeof editor.setHoverHighlight === 'function') {
+                                this._activeProblemHover = { editor }
                             }
                         }
-                        if (!targetBlock || !targetBlock.div) return
-                        if (targetBlock.div.classList.contains('minimized')) return
-                        const editor = targetBlock.props?.text_editor
-                        if (!editor || typeof editor.setHoverHighlight !== 'function') return
-                        if (scroll && typeof editor.revealRange === 'function') {
-                            editor.revealRange(
-                                { start: problem.start, end: problem.end },
-                                { ratio: 0.33, showTooltip: !!showTooltip, highlight: true }
-                            )
-                        } else {
-                            editor.setHoverHighlight({ start: problem.start, end: problem.end })
-                            if (showTooltip && typeof editor.showLintTooltip === 'function') {
-                                editor.showLintTooltip({ start: problem.start, end: problem.end })
-                            }
-                        }
-                        this._activeProblemHighlight = { editor }
+
+                        run()
                     }
 
                     const ensureGroupOpen = () => {
@@ -441,23 +617,36 @@ export default class WindowManager {
                         element: item,
                         ensureGroupOpen,
                         show: showProblem,
+                        programId: problem.programId || null,
                     }
                     this._problemsFlat.push(entry)
+                    const hoverKey = buildHoverKey(problem.blockId, problem)
+                    if (hoverKey) {
+                        const bucket = this._problemsByHoverKey.get(hoverKey) || []
+                        bucket.push(entry)
+                        this._problemsByHoverKey.set(hoverKey, bucket)
+                    }
 
                     item.addEventListener('mouseenter', () => {
-                        if (this._selectedProblemIndex >= 0) return
-                        showProblem({ showTooltip: true, scroll: false })
+                        activeHoverEntry = entry
+                        showProblem({ showTooltip: true, focus: false, mode: 'hover' })
                     })
 
                     item.addEventListener('mouseleave', () => {
-                        if (this._selectedProblemIndex >= 0) return
-                        if (this._activeProblemHighlight?.editor?.setHoverHighlight) {
-                            this._activeProblemHighlight.editor.setHoverHighlight(null)
+                        if (activeHoverEntry !== entry) return
+                        activeHoverEntry = null
+                        clearHoverHighlight()
+                        if (this._selectedProblemIndex >= 0) {
+                            const selected = this._problemsFlat[this._selectedProblemIndex]
+                            if (selected) {
+                                selected.show({
+                                    showTooltip: this._selectedProblemShowTooltip,
+                                    focus: false,
+                                    mode: 'selected'
+                                })
+                                return
+                            }
                         }
-                        if (this._activeProblemHighlight?.editor?.showLintTooltip) {
-                            this._activeProblemHighlight.editor.showLintTooltip(null)
-                        }
-                        this._activeProblemHighlight = null
                     })
 
                     item.addEventListener('click', () => {
@@ -511,6 +700,10 @@ export default class WindowManager {
                     if (this._selectedProblemIndex >= 0) {
                         applyProblemSelection(this._selectedProblemIndex, { showTooltip: true, keyboard: true })
                     }
+                } else if (key === 'Escape') {
+                    e.preventDefault()
+                    clearProblemSelection()
+                    clearHoverHighlight()
                 }
             })
         }
@@ -716,6 +909,9 @@ export default class WindowManager {
         }
 
         try {
+            if (typeof this.setConsoleTab === 'function') {
+                this.setConsoleTab('output')
+            }
             this.logToConsole('Compiling project...', 'info')
             const startTime = performance.now()
             const result = await this.#editor.project_manager.compile()
@@ -1233,6 +1429,11 @@ export default class WindowManager {
     /** @type { (id: string) => void } */
     closeProgram(id) {
         if (!id) throw new Error('Program ID not found')
+        if (this._selectedProblemProgramId && this._selectedProblemProgramId === id) {
+            if (typeof this.clearProblemSelection === 'function') {
+                this.clearProblemSelection()
+            }
+        }
         // Remove highlight from the tree
         this.#editor.window_manager.removeHighlight()
         

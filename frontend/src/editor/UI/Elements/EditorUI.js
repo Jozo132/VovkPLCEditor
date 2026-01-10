@@ -45,6 +45,13 @@ export default class EditorUI {
         if (!body) throw new Error('Body not found')
         this.header = header
         this.body = body
+        this._lastBodyScrollTop = 0
+        this.body.addEventListener('scroll', () => {
+            this._lastBodyScrollTop = this.body.scrollTop
+            if (this.program) {
+                this.program.scrollTop = this.body.scrollTop
+            }
+        })
         content.forEach(c => div.appendChild(c))
         this.master.context_manager.addListener({
             target: this.div,
@@ -269,6 +276,8 @@ export default class EditorUI {
             
             this.#drawProgramBlock(block)
         })
+
+        requestAnimationFrame(() => this.restoreBodyScroll())
     }
 
     async editBlock(index) {
@@ -566,6 +575,16 @@ export default class EditorUI {
         block_container.innerHTML = '<div class="TODO"></div>'
     }
 
+    restoreBodyScroll() {
+        if (!this.body) return
+        const top = (this.program && typeof this.program.scrollTop === 'number')
+            ? this.program.scrollTop
+            : this._lastBodyScrollTop
+        if (typeof top === 'number') {
+            this.body.scrollTop = top
+        }
+    }
+
     hide() {
         this.hidden = true
         this.div.classList.add('hidden')
@@ -573,6 +592,7 @@ export default class EditorUI {
     show() {
         this.hidden = false
         this.div.classList.remove('hidden')
+        requestAnimationFrame(() => this.restoreBodyScroll())
     }
 
     close() {

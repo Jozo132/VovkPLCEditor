@@ -763,6 +763,19 @@ ul {
     background: #37373d;
 }
 
+.plc-problems-item.linked {
+    background: #2f3b4b;
+}
+
+.plc-problems-item.linked:hover {
+    background: #344155;
+}
+
+.plc-problems-item.linked.selected,
+.plc-problems-item.linked.selected:hover {
+    background: #404857;
+}
+
 /* Footer buttons hover/active effects */
 .footer-btn {
     border-radius: 3px;
