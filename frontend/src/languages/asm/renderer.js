@@ -87,6 +87,10 @@ export const ladderRenderer = {
             }
             return null
         },
+        lintProvider: async () => {
+            if (!block.id || !editor.lintBlock) return []
+            return await editor.lintBlock(block.id)
+        },
         onChange: (value) => {
           block.code = value
           updateBlockSize()

@@ -54,7 +54,7 @@ export class MiniCodeEditor {
 .kw{color:#c586c0}.num{color:#b5cea8}.str{color:#ce9178}.cmt{color:#6a9955}.live{color:#0f0;opacity:.8}
 .type-keyword{color:#569cd6}.variable{color:#9cdcfe}.function{color:#dcdcaa}.dt{color:#4ec9b0}
 .dot{color:#fff}
-.mce-marker { position: absolute; pointer-events: auto; z-index: 5; color: transparent !important; }
+.mce-marker { position: absolute; pointer-events: none; z-index: 5; color: transparent !important; }
 .mce-marker.err { text-decoration: underline wavy #f48771; }
 .mce-marker.warn { text-decoration: underline wavy #cca700; }
 .mce-marker:hover::after {
@@ -64,7 +64,7 @@ export class MiniCodeEditor {
     padding: 4px 8px; font-size: 12px; white-space: nowrap; z-index: 10;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none;
 }
-.mce-hover{position:fixed;background:#252526;border:1px solid #454545;box-shadow:0 4px 8px rgba(0,0,0,0.4);color:#ccc;font-size:13px;z-index:100000;padding:0;max-width:400px;display:none;font-family:var(--f,monospace);line-height:1.4}
+.mce-hover{position:fixed;background:#252526;border:1px solid #454545;box-shadow:0 4px 8px rgba(0,0,0,0.4);color:#ccc;font-size:13px;z-index:100000;padding:0;max-width:400px;display:none;font-family:var(--f,monospace);line-height:1.4;pointer-events:none}
 .mce-hover-def{font-family:monospace;border-bottom:1px solid #454545;padding:6px 10px;background:#1e1e1e;color:#b4b4b4;font-weight:600}
 .mce-hover-desc{padding:8px 10px 4px 10px;}
 .mce-hover-ex{padding:4px 10px 8px 10px;font-family:monospace;font-size:0.9em;color:#ce9178;white-space:pre-wrap}
@@ -104,9 +104,73 @@ export class MiniCodeEditor {
         this._hint = hint
         this._hov = hov
 
+        let lintHoverVisible = false
         const hideHover = () => {
              hov.style.display = 'none'
              hov.innerHTML = ''
+             lintHoverVisible = false
+        }
+
+        let lintDiagnostics = []
+        let lintHoverActive = false
+
+        const positionHover = (x, y, preferAbove = false) => {
+             let left = x + 10
+             let top = y + 10
+             
+             hov.style.left = left + 'px'
+             hov.style.top = top + 'px'
+             
+             const box = hov.getBoundingClientRect()
+             const winW = window.innerWidth
+             const winH = window.innerHeight
+             
+             if (box.right > winW) left = x - box.width - 10
+             if (left < 0) left = 0
+             
+             if (preferAbove) {
+                 top = y - box.height - 6
+                 if (top < 0) top = y + 10
+             } else if (box.bottom > winH) {
+                 top = y - box.height - 10
+             }
+             if (top < 0) top = 0
+             
+             hov.style.left = left + 'px'
+             hov.style.top = top + 'px'
+        }
+        
+        const showLintHover = (lint, x, y, caretIndex = null) => {
+            const total = lintDiagnostics.length
+            const idx = lintDiagnostics.indexOf(lint)
+            const indexLabel = idx >= 0 && total > 0 ? ` (${idx + 1}/${total})` : ''
+            const label = lint.type === 'warning' ? 'Lint Warning' : lint.type === 'info' ? 'Lint Info' : 'Lint Error'
+             
+             hov.innerHTML = ''
+             const header = document.createElement('div')
+             header.className = 'mce-hover-def'
+             header.textContent = label + indexLabel
+             hov.appendChild(header)
+             
+             if (lint.message) {
+                 const desc = document.createElement('div')
+                 desc.className = 'mce-hover-desc'
+                 desc.textContent = lint.message
+                 hov.appendChild(desc)
+             }
+             
+             hov.style.display = 'block'
+             lintHoverVisible = true
+             if (typeof caretIndex === 'number') {
+                 const safeIndex = Math.max(0, Math.min(caretIndex, ta.value.length))
+                 const p = caretPx(safeIndex)
+                 const r = ta.getBoundingClientRect()
+                 const left = r.left + p.x - ta.scrollLeft
+                 const top = r.top + p.y - ta.scrollTop
+                 positionHover(left, top, true)
+             } else {
+                 positionHover(x, y, true)
+             }
         }
         
         // Font measuring for hover calculations
@@ -138,9 +202,67 @@ export class MiniCodeEditor {
 
         // Hover Handlers
         let hoverTimer = null
+        const getHoverInfo = (x, y) => {
+             const r = ta.getBoundingClientRect()
+             const style = getComputedStyle(ta)
+             const tm = measureText()
+             const lh = tm.h
+
+             const pl = parseFloat(style.paddingLeft) + (parseFloat(style.borderLeftWidth) || 0)
+             const pt = parseFloat(style.paddingTop) + (parseFloat(style.borderTopWidth) || 0)
+
+             if (x < r.left || x > r.right || y < r.top || y > r.bottom) return null
+
+             const relY = y - r.top - pt + ta.scrollTop
+             const relX = x - r.left - pl + ta.scrollLeft
+             if (relY < 0) return null
+
+             const row = Math.floor(relY / lh)
+             const lines = ta.value.split('\n')
+             if (row < 0 || row >= lines.length) return null
+
+             const line = lines[row]
+             if (line === undefined) return null
+
+             const cw = tm.w
+             let currX = 0
+             let idx = 0
+             let found = false
+             for (let i = 0; i < line.length; i++) {
+                 const w = (line[i] === '\t' ? 4 : 1) * cw
+                 if (relX >= currX && relX < currX + w) {
+                     idx = i
+                     found = true
+                     break
+                 }
+                 currX += w
+             }
+             if (!found && relX > currX) return null
+
+             let lineStart = 0
+             for (let i = 0; i < row; i++) lineStart += lines[i].length + 1
+             const offset = lineStart + idx
+
+             return { offset, row, idx, lines, line, relX, relY }
+        }
+
+        const tryShowLintHoverAt = (x, y) => {
+             if (!lintDiagnostics.length) return false
+             const info = getHoverInfo(x, y)
+             if (!info) return false
+             const lintHit = lintDiagnostics.find(d => info.offset >= d.start && info.offset < d.end)
+             if (!lintHit) return false
+             const caretIndex = typeof lintHit.start === 'number' ? lintHit.start : info.offset
+             showLintHover(lintHit, x, y, caretIndex)
+             return true
+        }
+
         const handleHover = (e) => {
              if (hoverTimer) clearTimeout(hoverTimer)
-             if (!lang.definitions) return
+             if (lintHoverActive) return
+             if (tryShowLintHoverAt(e.clientX, e.clientY)) return
+             if (lintHoverVisible) hideHover()
+             if (!lang.definitions && !o.hoverProvider) return
              
              hoverTimer = setTimeout(() => {
                  showHover(e.clientX, e.clientY)
@@ -194,6 +316,18 @@ export class MiniCodeEditor {
              if (!found && relX > currX) {
                  // Cursor past end of line
                  return hideHover()
+             }
+
+             if (lintDiagnostics.length) {
+                 let lineStart = 0
+                 for (let i = 0; i < row; i++) lineStart += lines[i].length + 1
+                 const offset = lineStart + idx
+                 const lintHit = lintDiagnostics.find(d => offset >= d.start && offset < d.end)
+                 if (lintHit) {
+                     const caretIndex = typeof lintHit.start === 'number' ? lintHit.start : offset
+                     showLintHover(lintHit, x, y, caretIndex)
+                     return
+                 }
              }
              
              // Find word boundaries
@@ -292,16 +426,7 @@ export class MiniCodeEditor {
                  // hov is fixed
                  
                  // Smart positioning (avoid offscreen)
-                 hov.style.left = (x + 10) + 'px'
-                 hov.style.top = (y + 10) + 'px'
-                 
-                 // Adjust if close to edge
-                 const box = hov.getBoundingClientRect()
-                 const winW = window.innerWidth
-                 const winH = window.innerHeight
-                 
-                 if (box.right > winW) hov.style.left = (x - box.width - 10) + 'px'
-                 if (box.bottom > winH) hov.style.top = (y - box.height - 10) + 'px'
+                 positionHover(x, y)
 
              } else {
                  hideHover()
@@ -386,15 +511,30 @@ export class MiniCodeEditor {
         const renderMarkers = (diagnostics) => {
             markers.forEach(m => m.remove())
             markers.length = 0
+            lintDiagnostics = Array.isArray(diagnostics) ? diagnostics : []
+            lintHoverActive = false
+
+            if (!ta.value.length) return
     
-            diagnostics.forEach(d => {
-                const p = caretPx(d.start)
-                const p2 = caretPx(d.end)
+            lintDiagnostics.forEach((d, idx) => {
+                const rawStart = typeof d.start === 'number' ? d.start : 0
+                const rawEnd = typeof d.end === 'number' ? d.end : rawStart + 1
+                const maxLen = ta.value.length
+                const start = Math.max(0, Math.min(rawStart, maxLen))
+                let end = Math.max(start + 1, Math.min(rawEnd, maxLen))
+                if (end <= start) end = Math.min(maxLen, start + 1)
+
+                const p = caretPx(start)
+                const p2 = caretPx(end)
                 
                 const m = document.createElement('div')
                 m.className = `mce-marker ${d.type === 'error' ? 'err' : 'warn'}`
-                m.dataset.msg = d.message
-                m.style.left = (p.x + LN_W) + 'px'
+                const total = lintDiagnostics.length
+                const typeLabel = d.type === 'warning' ? 'Warning' : d.type === 'info' ? 'Info' : 'Error'
+                const indexLabel = total > 0 ? ` ${idx + 1}/${total}` : ''
+                const message = d.message || ''
+                m.dataset.msg = `${typeLabel}${indexLabel}: ${message}`.trim()
+                m.style.left = p.x + 'px'
                 m.style.top = p.y + 'px'
                 m.style.height = p.h + 'px'
                 
@@ -403,7 +543,15 @@ export class MiniCodeEditor {
                 } else {
                      m.style.width = '100px'
                 }
-                m.textContent = ta.value.slice(d.start, d.end)
+                m.textContent = ta.value.slice(start, end)
+
+                m.addEventListener('mouseenter', () => {
+                    lintHoverActive = true
+                    hideHover()
+                })
+                m.addEventListener('mouseleave', () => {
+                    lintHoverActive = false
+                })
                 
                 ov.appendChild(m)
                 markers.push(m)
@@ -482,13 +630,13 @@ export class MiniCodeEditor {
         let lintTimer = null
         const triggerLint = () => {
             if (lintTimer) clearTimeout(lintTimer)
-            lintTimer = setTimeout(runLint, 500)
+            lintTimer = setTimeout(runLint, 200)
         }
 
         /* live overlay */
         let live = o.liveProvider || (() => undefined)
         const overlay = () => {
-            ov.innerHTML = ''
+            ov.querySelectorAll('.live').forEach(node => node.remove())
             const re = /\b([A-Za-z_]\w*)\b/g
             let mx
             while ((mx = re.exec(ta.value))) {
@@ -498,7 +646,7 @@ export class MiniCodeEditor {
                 const s = document.createElement('span')
                 s.className = 'live'
                 s.textContent = ' = ' + val
-                s.style.cssText = `position:absolute;left:${p.x + LN_W + 6}px;top:${p.y}px`
+                s.style.cssText = `position:absolute;left:${p.x + 6}px;top:${p.y}px`
                 ov.appendChild(s)
             }
         }
@@ -886,6 +1034,10 @@ export class MiniCodeEditor {
         }
 
         /* Public API */
+        this.setDiagnostics = (diagnostics = []) => {
+            renderMarkers(diagnostics)
+            if (o.onDiagnosticsChange) o.onDiagnosticsChange(diagnostics)
+        }
         this.getValue = () => ta.value
         this.setValue = v => {
             const sl = ta.scrollLeft,

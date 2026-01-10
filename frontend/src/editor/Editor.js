@@ -27,6 +27,12 @@ export class VovkPLCEditor {
     /** @type { VovkPLCWorker } */
     runtime
     runtime_ready = false
+    _lint_state = {
+        assembly: '',
+        diagnosticsByBlock: new Map(),
+        inFlight: null,
+        runId: 0,
+    }
 
     /** @type {Object | null} */
     initial_program = null
@@ -232,6 +238,160 @@ export class VovkPLCEditor {
             // @ts-ignore
             throw new Error(`Invalid child type: ${file.type}`)
         })
+    }
+
+    _getLintPrograms() {
+        const treeRoot = this.window_manager?.tree_manager?.root
+        if (Array.isArray(treeRoot) && treeRoot.length) {
+            const programs = treeRoot
+                .filter(node => node.type === 'file' && node.item?.item?.type === 'program')
+                .map(node => node.item.item)
+            if (programs.length) return programs
+        }
+        return (this.project?.files || []).filter(file => file.type === 'program')
+    }
+
+    _buildLintAssembly() {
+        /** @type {{ block: any, code: string, codeStart: number, codeEnd: number }[]} */
+        const blocks = []
+        let assembly = ''
+        const programs = this._getLintPrograms()
+        if (!programs.length) return { assembly, blocks }
+
+        programs.forEach(file => {
+            if (!file.blocks) return
+            file.blocks.forEach(block => {
+                if (block.type !== 'asm') return
+                if (!block.id) block.id = this._generateID(block.id)
+
+                const header = `# block:${block.id}\n`
+                assembly += header
+                const codeStart = assembly.length
+                const code = block.code || ''
+                assembly += code
+                const codeEnd = assembly.length
+
+                if (!assembly.endsWith('\n')) assembly += '\n'
+
+                blocks.push({ block, code, codeStart, codeEnd })
+            })
+        })
+
+        return { assembly, blocks }
+    }
+
+    _applyLintDiagnostics(blocks, diagnosticsByBlock) {
+        blocks.forEach(({ block }) => {
+            const editor = block.props?.text_editor
+            if (editor && typeof editor.setDiagnostics === 'function') {
+                editor.setDiagnostics(diagnosticsByBlock.get(block.id) || [])
+            }
+        })
+    }
+
+    async lintProject() {
+        const { assembly, blocks } = this._buildLintAssembly()
+        const emptyByBlock = new Map()
+        blocks.forEach(({ block }) => emptyByBlock.set(block.id, []))
+
+        if (!this.runtime_ready || !this.runtime || typeof this.runtime.lint !== 'function') {
+            this._lint_state = { assembly, diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0 }
+            this._applyLintDiagnostics(blocks, emptyByBlock)
+            return this._lint_state
+        }
+
+        if (!assembly.trim()) {
+            this._lint_state = { assembly, diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0 }
+            this._applyLintDiagnostics(blocks, emptyByBlock)
+            return this._lint_state
+        }
+
+        if (this._lint_state.assembly === assembly && this._lint_state.diagnosticsByBlock) {
+            this._applyLintDiagnostics(blocks, this._lint_state.diagnosticsByBlock)
+            return this._lint_state
+        }
+
+        if (this._lint_state.inFlight && this._lint_state.inFlight.assembly === assembly) {
+            return await this._lint_state.inFlight.promise
+        }
+
+        const runId = (this._lint_state.runId || 0) + 1
+        this._lint_state.runId = runId
+
+        const promise = (async () => {
+            let problems = []
+            try {
+                problems = await this.runtime.lint(assembly)
+            } catch (e) {
+                console.error('Lint failed', e)
+            }
+
+            const diagnosticsByBlock = new Map()
+            blocks.forEach(({ block }) => diagnosticsByBlock.set(block.id, []))
+
+            if (problems && problems.length) {
+                const lineStarts = [0]
+                for (let i = 0; i < assembly.length; i++) {
+                    if (assembly[i] === '\n') lineStarts.push(i + 1)
+                }
+
+                const toOffset = (line, column) => {
+                    const lineIndex = Math.max(0, (line || 1) - 1)
+                    const lineStart = lineStarts[lineIndex] ?? 0
+                    const colIndex = Math.max(0, (column || 1) - 1)
+                    return lineStart + colIndex
+                }
+
+                problems.forEach(problem => {
+                    const length = Math.max(problem.length || problem.token_text?.length || 1, 1)
+                    const start = toOffset(problem.line, problem.column)
+                    const end = start + length
+
+                    let target = null
+                    for (const info of blocks) {
+                        if (start >= info.codeStart && start <= info.codeEnd) {
+                            target = info
+                            break
+                        }
+                    }
+                    if (!target) return
+
+                    const localStart = Math.max(0, start - target.codeStart)
+                    let localEnd = Math.min(target.code.length, end - target.codeStart)
+                    if (localEnd <= localStart) {
+                        localEnd = Math.min(target.code.length, localStart + 1)
+                    }
+
+                    const list = diagnosticsByBlock.get(target.block.id)
+                    if (list) {
+                        list.push({
+                            type: problem.type || 'error',
+                            start: localStart,
+                            end: localEnd,
+                            message: problem.message || 'Lint error',
+                        })
+                    }
+                })
+            }
+
+            if (this._lint_state.runId !== runId) return this._lint_state
+
+            this._lint_state = { assembly, diagnosticsByBlock, inFlight: null, runId }
+            this._applyLintDiagnostics(blocks, diagnosticsByBlock)
+            return this._lint_state
+        })()
+
+        this._lint_state.inFlight = { assembly, promise }
+        const state = await promise
+        if (this._lint_state.inFlight?.promise === promise) {
+            this._lint_state.inFlight = null
+        }
+        return state
+    }
+
+    async lintBlock(blockId) {
+        const state = await this.lintProject()
+        return state.diagnosticsByBlock?.get(blockId) || []
     }
 
     _generateID(id = '') {
