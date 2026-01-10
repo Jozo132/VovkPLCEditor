@@ -252,7 +252,7 @@ export class VovkPLCEditor {
     }
 
     _buildLintAssembly() {
-        /** @type {{ block: any, code: string, codeStart: number, codeEnd: number }[]} */
+        /** @type {{ block: any, code: string, codeStart: number, codeEnd: number, program: any }[]} */
         const blocks = []
         let assembly = ''
         const programs = this._getLintPrograms()
@@ -273,7 +273,7 @@ export class VovkPLCEditor {
 
                 if (!assembly.endsWith('\n')) assembly += '\n'
 
-                blocks.push({ block, code, codeStart, codeEnd })
+                blocks.push({ block, code, codeStart, codeEnd, program: file })
             })
         })
 
@@ -297,12 +297,18 @@ export class VovkPLCEditor {
         if (!this.runtime_ready || !this.runtime || typeof this.runtime.lint !== 'function') {
             this._lint_state = { assembly, diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0 }
             this._applyLintDiagnostics(blocks, emptyByBlock)
+            if (this.window_manager?.setConsoleProblems) {
+                this.window_manager.setConsoleProblems([])
+            }
             return this._lint_state
         }
 
         if (!assembly.trim()) {
             this._lint_state = { assembly, diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0 }
             this._applyLintDiagnostics(blocks, emptyByBlock)
+            if (this.window_manager?.setConsoleProblems) {
+                this.window_manager.setConsoleProblems([])
+            }
             return this._lint_state
         }
 
@@ -318,6 +324,10 @@ export class VovkPLCEditor {
         const runId = (this._lint_state.runId || 0) + 1
         this._lint_state.runId = runId
 
+        if (this.window_manager?.setConsoleProblems) {
+            this.window_manager.setConsoleProblems({ status: 'checking' })
+        }
+
         const promise = (async () => {
             let problems = []
             try {
@@ -327,6 +337,7 @@ export class VovkPLCEditor {
             }
 
             const diagnosticsByBlock = new Map()
+            const problemsList = []
             blocks.forEach(({ block }) => diagnosticsByBlock.set(block.id, []))
 
             if (problems && problems.length) {
@@ -371,6 +382,24 @@ export class VovkPLCEditor {
                             message: problem.message || 'Lint error',
                         })
                     }
+
+                    const before = target.code.slice(0, localStart)
+                    const localLine = before.split('\n').length
+                    const lastNl = before.lastIndexOf('\n')
+                    const localColumn = localStart - (lastNl === -1 ? -1 : lastNl)
+                    problemsList.push({
+                        type: problem.type || 'error',
+                        message: problem.message || 'Lint error',
+                        token: problem.token_text || '',
+                        line: localLine,
+                        column: localColumn,
+                        start: localStart,
+                        end: localEnd,
+                        blockId: target.block.id,
+                        blockName: target.block.name || '',
+                        programName: target.program?.name || '',
+                        programPath: target.program?.full_path || target.program?.path || '',
+                    })
                 })
             }
 
@@ -378,6 +407,9 @@ export class VovkPLCEditor {
 
             this._lint_state = { assembly, diagnosticsByBlock, inFlight: null, runId }
             this._applyLintDiagnostics(blocks, diagnosticsByBlock)
+            if (this.window_manager?.setConsoleProblems) {
+                this.window_manager.setConsoleProblems(problemsList)
+            }
             return this._lint_state
         })()
 

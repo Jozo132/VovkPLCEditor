@@ -27,7 +27,7 @@ export class MiniCodeEditor {
         if (!document.getElementById('mce-css')) {
             const s = document.createElement('style')
             s.id = 'mce-css'
-            s.textContent = `.mce{width:100%;height:100%;font:var(--f,14px/1.4 monospace);background:#282828}
+            s.textContent = `.mce{width:100%;height:100%;font:var(--f,14px/1.4 monospace);background:#282828;overflow:hidden}
 .mce>textarea,.mce>pre{position:absolute;top:0;bottom:0;width:100%;margin:0;border:0;resize:none;outline:0;font:inherit;white-space:pre;overflow:auto;box-sizing:border-box;tab-size:4;-moz-tab-size:4}
 .mce>textarea{background:none;color:transparent;caret-color:#fff;padding:8px 8px 8px calc(${LN_W}px + 8px)}
 .mce>textarea::selection,.mce>textarea::-moz-selection{color:transparent;background:rgba(0,0,0,.25)}
@@ -54,9 +54,11 @@ export class MiniCodeEditor {
 .kw{color:#c586c0}.num{color:#b5cea8}.str{color:#ce9178}.cmt{color:#6a9955}.live{color:#0f0;opacity:.8}
 .type-keyword{color:#569cd6}.variable{color:#9cdcfe}.function{color:#dcdcaa}.dt{color:#4ec9b0}
 .dot{color:#fff}
+.mce>div.overlay{position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;pointer-events:none;z-index:4}
 .mce-marker { position: absolute; pointer-events: none; z-index: 5; color: transparent !important; }
 .mce-marker.err { text-decoration: underline wavy #f48771; }
 .mce-marker.warn { text-decoration: underline wavy #cca700; }
+.mce-hover-highlight { position: absolute; pointer-events: none; z-index: 4; background: rgba(216, 90, 112, 0.3); border-radius: 2px; }
 .mce-marker:hover::after {
     content: attr(data-msg);
     position: absolute; bottom: 100%; left: 0;
@@ -86,6 +88,7 @@ export class MiniCodeEditor {
             hov = document.body.appendChild(document.createElement('div'))
         
         hov.className = 'mce-hover'
+        ov.className = 'overlay'
         ln.className = 'ln'
         pr.className = 'code'
         ac.className = 'ac hide'
@@ -104,11 +107,54 @@ export class MiniCodeEditor {
         this._hint = hint
         this._hov = hov
 
+        const hoverHighlights = []
+        const clearHoverHighlight = () => {
+            hoverHighlights.forEach(h => h.remove())
+            hoverHighlights.length = 0
+        }
+        const renderHoverHighlight = (range) => {
+            clearHoverHighlight()
+            if (!range || typeof range.start !== 'number' || typeof range.end !== 'number') return
+            const text = ta.value || ''
+            if (!text.length) return
+
+            const maxLen = text.length
+            let start = Math.max(0, Math.min(range.start, maxLen))
+            let end = Math.max(start + 1, Math.min(range.end, maxLen))
+            if (end <= start) end = Math.min(maxLen, start + 1)
+
+            let offset = 0
+            const lines = text.split('\n')
+            for (let i = 0; i < lines.length; i++) {
+                const lineStart = offset
+                const lineEnd = offset + lines[i].length
+                if (end <= lineStart) break
+                if (start < lineEnd + 1 && end > lineStart) {
+                    const segStart = Math.max(start, lineStart)
+                    const segEnd = Math.min(end, lineEnd)
+                    if (segEnd > segStart) {
+                        const p = caretPx(segStart)
+                        const p2 = caretPx(segEnd)
+                        const h = document.createElement('div')
+                        h.className = 'mce-hover-highlight'
+                        h.style.left = p.x + 'px'
+                        h.style.top = p.y + 'px'
+                        h.style.height = p.h + 'px'
+                        h.style.width = Math.max(2, p2.x - p.x) + 'px'
+                        ov.insertBefore(h, ov.firstChild)
+                        hoverHighlights.push(h)
+                    }
+                }
+                offset += lines[i].length + 1
+            }
+        }
+
         let lintHoverVisible = false
         const hideHover = () => {
              hov.style.display = 'none'
              hov.innerHTML = ''
              lintHoverVisible = false
+             clearHoverHighlight()
         }
 
         let lintDiagnostics = []
@@ -161,6 +207,7 @@ export class MiniCodeEditor {
              
              hov.style.display = 'block'
              lintHoverVisible = true
+             renderHoverHighlight(lint)
              if (typeof caretIndex === 'number') {
                  const safeIndex = Math.max(0, Math.min(caretIndex, ta.value.length))
                  const p = caretPx(safeIndex)
@@ -1037,6 +1084,67 @@ export class MiniCodeEditor {
         this.setDiagnostics = (diagnostics = []) => {
             renderMarkers(diagnostics)
             if (o.onDiagnosticsChange) o.onDiagnosticsChange(diagnostics)
+        }
+        this.setHoverHighlight = (range) => {
+            if (!range) {
+                clearHoverHighlight()
+                return
+            }
+            renderHoverHighlight(range)
+        }
+        this.getCodePosition = index => {
+            const text = ta.value || ''
+            const maxLen = text.length
+            const safeIndex = Math.max(0, Math.min(index || 0, maxLen))
+            const p = caretPx(safeIndex)
+            const rect = ta.getBoundingClientRect()
+            return {
+                x: p.x,
+                y: p.y,
+                height: p.h,
+                viewportX: rect.left + p.x - ta.scrollLeft,
+                viewportY: rect.top + p.y - ta.scrollTop,
+                scrollTop: ta.scrollTop,
+                scrollLeft: ta.scrollLeft,
+                rect
+            }
+        }
+        this.revealRange = (range, opts = {}) => {
+            if (!range || typeof range.start !== 'number') return false
+            const ratio = typeof opts.ratio === 'number' ? opts.ratio : 0.33
+            const p = caretPx(range.start)
+            const target = Math.max(0, p.y - ta.clientHeight * ratio)
+            ta.scrollTop = target
+            sync()
+            setTimeout(() => {
+                if (opts.highlight !== false) renderHoverHighlight(range)
+                if (opts.showTooltip) this.showLintTooltip(range)
+            }, 0)
+            return true
+        }
+        this.showLintTooltip = (range) => {
+            if (hoverTimer) clearTimeout(hoverTimer)
+            if (!range) {
+                hideHover()
+                return false
+            }
+            if (!lintDiagnostics.length) return false
+
+            const start = typeof range.start === 'number' ? range.start : null
+            const end = typeof range.end === 'number' ? range.end : null
+            if (start === null) return false
+
+            const hit = lintDiagnostics.find(d => start >= d.start && start < d.end)
+                || lintDiagnostics.find(d => end !== null && d.start < end && d.end > start)
+            if (!hit) return false
+
+            const p = caretPx(hit.start)
+            const visibleTop = ta.scrollTop
+            const visibleBottom = ta.scrollTop + ta.clientHeight
+            if (p.y + p.h < visibleTop || p.y > visibleBottom) return false
+
+            showLintHover(hit, 0, 0, hit.start)
+            return true
         }
         this.getValue = () => ta.value
         this.setValue = v => {

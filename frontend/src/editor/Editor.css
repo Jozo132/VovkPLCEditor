@@ -598,6 +598,171 @@ ul {
     display: none;
 }
 
+.plc-console.minimized .plc-console-body {
+    display: none;
+}
+
+.plc-console.tab-problems .plc-console-actions {
+    display: none;
+}
+
+.plc-console-tabs {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.plc-console-tab {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 2px 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.plc-console-tab.active {
+    color: #ddd;
+    border-bottom: 1px solid #4daafc;
+}
+
+.plc-console-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 10px;
+    background: #3c3c3c;
+    color: #ddd;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.plc-console-body.problems {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 4px 0;
+}
+
+.plc-problems-status {
+    color: #9a9a9a;
+    padding: 8px 10px;
+}
+
+.plc-problems-group {
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.plc-problems-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.plc-problems-group-header:hover {
+    background: #2a2d2e;
+}
+
+.plc-problems-group-toggle {
+    color: #bbb;
+    width: 14px;
+    text-align: center;
+    font-size: 12px;
+}
+
+.plc-problems-file-name {
+    color: #ddd;
+    font-weight: 600;
+}
+
+.plc-problems-block-name {
+    color: #ddd;
+    font-weight: 600;
+}
+
+.plc-problems-block-id {
+    color: #888;
+    font-size: 11px;
+}
+
+.plc-problems-file-path {
+    color: #777;
+    font-size: 11px;
+}
+
+.plc-problems-file-count {
+    margin-left: auto;
+    background: #3c3c3c;
+    color: #ddd;
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 11px;
+}
+
+.plc-problems-group-items {
+    padding: 0 10px 6px 24px;
+}
+
+.plc-problems-item {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 3px 0;
+    border-radius: 3px;
+}
+
+.plc-problems-item-icon {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #f48771;
+    flex-shrink: 0;
+}
+
+.plc-problems-item.warning .plc-problems-item-icon {
+    background: #cca700;
+}
+
+.plc-problems-item.info .plc-problems-item-icon {
+    background: #4fc1ff;
+}
+
+.plc-problems-item-message {
+    color: #ddd;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.plc-problems-item-meta {
+    color: #888;
+    font-size: 11px;
+    margin-left: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.plc-problems-item:hover {
+    background: #2a2d2e;
+}
+
+.plc-problems-item.selected {
+    background: #37373d;
+}
+
+.plc-problems-item.selected:hover {
+    background: #37373d;
+}
+
 /* Footer buttons hover/active effects */
 .footer-btn {
     border-radius: 3px;

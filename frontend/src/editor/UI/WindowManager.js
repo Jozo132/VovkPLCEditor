@@ -77,10 +77,16 @@ export default class WindowManager {
                     
                     <div class="resizer-console-top" style="height: 4px; background: #333; cursor: ns-resize; z-index: 10;"></div>
                     
-                    <div class="plc-console minimized" style="height: 0px; min-height: 0px; background: #1e1e1e; border-top: 1px solid #333; display: flex; flex-direction: column;">
+                    <div class="plc-console minimized" style="height: 25px; min-height: 25px; background: #1e1e1e; border-top: 1px solid #333; display: flex; flex-direction: column;">
                         <div class="plc-console-header" style="height: 25px; background: #252526; display: flex; align-items: center; padding: 0 10px; cursor: pointer;">
                             <span class="codicon codicon-chevron-right" style="margin-right: 5px;"></span>
-                            <span style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #ccc;">Output</span>
+                            <div class="plc-console-tabs">
+                                <button class="plc-console-tab active" data-tab="output">Output</button>
+                                <button class="plc-console-tab plc-console-tab-problems" data-tab="problems">
+                                    <span class="plc-console-tab-label">Problems</span>
+                                    <span class="plc-console-tab-count" style="display:none;">0</span>
+                                </button>
+                            </div>
                             <div style="flex: 1;"></div>
                             <div class="plc-console-actions">
                                 <button class="icon-btn clear-console" title="Clear Console" style="background:none; border: 1px solid #444; border-radius: 2px; padding: 0 5px; color:#ccc; cursor:pointer; font-size: 11px;">
@@ -88,8 +94,11 @@ export default class WindowManager {
                                 </button>
                             </div>
                         </div>
-                        <div class="plc-console-body" style="flex: 1; overflow: auto; padding: 5px 10px; font-family: monospace; color: #ddd;">
+                        <div class="plc-console-body output" style="flex: 1; overflow: auto; padding: 5px 10px; font-family: monospace; color: #ddd;">
                             <!-- Console Output -->
+                        </div>
+                        <div class="plc-console-body problems" style="flex: 1; overflow: auto; padding: 5px 10px; font-family: inherit; color: #ddd; display: none;">
+                            <!-- Lint Problems -->
                         </div>
                     </div>
                 </div>
@@ -141,27 +150,395 @@ export default class WindowManager {
 
         const consoleHeader = workspace.querySelector('.plc-console-header')
         const consoleBody = workspace.querySelector('.plc-console')
+        const consoleTabs = workspace.querySelectorAll('.plc-console-tab')
+        const problemsTab = workspace.querySelector('.plc-console-tab-problems')
         const clearConsoleBtn = workspace.querySelector('.clear-console')
         const consoleResizer = workspace.querySelector('.resizer-console-top')
+        const outputBody = workspace.querySelector('.plc-console-body.output')
+        const problemsBody = workspace.querySelector('.plc-console-body.problems')
 
-        consoleBody.style.height = '0px' // Start minimized
+        const consoleHeaderHeight = Math.max(1, Math.round(consoleHeader.getBoundingClientRect().height || 25))
+        consoleBody.style.height = `${consoleHeaderHeight}px` // Start minimized (header visible)
+        consoleBody.style.minHeight = `${consoleHeaderHeight}px`
 
         // Initial console state management
-        let lastHeight = 150
+        this._consoleState = this._consoleState || { activeTab: 'output', lastHeight: 150, minimized: true }
+        const consoleState = this._consoleState
+        consoleState.lastHeight = typeof consoleState.lastHeight === 'number' ? consoleState.lastHeight : 150
+        consoleState.activeTab = consoleState.activeTab === 'problems' ? 'problems' : 'output'
+        consoleState.minimized = typeof consoleState.minimized === 'boolean' ? consoleState.minimized : true
+        let activeConsoleTab = consoleState.activeTab
+        this._problemsFlat = []
+        this._selectedProblemIndex = -1
+        this._selectedProblemKey = null
 
-        consoleHeader.onclick = e => {
-            if (e.target.closest('.plc-console-actions')) return
-            // If visible, minimize it
-            if (!consoleBody.classList.contains('minimized')) {
-                lastHeight = parseInt(getComputedStyle(consoleBody).height, 10)
-                consoleBody.classList.add('minimized')
-                consoleBody.style.height = '0px'
+        const setActiveConsoleTab = tab => {
+            activeConsoleTab = tab === 'problems' ? 'problems' : 'output'
+            consoleState.activeTab = activeConsoleTab
+            if (outputBody) outputBody.style.display = activeConsoleTab === 'output' ? 'block' : 'none'
+            if (problemsBody) problemsBody.style.display = activeConsoleTab === 'problems' ? 'block' : 'none'
+            if (consoleBody) consoleBody.classList.toggle('tab-problems', activeConsoleTab === 'problems')
+            consoleTabs.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === activeConsoleTab)
+            })
+            if (activeConsoleTab === 'problems' && problemsBody) {
+                problemsBody.focus()
             }
         }
 
+        const openConsole = (height, opts = {}) => {
+            if (!consoleBody) return
+            const wasMinimized = consoleBody.classList.contains('minimized')
+            if (!wasMinimized && !opts.force) return
+            consoleBody.classList.remove('minimized')
+            consoleState.minimized = false
+            const nextHeight = typeof height === 'number' && height > consoleHeaderHeight
+                ? height
+                : (consoleState.lastHeight && consoleState.lastHeight > consoleHeaderHeight ? consoleState.lastHeight : 150)
+            consoleState.lastHeight = nextHeight
+            consoleBody.style.height = `${nextHeight}px`
+        }
+
+        const clearActiveProblemHighlight = () => {
+            if (this._activeProblemHighlight?.editor?.setHoverHighlight) {
+                this._activeProblemHighlight.editor.setHoverHighlight(null)
+            }
+            if (this._activeProblemHighlight?.editor?.showLintTooltip) {
+                this._activeProblemHighlight.editor.showLintTooltip(null)
+            }
+            this._activeProblemHighlight = null
+        }
+
+        const clearProblemSelection = () => {
+            if (this._selectedProblemIndex >= 0) {
+                const prev = this._problemsFlat[this._selectedProblemIndex]
+                prev?.element?.classList.remove('selected')
+            }
+            this._selectedProblemIndex = -1
+        }
+
+        const ensureProblemVisible = entry => {
+            if (!entry) return
+            const item = entry.element
+            if (item && item.scrollIntoView) {
+                item.scrollIntoView({ block: 'nearest' })
+            }
+        }
+
+        const applyProblemSelection = (index, opts = {}) => {
+            if (!this._problemsFlat.length) return
+            const max = this._problemsFlat.length - 1
+            const nextIndex = Math.max(0, Math.min(index, max))
+            if (this._selectedProblemIndex === nextIndex) {
+                if (opts.showTooltip) this._problemsFlat[nextIndex].show(opts.showTooltip)
+                return
+            }
+            clearProblemSelection()
+            const entry = this._problemsFlat[nextIndex]
+            if (!entry) return
+            entry.element.classList.add('selected')
+            this._selectedProblemIndex = nextIndex
+            this._selectedProblemKey = entry.key
+            entry.ensureGroupOpen()
+            ensureProblemVisible(entry)
+            entry.show({ showTooltip: !!opts.showTooltip, scroll: true })
+        }
+
+        this.setConsoleTab = setActiveConsoleTab
+        this.openConsole = openConsole
+        this.getConsoleState = () => {
+            if (!consoleBody) return null
+            return {
+                tab: activeConsoleTab,
+                height: consoleState.lastHeight,
+                minimized: consoleBody.classList.contains('minimized'),
+            }
+        }
+        this.setConsoleState = state => {
+            if (!state || !consoleBody) return
+            if (state.tab) setActiveConsoleTab(state.tab)
+            const nextHeight = typeof state.height === 'number' ? state.height : consoleState.lastHeight
+            const isMinimized = typeof state.minimized === 'boolean' ? state.minimized : consoleBody.classList.contains('minimized')
+            if (isMinimized) {
+                if (typeof nextHeight === 'number' && nextHeight > consoleHeaderHeight) {
+                    consoleState.lastHeight = nextHeight
+                }
+                consoleState.minimized = true
+                consoleBody.classList.add('minimized')
+                consoleBody.style.height = `${consoleHeaderHeight}px`
+            } else {
+                openConsole(nextHeight, { force: true })
+            }
+        }
+        this._problemsCollapsed = this._problemsCollapsed || new Set()
+        this.setConsoleProblems = input => {
+            const list = Array.isArray(input) ? input : (input && Array.isArray(input.problems) ? input.problems : [])
+            const status = !Array.isArray(input) && input && input.status ? input.status : 'idle'
+            this._problemsFlat = []
+            clearProblemSelection()
+
+            if (problemsTab) {
+                const countEl = problemsTab.querySelector('.plc-console-tab-count')
+                if (countEl) {
+                    if (list.length) {
+                        countEl.style.display = ''
+                        countEl.textContent = list.length
+                    } else {
+                        countEl.style.display = 'none'
+                        countEl.textContent = '0'
+                    }
+                }
+            }
+
+            if (!problemsBody) return
+            problemsBody.innerHTML = ''
+
+            if (status === 'checking') {
+                const checking = document.createElement('div')
+                checking.className = 'plc-problems-status'
+                checking.textContent = 'Checking for problems ...'
+                problemsBody.appendChild(checking)
+                clearActiveProblemHighlight()
+                return
+            }
+
+            if (!list.length) {
+                const empty = document.createElement('div')
+                empty.className = 'plc-problems-status'
+                empty.textContent = 'No problems detected'
+                problemsBody.appendChild(empty)
+                clearActiveProblemHighlight()
+                return
+            }
+
+            const groups = new Map()
+            list.forEach(problem => {
+                const rawPath = problem.programPath || problem.programName || 'Unknown'
+                const cleanPath = rawPath.startsWith('/') ? rawPath : `/${rawPath}`
+                const pathParts = cleanPath.split('/').filter(Boolean)
+                const fileName = problem.programName || pathParts[pathParts.length - 1] || 'Unknown'
+                const dir = pathParts.length > 1 ? `/${pathParts.slice(0, -1).join('/')}` : '/'
+                const blockId = problem.blockId || 'unknown'
+                const blockName = problem.blockName || `Block ${blockId}`
+                const key = `${cleanPath}::${blockId}`
+
+                if (!groups.has(key)) {
+                    groups.set(key, { fileName, dir, blockId, blockName, key, items: [] })
+                }
+                groups.get(key).items.push(problem)
+            })
+
+            groups.forEach(group => {
+                const groupEl = document.createElement('div')
+                groupEl.className = 'plc-problems-group'
+
+                const header = document.createElement('div')
+                header.className = 'plc-problems-group-header'
+
+                const toggle = document.createElement('span')
+                toggle.className = 'plc-problems-group-toggle'
+
+                const block = document.createElement('span')
+                block.className = 'plc-problems-block-name'
+                block.textContent = group.blockName
+
+                const blockId = document.createElement('span')
+                blockId.className = 'plc-problems-block-id'
+                blockId.textContent = `#${group.blockId}`
+
+                const file = document.createElement('span')
+                file.className = 'plc-problems-file-name'
+                file.textContent = group.fileName
+
+                const dir = document.createElement('span')
+                dir.className = 'plc-problems-file-path'
+                dir.textContent = group.dir
+
+                const count = document.createElement('span')
+                count.className = 'plc-problems-file-count'
+                count.textContent = group.items.length
+
+                header.appendChild(toggle)
+                header.appendChild(block)
+                header.appendChild(blockId)
+                header.appendChild(file)
+                header.appendChild(dir)
+                header.appendChild(count)
+                groupEl.appendChild(header)
+
+                const items = document.createElement('div')
+                items.className = 'plc-problems-group-items'
+
+                group.items.forEach(problem => {
+                    const item = document.createElement('div')
+                    item.className = `plc-problems-item ${problem.type || 'error'}`
+
+                    const icon = document.createElement('span')
+                    icon.className = 'plc-problems-item-icon'
+
+                    const msg = document.createElement('span')
+                    msg.className = 'plc-problems-item-message'
+                    const tokenText = problem.token ? ` "${problem.token}"` : ''
+                    msg.textContent = `${problem.message || 'Lint error'}${tokenText}`
+
+                    const meta = document.createElement('span')
+                    meta.className = 'plc-problems-item-meta'
+                    meta.textContent = `[Ln ${problem.line || 1}, Col ${problem.column || 1}]`
+
+                    item.appendChild(icon)
+                    item.appendChild(msg)
+                    item.appendChild(meta)
+                    items.appendChild(item)
+
+                    const entryKey = `${problem.blockId || 'unknown'}:${problem.start || 0}:${problem.message || ''}:${problem.token || ''}`
+                    const showProblem = (opts = {}) => {
+                        const { showTooltip = false, scroll = false } = opts
+                        if (this._activeProblemHighlight?.editor?.setHoverHighlight) {
+                            this._activeProblemHighlight.editor.setHoverHighlight(null)
+                        }
+                        if (this._activeProblemHighlight?.editor?.showLintTooltip) {
+                            this._activeProblemHighlight.editor.showLintTooltip(null)
+                        }
+
+                        if (!problem.blockId || typeof problem.start !== 'number' || typeof problem.end !== 'number') return
+                        const programs = this.#editor?._getLintPrograms?.() || []
+                        let targetBlock = null
+                        for (const program of programs) {
+                            const found = program?.blocks?.find(b => b.id === problem.blockId)
+                            if (found) {
+                                targetBlock = found
+                                break
+                            }
+                        }
+                        if (!targetBlock || !targetBlock.div) return
+                        if (targetBlock.div.classList.contains('minimized')) return
+                        const editor = targetBlock.props?.text_editor
+                        if (!editor || typeof editor.setHoverHighlight !== 'function') return
+                        if (scroll && typeof editor.revealRange === 'function') {
+                            editor.revealRange(
+                                { start: problem.start, end: problem.end },
+                                { ratio: 0.33, showTooltip: !!showTooltip, highlight: true }
+                            )
+                        } else {
+                            editor.setHoverHighlight({ start: problem.start, end: problem.end })
+                            if (showTooltip && typeof editor.showLintTooltip === 'function') {
+                                editor.showLintTooltip({ start: problem.start, end: problem.end })
+                            }
+                        }
+                        this._activeProblemHighlight = { editor }
+                    }
+
+                    const ensureGroupOpen = () => {
+                        if (this._problemsCollapsed.has(group.key)) {
+                            this._problemsCollapsed.delete(group.key)
+                            items.style.display = 'block'
+                            toggle.textContent = '▾'
+                        }
+                    }
+
+                    const entry = {
+                        key: entryKey,
+                        element: item,
+                        ensureGroupOpen,
+                        show: showProblem,
+                    }
+                    this._problemsFlat.push(entry)
+
+                    item.addEventListener('mouseenter', () => {
+                        if (this._selectedProblemIndex >= 0) return
+                        showProblem({ showTooltip: true, scroll: false })
+                    })
+
+                    item.addEventListener('mouseleave', () => {
+                        if (this._selectedProblemIndex >= 0) return
+                        if (this._activeProblemHighlight?.editor?.setHoverHighlight) {
+                            this._activeProblemHighlight.editor.setHoverHighlight(null)
+                        }
+                        if (this._activeProblemHighlight?.editor?.showLintTooltip) {
+                            this._activeProblemHighlight.editor.showLintTooltip(null)
+                        }
+                        this._activeProblemHighlight = null
+                    })
+
+                    item.addEventListener('click', () => {
+                        applyProblemSelection(this._problemsFlat.indexOf(entry), { showTooltip: true })
+                        if (problemsBody) problemsBody.focus()
+                    })
+                })
+
+                const isCollapsed = this._problemsCollapsed.has(group.key)
+                items.style.display = isCollapsed ? 'none' : 'block'
+                toggle.textContent = isCollapsed ? '▸' : '▾'
+
+                header.addEventListener('click', () => {
+                    const nextCollapsed = !this._problemsCollapsed.has(group.key)
+                    if (nextCollapsed) {
+                        this._problemsCollapsed.add(group.key)
+                        items.style.display = 'none'
+                        toggle.textContent = '▸'
+                    } else {
+                        this._problemsCollapsed.delete(group.key)
+                        items.style.display = 'block'
+                        toggle.textContent = '▾'
+                    }
+                })
+
+                groupEl.appendChild(items)
+                problemsBody.appendChild(groupEl)
+            })
+
+            if (this._selectedProblemKey) {
+                const idx = this._problemsFlat.findIndex(e => e.key === this._selectedProblemKey)
+                if (idx >= 0) applyProblemSelection(idx, { showTooltip: false })
+            } else {
+                clearProblemSelection()
+            }
+        }
+
+        if (problemsBody) {
+            problemsBody.tabIndex = 0
+            problemsBody.addEventListener('keydown', e => {
+                if (activeConsoleTab !== 'problems') return
+                if (!this._problemsFlat.length) return
+                const key = e.key
+                if (key === 'ArrowDown' || key === 'ArrowUp' || key === 'Tab') {
+                    e.preventDefault()
+                    const dir = (key === 'ArrowUp' || (key === 'Tab' && e.shiftKey)) ? -1 : 1
+                    const nextIndex = this._selectedProblemIndex >= 0 ? this._selectedProblemIndex + dir : (dir > 0 ? 0 : this._problemsFlat.length - 1)
+                    applyProblemSelection(nextIndex, { showTooltip: false, keyboard: true })
+                } else if (key === 'Enter') {
+                    e.preventDefault()
+                    if (this._selectedProblemIndex >= 0) {
+                        applyProblemSelection(this._selectedProblemIndex, { showTooltip: true, keyboard: true })
+                    }
+                }
+            })
+        }
+
+        consoleHeader.onclick = e => {
+            if (e.target.closest('.plc-console-actions')) return
+            if (e.target.closest('.plc-console-tab')) return
+            if (consoleBody.classList.contains('minimized')) {
+                openConsole()
+            } else {
+                consoleState.lastHeight = parseInt(getComputedStyle(consoleBody).height, 10)
+                consoleState.minimized = true
+                consoleBody.classList.add('minimized')
+                consoleBody.style.height = `${consoleHeaderHeight}px`
+            }
+        }
+
+        consoleTabs.forEach(tab => {
+            tab.addEventListener('click', e => {
+                e.preventDefault()
+                e.stopPropagation()
+                setActiveConsoleTab(tab.dataset.tab)
+                openConsole()
+            })
+        })
+
         clearConsoleBtn.onclick = () => {
-            const body = workspace.querySelector('.plc-console-body')
-            if (body) body.innerHTML = ''
+            if (outputBody) outputBody.innerHTML = ''
         }
 
         // Console Resizer Logic (Draggable Line)
@@ -183,16 +560,18 @@ export default class WindowManager {
             let newHeight = rect.bottom - e.clientY
 
             // Constraints
-            if (newHeight < 25) newHeight = 0 // Snap to closed if less than header height
+            if (newHeight < consoleHeaderHeight + 2) newHeight = consoleHeaderHeight // Keep header visible
             if (newHeight > rect.height - 100) newHeight = rect.height - 100 // Max height
 
             consoleBody.style.height = newHeight + 'px'
 
-            if (newHeight > 0) {
+            if (newHeight > consoleHeaderHeight) {
                 consoleBody.classList.remove('minimized')
-                lastHeight = newHeight
+                consoleState.lastHeight = newHeight
+                consoleState.minimized = false
             } else {
                 consoleBody.classList.add('minimized')
+                consoleState.minimized = true
             }
         })
 
@@ -276,7 +655,7 @@ export default class WindowManager {
     consoleAutoOpened = false
 
     logToConsole(msg, type = 'info') {
-        const body = this.workspace.querySelector('.plc-console-body')
+        const body = this.workspace.querySelector('.plc-console-body.output')
         if (!body) return
 
         const line = document.createElement('div')
@@ -297,16 +676,21 @@ export default class WindowManager {
         content.innerText = typeof msg === 'string' ? msg : JSON.stringify(msg)
 
         const consoleEl = this.workspace.querySelector('.plc-console')
-        const openConsole = () => {
-            if (consoleEl && consoleEl.classList.contains('minimized')) {
-                consoleEl.classList.remove('minimized')
-                consoleEl.style.height = '240px'
+        const openConsole = height => {
+            if (typeof this.openConsole === 'function') {
+                this.openConsole(height)
+                return
+            }
+            if (!consoleEl) return
+            consoleEl.classList.remove('minimized')
+            if (typeof height === 'number') {
+                consoleEl.style.height = `${height}px`
             }
         }
 
         if (type === 'error') {
             content.style.color = '#f48771'
-            openConsole()
+            openConsole(240)
         } else if (type === 'success') {
             content.style.color = '#89d185'
         } else if (type === 'warning') {
@@ -316,7 +700,7 @@ export default class WindowManager {
         // Open console on first log of the session (usually compile/upload start)
         if (!this.consoleAutoOpened) {
             this.consoleAutoOpened = true
-            openConsole()
+            openConsole(240)
         }
 
         line.appendChild(content)
@@ -379,10 +763,14 @@ export default class WindowManager {
             if (hexPreview) this.logToConsole('Bytecode: ' + hexPreview)
 
             // Auto open console
-            const consoleEl = this.workspace.querySelector('.plc-console')
-            if (consoleEl && consoleEl.classList.contains('minimized')) {
-                consoleEl.classList.remove('minimized')
-                consoleEl.style.height = '150px'
+            if (typeof this.openConsole === 'function') {
+                this.openConsole(150)
+            } else {
+                const consoleEl = this.workspace.querySelector('.plc-console')
+                if (consoleEl) {
+                    consoleEl.classList.remove('minimized')
+                    consoleEl.style.height = '150px'
+                }
             }
             this.logToConsole('----------------------------------------', 'info')
         } catch (e) {
@@ -873,6 +1261,27 @@ export default class WindowManager {
     openProgram(id) {
         const editor = this.#editor
         if (!id) throw new Error('Program ID not found')
+
+        const existingTab = this.tab_manager.tabs.get(id)
+        const existingProgram = editor.findProgram(id)
+        const existingHost = existingProgram?.host || existingTab?.host
+        if (existingTab && existingHost && existingProgram) {
+            this.active_tab = id
+            this.active_program = existingProgram
+            existingProgram.host = existingHost
+            this.tab_manager.switchTo(id)
+            return
+        }
+
+        if (!existingTab && existingHost && existingProgram) {
+            this.active_tab = id
+            this.active_program = existingProgram
+            existingProgram.host = existingHost
+            this.tab_manager.openTab(id, existingHost)
+            existingHost.show()
+            return
+        }
+
         if (this.active_program) {
             this.active_program.host?.hide()
         }

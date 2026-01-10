@@ -172,6 +172,9 @@ export default class ProjectManager {
     const activeTab = tabManager.active
     const activeDevice = this.#editor.window_manager.active_device
     const treeState = this.#editor.window_manager.tree_manager.minimized_folders
+    const consoleState = typeof this.#editor.window_manager.getConsoleState === 'function'
+      ? this.#editor.window_manager.getConsoleState()
+      : null
 
     // Update project
     this.#editor.project.files = files
@@ -180,7 +183,8 @@ export default class ProjectManager {
         open_tabs: openTabs,
         active_tab: activeTab,
         active_device: activeDevice,
-        tree_state: treeState
+        tree_state: treeState,
+        console_state: consoleState
     }
   }
 
@@ -195,7 +199,7 @@ export default class ProjectManager {
     let restoredTabs = false;
     if (project && project._ui_state) {
         try {
-            const { open_tabs, active_tab, active_device, tree_state } = project._ui_state
+            const { open_tabs, active_tab, active_device, tree_state, console_state } = project._ui_state
             const wm = this.#editor.window_manager
             
             // Restore Tree State
@@ -236,6 +240,10 @@ export default class ProjectManager {
                  // Nothing specific active, but tabs restored
                  const first = wm.tab_manager.tabs.keys().next().value;
                  if(first) wm.tab_manager.switchTo(first)
+            }
+
+            if (console_state && typeof wm.setConsoleState === 'function') {
+                wm.setConsoleState(console_state)
             }
 
         } catch (e) {
