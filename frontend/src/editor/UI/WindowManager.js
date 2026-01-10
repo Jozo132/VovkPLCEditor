@@ -252,7 +252,7 @@ export default class WindowManager {
             if (this._selectedProblemIndex === nextIndex) {
                 if (opts.showTooltip) {
                     this._selectedProblemShowTooltip = true
-                    this._problemsFlat[nextIndex].show({ showTooltip: true, focus: true, mode: 'selected' })
+                    this._problemsFlat[nextIndex].show({ showTooltip: true, focus: false, mode: 'selected' })
                 }
                 return
             }
