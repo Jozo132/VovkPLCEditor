@@ -793,12 +793,22 @@ export default class WindowManager {
         setInterval(() => {
             const connected = this.#editor.device_manager && this.#editor.device_manager.connected
             const status = workspace.querySelector('#footer-device-status')
-            if (status) status.innerText = connected ? 'Connected' : 'Disconnected'
+            if (status) {
+                status.innerText = connected ? 'Connected' : 'Disconnected'
+                status.style.display = 'flex'
+                status.style.alignItems = 'center'
+                status.style.height = '100%'
+                status.style.padding = '0 10px'
+                status.style.margin = '0 8px'
+                status.style.fontWeight = '600'
+                status.style.backgroundColor = connected ? '#1fba5f' : ''
+                status.style.color = connected ? '#fff' : ''
+            }
 
             // Enable/Disable buttons based on connection
             if (compileBtn) {
-                compileBtn.style.opacity = '1'
-                compileBtn.style.pointerEvents = 'all'
+                compileBtn.style.opacity = connected ? '1' : '0.5'
+                compileBtn.style.pointerEvents = connected ? 'all' : 'none'
             }
             if (downloadBtn) {
                 downloadBtn.style.opacity = connected ? '1' : '0.5'
@@ -811,6 +821,14 @@ export default class WindowManager {
             if (setupWin && typeof setupWin.updateConnectionStatus === 'function') {
                 // @ts-ignore
                 setupWin.updateConnectionStatus(connected)
+            }
+
+            const locked = !!connected
+            if (this._edit_lock_state !== locked) {
+                this._edit_lock_state = locked
+                if (typeof this.#editor.setEditLock === 'function') {
+                    this.#editor.setEditLock(locked)
+                }
             }
         }, 500)
 
@@ -912,6 +930,12 @@ export default class WindowManager {
     }
 
     async handleCompile() {
+        const connected = this.#editor.device_manager && this.#editor.device_manager.connected
+        if (!connected) {
+            this.logToConsole('Connect to a device to compile.', 'warning')
+            this.logToConsole('----------------------------------------', 'info')
+            return
+        }
         if (!this.#editor.runtime_ready) {
             this.logToConsole('WASM Runtime is not ready yet.', 'error')
             this.logToConsole('----------------------------------------', 'info')
@@ -986,6 +1010,12 @@ export default class WindowManager {
     }
 
     async handleDownload() {
+        const connected = this.#editor.device_manager && this.#editor.device_manager.connected
+        if (!connected) {
+            this.logToConsole('Connect to a device to download.', 'warning')
+            this.logToConsole('----------------------------------------', 'info')
+            return
+        }
         const compiledBytecode = this.#editor.project.compiledBytecode
         const compiledSize = this.#editor.project.compiledSize
 
@@ -1132,6 +1162,9 @@ export default class WindowManager {
             device_online_button.classList.add('green')
         }
         this.active_mode = mode
+        if (typeof editor.setEditLock === 'function') {
+            editor.setEditLock(mode === 'online')
+        }
     }
 
     #on_navigation_minimize_toggle = () => {
@@ -1428,6 +1461,9 @@ export default class WindowManager {
             editorUI = new SetupUI(this.#editor)
         } else {
             editorUI = new EditorUI(this.#editor, id)
+        }
+        if (editorUI && typeof editorUI.setLocked === 'function') {
+            editorUI.setLocked(!!this.#editor.edit_locked)
         }
         this.windows.set(id, editorUI)
         // Append the editor UI to the workspace

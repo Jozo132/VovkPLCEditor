@@ -32,6 +32,7 @@ export const ladderRenderer = {
         font: '12px Consolas, monospace',
         editorId: editor._nav_id,
         programId: block.programId,
+        readOnly: !!editor.edit_locked,
         blockId: block.id,
         onLintHover: payload => {
           if (editor.window_manager?.setProblemHover) {
@@ -138,6 +139,9 @@ export const ladderRenderer = {
       // console.log('ASM editor created')
       // console.log(text_editor)
       props.text_editor = text_editor
+      if (typeof text_editor.setReadOnly === 'function') {
+        text_editor.setReadOnly(!!editor.edit_locked)
+      }
       if (typeof text_editor.setScroll === 'function') {
         requestAnimationFrame(() => {
           const hasTop = typeof block.scrollTop === 'number'

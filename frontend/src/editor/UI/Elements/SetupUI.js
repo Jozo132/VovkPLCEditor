@@ -11,6 +11,7 @@ export default class SetupUI {
     header
     body
     master
+    locked = false
 
     /** @param { import("../../Editor.js").VovkPLCEditor } master */
     constructor(master) {
@@ -85,6 +86,7 @@ export default class SetupUI {
         const iconUpload = `<svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 12a.5.5 0 0 1-.5-.5V5.707l-2.146 2.147a.5.5 0 0 1-.708-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 5.707V11.5a.5.5 0 0 1-.5.5z"/><path d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-6a.5.5 0 0 0-1 0v6z"/></svg>` // Arrow up
         const iconDownload = `<svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5v5.793l2.146-2.147a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 1 1 .708-.708L7.5 10.293V4.5A.5.5 0 0 1 8 4z"/><path d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-6a.5.5 0 0 0-1 0v6z"/></svg>` // Arrow down
 
+        const lockSettings = this.locked
         this.div.innerHTML = /*HTML*/`
             <div class="plc-editor-top">
                 <div class="plc-editor-header">
@@ -125,17 +127,17 @@ export default class SetupUI {
 
                     <!-- Action Buttons -->
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
-                        <button id="setup-read-config" class="plc-btn setup-btn" ${!connected ? 'disabled' : ''} style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
+                        <button id="setup-read-config" class="plc-btn setup-btn" ${(!connected || lockSettings) ? 'disabled' : ''} style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
                             <span style="margin-right: 8px; display: flex; transform: translateY(-1.5px);">${iconUpload}</span> Load PLC Configuration
                         </button>
                         
                         <div style="width: 1px; background: #444; margin: 0 5px;"></div>
 
-                        <button id="setup-upload-plc" title="Upload program from PLC to PC" class="plc-btn setup-btn" ${!connected ? 'disabled' : ''} style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
+                        <button id="setup-upload-plc" title="Upload program from PLC to PC" class="plc-btn setup-btn" ${(!connected || lockSettings) ? 'disabled' : ''} style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
                             <span style="margin-right: 8px; display: flex; transform: translateY(-1.5px);">${iconUpload}</span> Upload from PLC
                         </button>
 
-                         <button id="setup-compile" class="plc-btn setup-btn" style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
+                         <button id="setup-compile" class="plc-btn setup-btn" ${!connected ? 'disabled' : ''} style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
                             <span style="margin-right: 8px; display: flex; transform: translateY(-1.5px);">${iconCompile}</span> Compile Project
                         </button>
 
@@ -197,10 +199,10 @@ export default class SetupUI {
             <tr style="border-bottom: 1px solid #333;">
                 <td style="padding: 8px 10px; color: #bbb;">${label}</td>
                 <td style="padding: 4px 10px;">
-                    <input type="number" data-key="${key}" data-field="offset" value="${data ? data.offset : 0}" class="tc-input setup-offset-input">
+                    <input type="number" data-key="${key}" data-field="offset" value="${data ? data.offset : 0}" class="tc-input setup-offset-input" ${this.locked ? 'disabled' : ''}>
                 </td>
                 <td style="padding: 4px 10px;">
-                    <input type="number" data-key="${key}" data-field="size" value="${data ? data.size : 0}" class="tc-input setup-offset-input">
+                    <input type="number" data-key="${key}" data-field="size" value="${data ? data.size : 0}" class="tc-input setup-offset-input" ${this.locked ? 'disabled' : ''}>
                 </td>
             </tr>
         `
@@ -309,15 +311,41 @@ export default class SetupUI {
         }
 
         // Update Buttons
-        const btns = ['#setup-read-config', '#setup-upload-plc', '#setup-download-plc']
+        const btns = ['#setup-read-config', '#setup-upload-plc']
         btns.forEach(sel => {
             const btn = this.div.querySelector(sel)
             if (btn) {
-                if (connected) {
+                if (connected && !this.locked) {
                     btn.removeAttribute('disabled')
                 } else {
                     btn.setAttribute('disabled', 'disabled')
                 }
+            }
+        })
+
+        const compileBtn = this.div.querySelector('#setup-compile')
+        if (compileBtn) {
+            if (connected) {
+                compileBtn.removeAttribute('disabled')
+            } else {
+                compileBtn.setAttribute('disabled', 'disabled')
+            }
+        }
+        const downloadBtn = this.div.querySelector('#setup-download-plc')
+        if (downloadBtn) {
+            if (connected) {
+                downloadBtn.removeAttribute('disabled')
+            } else {
+                downloadBtn.setAttribute('disabled', 'disabled')
+            }
+        }
+
+        const offsetInputs = this.div.querySelectorAll('.setup-offset-input')
+        offsetInputs.forEach(input => {
+            if (this.locked) {
+                input.setAttribute('disabled', 'disabled')
+            } else {
+                input.removeAttribute('disabled')
             }
         })
     }
@@ -335,6 +363,11 @@ export default class SetupUI {
     }
 
     reloadProgram() {
+        this.render()
+    }
+
+    setLocked(locked = true) {
+        this.locked = !!locked
         this.render()
     }
 }

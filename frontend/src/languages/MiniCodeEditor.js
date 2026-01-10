@@ -11,6 +11,7 @@ export class MiniCodeEditor {
      *          onDiagnosticsChange?:(diagnostics:any[])=>void,
      *          editorId?:number,
      *          programId?:string,
+     *          readOnly?:boolean,
      *          blockId?:string,
      *          onLintHover?:(payload:{state:'enter'|'leave',diagnostic:any,blockId?:string})=>void,
      *          onGoToDefinition?:(payload:{type:'symbol',name:string,blockId?:string})=>void,
@@ -109,6 +110,9 @@ export class MiniCodeEditor {
         hint.className = 'start-hint'
         ta.value = o.value || ''
         ta.spellcheck = false
+        if (o.readOnly) {
+            ta.readOnly = true
+        }
         
         // Save references for cleanup
         this._ac = ac
@@ -1585,6 +1589,10 @@ export class MiniCodeEditor {
             ta.scrollTop = st
         }
         this.getScrollHeight = () => (cd.scrollHeight || 0) + 16
+        this.setReadOnly = (locked = true) => {
+            ta.readOnly = !!locked
+            if (!locked && ta.disabled) ta.disabled = false
+        }
     }
 
     destroy() {

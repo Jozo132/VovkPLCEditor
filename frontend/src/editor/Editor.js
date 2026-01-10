@@ -310,6 +310,7 @@ export class VovkPLCEditor {
         inFlight: null,
         runId: 0,
     }
+    edit_locked = false
 
     /** @type {Object | null} */
     initial_program = null
@@ -514,6 +515,41 @@ export class VovkPLCEditor {
             minimize.innerHTML = '+'
         }
         // this.draw()
+    }
+
+    setEditLock(locked) {
+        const next = !!locked
+        if (this.edit_locked === next) return
+        this.edit_locked = next
+
+        const applyToBlock = block => {
+            const editor = block?.props?.text_editor
+            if (editor && typeof editor.setReadOnly === 'function') {
+                editor.setReadOnly(next)
+            }
+        }
+
+        const programs = this._getLintPrograms ? this._getLintPrograms() : []
+        if (programs && programs.length) {
+            programs.forEach(program => {
+                program?.blocks?.forEach(applyToBlock)
+            })
+        } else if (this.project?.files) {
+            this.project.files.forEach(file => {
+                if (file.type !== 'program') return
+                file?.blocks?.forEach(applyToBlock)
+            })
+        }
+
+        const wm = this.window_manager
+        const symbols = wm?.windows?.get('symbols')
+        if (symbols && typeof symbols.setLocked === 'function') {
+            symbols.setLocked(next)
+        }
+        const setup = wm?.windows?.get('setup')
+        if (setup && typeof setup.setLocked === 'function') {
+            setup.setLocked(next)
+        }
     }
 
     _pushWindowHistory(id) {

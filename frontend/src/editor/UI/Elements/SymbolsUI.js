@@ -13,6 +13,7 @@ export default class SymbolsUI {
     header
     body
     master
+    locked = false
     
     selectedSymbols = new Set()
     lastFocusedIndex = -1
@@ -73,7 +74,8 @@ export default class SymbolsUI {
         this.body = div.querySelector('.plc-editor-body')
         this.tbody = div.querySelector('tbody')
         
-        div.querySelector('.add-symbol-btn').addEventListener('click', () => this.addSymbol())
+        this.add_button = div.querySelector('.add-symbol-btn')
+        this.add_button.addEventListener('click', () => this.addSymbol())
         
         // Bind sort handlers
         const headers = div.querySelectorAll('th[data-sort]')
@@ -117,6 +119,7 @@ export default class SymbolsUI {
 
     handleKeyDown(e) {
         if (this.hidden) return
+        if (this.locked) return
         
         if (e.key === 'Escape') {
             this.deselectAll()
@@ -144,6 +147,7 @@ export default class SymbolsUI {
     }
 
     deleteSelected() {
+        if (this.locked) return
         if (this.selectedSymbols.size === 0) return
         
         // delete only non-readonly symbols
@@ -179,6 +183,7 @@ export default class SymbolsUI {
     }
 
     async pasteSymbols(index = undefined) {
+        if (this.locked) return
         try {
             const text = await navigator.clipboard.readText()
             const symbols = JSON.parse(text)
@@ -326,6 +331,7 @@ export default class SymbolsUI {
                     { type: 'item', name: 'delete', label: 'Delete', className: `plc-icon ${getIconType('delete')}` }
                 ],
                 onClose: (key) => {
+                    if (this.locked && key !== 'copy') return
                     if (key === 'add-above') this.addSymbol(index)
                     if (key === 'add-below') this.addSymbol(index + 1)
                     if (key === 'copy') {
@@ -339,11 +345,9 @@ export default class SymbolsUI {
                     if (key === 'delete') {
                         if (this.selectedSymbols.has(symbol)) {
                             this.deleteSelected()
-                        } else {
-                            if (!symbol.readonly) {
-                                this.master.project.symbols.splice(index, 1)
-                                this.renderTable()
-                            }
+                        } else if (!symbol.readonly && !this.locked) {
+                            this.master.project.symbols.splice(index, 1)
+                            this.renderTable()
                         }
                     }
                 }
@@ -360,14 +364,15 @@ export default class SymbolsUI {
             tdIcon.appendChild(icon)
             tr.appendChild(tdIcon)
             
+            const cellLocked = this.locked || symbol.readonly
             // Name
-            tr.appendChild(this.createCell('input', symbol.name, val => symbol.name = val, [], 'text', symbol.readonly))
+            tr.appendChild(this.createCell('input', symbol.name, val => symbol.name = val, [], 'text', cellLocked))
 
             // Location
-            tr.appendChild(this.createCell('select', symbol.location, val => symbol.location = val, ['control', 'input', 'output', 'memory', 'system'], 'text', symbol.readonly))
+            tr.appendChild(this.createCell('select', symbol.location, val => symbol.location = val, ['control', 'input', 'output', 'memory', 'system'], 'text', cellLocked))
 
             // Type
-            tr.appendChild(this.createCell('select', symbol.type, val => symbol.type = val, ['bit', 'byte', 'int', 'dint', 'real'], 'text', symbol.readonly))
+            tr.appendChild(this.createCell('select', symbol.type, val => symbol.type = val, ['bit', 'byte', 'int', 'dint', 'real'], 'text', cellLocked))
 
             // Address
             let addressValue = symbol.address
@@ -386,17 +391,17 @@ export default class SymbolsUI {
                          inputEl.value = num
                      }
                 }
-            }, null, 'text', symbol.readonly))
+            }, null, 'text', cellLocked))
 
             // Initial Value
-            tr.appendChild(this.createCell('input', symbol.initial_value, val => symbol.initial_value = parseFloat(val) || 0, null, 'number', symbol.readonly))
+            tr.appendChild(this.createCell('input', symbol.initial_value, val => symbol.initial_value = parseFloat(val) || 0, null, 'number', cellLocked))
 
             // Comment
-            tr.appendChild(this.createCell('input', symbol.comment, val => symbol.comment = val, [], 'text', symbol.readonly))
+            tr.appendChild(this.createCell('input', symbol.comment, val => symbol.comment = val, [], 'text', cellLocked))
 
             // Delete
             const tdDel = document.createElement('td')
-            if (!symbol.readonly) {
+            if (!cellLocked) {
                 const btnDel = document.createElement('button')
                 btnDel.innerText = 'x'
                 btnDel.classList.add('symbol-delete-btn')
@@ -425,7 +430,7 @@ export default class SymbolsUI {
             row.classList.add('active-row')
             row.scrollIntoView({ block: 'center' })
             const input = row.querySelector('input')
-            if (input) input.focus()
+            if (input && !this.locked) input.focus()
         }
         return true
     }
@@ -542,6 +547,7 @@ export default class SymbolsUI {
     }
 
     addSymbol(index = undefined) {
+        if (this.locked) return
         if (!this.master.project.symbols) this.master.project.symbols = []
         
         // Infer index from selection or focus if not provided
@@ -640,5 +646,17 @@ export default class SymbolsUI {
                 }
             }
         }, 0)
+    }
+
+    setLocked(locked = true) {
+        this.locked = !!locked
+        if (this.add_button) {
+            if (this.locked) {
+                this.add_button.setAttribute('disabled', 'disabled')
+            } else {
+                this.add_button.removeAttribute('disabled')
+            }
+        }
+        this.renderTable()
     }
 }
