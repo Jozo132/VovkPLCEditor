@@ -141,6 +141,7 @@ export default class ProjectManager {
           delete copy.cached_checksum
           delete copy.cached_symbols_checksum
           delete copy.cached_asm_map
+          delete copy.programId
           // delete copy.props // Remove rendering props
           if (copy.props) {
             const props_copy = { ...copy.props }

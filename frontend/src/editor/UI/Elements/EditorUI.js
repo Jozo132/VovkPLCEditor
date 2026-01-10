@@ -142,8 +142,10 @@ export default class EditorUI {
              this.body.innerHTML = ''
         }
 
+        const programId = this.program?.id
         this.program.blocks.forEach(block => {
             if (!block) return
+            block.programId = programId
             if (!block.id) block.id = this.master._generateID(block.id)
             const { id, type, name, comment } = block
             if (!block.div) {

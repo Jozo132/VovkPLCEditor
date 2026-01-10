@@ -30,6 +30,8 @@ export const ladderRenderer = {
         language: 'asm',
         value: block.code,
         font: '12px Consolas, monospace',
+        editorId: editor._nav_id,
+        programId: block.programId,
         blockId: block.id,
         onLintHover: payload => {
           if (editor.window_manager?.setProblemHover) {
@@ -58,6 +60,28 @@ export const ladderRenderer = {
         },
         hoverProvider: (word) => {
             if (!editor.project || !editor.project.symbols) return null
+            if (word) {
+                const labelMatches = block.code.matchAll(/^\s*([A-Za-z_]\w+):/gm)
+                const labels = []
+                for (const match of labelMatches) {
+                    labels.push({ name: match[1], index: match.index || 0 })
+                }
+                const label = labels.find(l => l.name === word)
+                if (label) {
+                    const before = block.code.slice(0, label.index)
+                    const line = before.split('\n').length + 1
+                    return `
+                        <div class="mce-hover-def" style="display: flex; align-items: center; gap: 6px;">
+                            <span class="icon" style="width: 14px; height: 14px; background-size: contain; background-repeat: no-repeat; background-image: url('data:image/svg+xml,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 16 16&quot;><path fill=&quot;%23cccccc&quot; d=&quot;M3 2.5h7a1.5 1.5 0 0 1 1.5 1.5v1H14v2h-2.5v1H14v2h-2.5v1A1.5 1.5 0 0 1 10 13.5H3A1.5 1.5 0 0 1 1.5 12V4A1.5 1.5 0 0 1 3 2.5zm0 1A.5.5 0 0 0 2.5 4v8a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-1H8V9h2.5V7H8V5h2.5V4a.5.5 0 0 0-.5-.5H3z&quot;/></svg>')"></span>
+                            <span style="color:#4daafc">${label.name}</span>
+                            <span style="color:#9cdcfe; margin-left: auto; font-weight: bold;">Label</span>
+                        </div>
+                        <div class="mce-hover-desc">
+                            <div><span style="color:#bbb">Defined at:</span> <span style="color:#b5cea8">Ln ${line}</span></div>
+                        </div>
+                    `
+                }
+            }
             const sym = editor.project.symbols.find(s => s.name === word)
             if (sym) {
                 // Return HTML string

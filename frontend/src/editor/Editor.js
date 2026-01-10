@@ -16,6 +16,141 @@ import VOVKPLC_VERSION_BUILD from './BuildNumber.js'
 
 Actions.initialize() // Enable global actions for all instances of VovkPLCEditor
 
+const isSameNavEntry = (a, b) => {
+    if (!a || !b) return false
+    if (a.type !== b.type) return false
+    if (a.editorId !== b.editorId) return false
+    if (a.type === 'code') {
+        return a.programId === b.programId && a.blockId === b.blockId && a.line === b.line
+    }
+    if (a.type === 'window') {
+        return a.windowId === b.windowId
+    }
+    return false
+}
+
+const createNavHistory = editor => ({
+    stack: [],
+    index: -1,
+    isNavigating: false,
+    validate(entry) {
+        if (!entry || !entry.type) return false
+        if (entry.type === 'code') {
+            const program = editor.findProgram(entry.programId)
+            if (!program) return false
+            return !!program?.blocks?.find(b => b.id === entry.blockId)
+        }
+        if (entry.type === 'window') {
+            if (entry.windowId === 'symbols' || entry.windowId === 'setup') return true
+            return !!editor.findProgram(entry.windowId)
+        }
+        return false
+    },
+    push(entry) {
+        if (!entry || this.isNavigating) return
+        if (!this.validate(entry)) return
+        const last = this.stack[this.index]
+        if (isSameNavEntry(last, entry)) return
+        if (this.index < this.stack.length - 1) {
+            this.stack = this.stack.slice(0, this.index + 1)
+        }
+        this.stack.push(entry)
+        this.index = this.stack.length - 1
+    },
+    apply(entry) {
+        if (!entry) return false
+        if (entry.type === 'code') {
+            const wm = editor.window_manager
+            if (wm && typeof wm.focusCodeLocation === 'function') {
+                wm.focusCodeLocation(entry)
+                return true
+            }
+        }
+        if (entry.type === 'window') {
+            const wm = editor.window_manager
+            if (wm && typeof wm.openProgram === 'function') {
+                wm.openProgram(entry.windowId)
+                return true
+            }
+        }
+        return false
+    },
+    go(delta) {
+        const step = delta >= 0 ? 1 : -1
+        let nextIndex = this.index + step
+        while (nextIndex >= 0 && nextIndex < this.stack.length) {
+            const entry = this.stack[nextIndex]
+            if (!this.validate(entry)) {
+                this.stack.splice(nextIndex, 1)
+                if (nextIndex <= this.index) this.index -= 1
+                if (this.index < -1) this.index = -1
+                nextIndex = this.index + step
+                continue
+            }
+            this.index = nextIndex
+            this.isNavigating = true
+            this.apply(entry)
+            setTimeout(() => { this.isNavigating = false }, 0)
+            return true
+        }
+        return false
+    },
+    back() { return this.go(-1) },
+    forward() { return this.go(1) },
+})
+
+const getGlobalNavState = () => {
+    const root = typeof window !== 'undefined' ? window : globalThis
+    if (!root.__vovkPlcNavState) {
+        root.__vovkPlcNavState = {
+            nextEditorId: 1,
+            editors: new Map(),
+            activeEditorId: null,
+            hotkeysBound: false,
+        }
+    }
+    return root.__vovkPlcNavState
+}
+
+const bindGlobalNavHotkeys = state => {
+    if (!state || state.hotkeysBound) return
+    if (typeof document === 'undefined') return
+    state.hotkeysBound = true
+    document.addEventListener('keydown', e => {
+        const isBack = e.key === 'BrowserBack' || (e.altKey && e.key === 'ArrowLeft')
+        const isForward = e.key === 'BrowserForward' || (e.altKey && e.key === 'ArrowRight')
+        if (!isBack && !isForward) return
+        e.preventDefault()
+        e.stopPropagation()
+        const editor = state.editors.get(state.activeEditorId)
+        const history = editor?._nav_history
+        if (!history) return
+        if (isBack) history.back()
+        if (isForward) history.forward()
+    })
+    let navMouseButton = null
+    const handleNavMouse = (e, isUp) => {
+        const isBack = e.button === 3
+        const isForward = e.button === 4
+        if (!isBack && !isForward) return
+        const editor = state.editors.get(state.activeEditorId)
+        const history = editor?._nav_history
+        if (!history) return
+        e.preventDefault()
+        e.stopPropagation()
+        if (!isUp) {
+            navMouseButton = e.button
+            return
+        }
+        if (navMouseButton !== e.button) return
+        navMouseButton = null
+        if (isBack) history.back()
+        if (isForward) history.forward()
+    }
+    document.addEventListener('mousedown', e => handleNavMouse(e, false))
+    document.addEventListener('mouseup', e => handleNavMouse(e, true))
+}
+
 export class VovkPLCEditor {
     /** @type {PLC_Project} */ project
     /** @type {HTMLElement} */ workspace
@@ -100,6 +235,18 @@ export class VovkPLCEditor {
         this.workspace = workspace
         this.workspace.classList.add('plc-workspace')
         if (debug_css) this.workspace.classList.add('debug')
+
+        const navState = getGlobalNavState()
+        this._nav_id = navState.nextEditorId++
+        this._nav_history = createNavHistory(this)
+        navState.editors.set(this._nav_id, this)
+        bindGlobalNavHotkeys(navState)
+
+        const markActive = () => {
+            navState.activeEditorId = this._nav_id
+        }
+        this.workspace.addEventListener('mousedown', markActive)
+        this.workspace.addEventListener('focusin', markActive)
 
         // this.runtime.initialize('/wasm/VovkPLC.wasm').then(() => {
         //     // Compile 'exit' to flush out any initial runtime logs
@@ -207,6 +354,16 @@ export class VovkPLCEditor {
             minimize.innerHTML = '+'
         }
         // this.draw()
+    }
+
+    _pushWindowHistory(id) {
+        if (!id) return
+        if (!this._nav_history || !this._nav_id) return
+        this._nav_history.push({
+            type: 'window',
+            editorId: this._nav_id,
+            windowId: id,
+        })
     }
 
     /** @param { PLC_Project } project */

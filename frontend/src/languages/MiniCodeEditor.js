@@ -9,6 +9,8 @@ export class MiniCodeEditor {
      *          hoverProvider?:(word:string)=>Promise<string|null>|string|null,
      *          lintProvider?:(code:string)=>Promise<{type:'error'|'warning',start:number,end:number,message:string}[]>,
      *          onDiagnosticsChange?:(diagnostics:any[])=>void,
+     *          editorId?:number,
+     *          programId?:string,
      *          blockId?:string,
      *          onLintHover?:(payload:{state:'enter'|'leave',diagnostic:any,blockId?:string})=>void,
      *          onGoToDefinition?:(payload:{type:'symbol',name:string,blockId?:string})=>void,
@@ -112,6 +114,86 @@ export class MiniCodeEditor {
         this._ac = ac
         this._hint = hint
         this._hov = hov
+
+        const navRoot = typeof window !== 'undefined' ? window : globalThis
+        const navState = navRoot.__vovkPlcNavState
+        const navEditorId = Number.isInteger(o.editorId) ? o.editorId : null
+        const navProgramId = o.programId || null
+        const navBlockId = o.blockId || null
+        const getNavHistory = () => {
+            if (!navState || navEditorId === null) return null
+            const editor = navState.editors?.get(navEditorId)
+            return editor?._nav_history || null
+        }
+        const canTrackHistory = () => !!(navProgramId && navBlockId && getNavHistory())
+        const markActiveEditor = () => {
+            if (navState && navEditorId !== null) {
+                navState.activeEditorId = navEditorId
+            }
+        }
+        let historyTimer = null
+        let historySuppressed = false
+        let lastRecordedLine = null
+
+        const getLineFromIndex = (text, index) => {
+            let line = 1
+            const max = Math.max(0, Math.min(index || 0, text.length))
+            for (let i = 0; i < max; i++) {
+                if (text.charCodeAt(i) === 10) line += 1
+            }
+            return line
+        }
+
+        const getCursorInfo = (indexOverride) => {
+            const text = ta.value || ''
+            const rawIndex = typeof indexOverride === 'number'
+                ? indexOverride
+                : (typeof ta.selectionStart === 'number' ? ta.selectionStart : 0)
+            const index = Math.max(0, Math.min(rawIndex, text.length))
+            return { index, line: getLineFromIndex(text, index) }
+        }
+
+        const recordHistory = () => {
+            if (!canTrackHistory() || historySuppressed) return
+            const history = getNavHistory()
+            if (!history) return
+            const info = getCursorInfo()
+            if (!info) return
+            if (info.line === lastRecordedLine) return
+            lastRecordedLine = info.line
+            history.push({
+                type: 'code',
+                editorId: navEditorId,
+                programId: navProgramId,
+                blockId: navBlockId,
+                index: info.index,
+                line: info.line,
+            })
+        }
+
+        const scheduleHistory = () => {
+            if (!canTrackHistory() || historySuppressed) return
+            markActiveEditor()
+            if (historyTimer) clearTimeout(historyTimer)
+            historyTimer = setTimeout(() => {
+                historyTimer = null
+                recordHistory()
+            }, 500)
+        }
+
+        const suppressHistory = (duration = 120, indexOverride) => {
+            if (!canTrackHistory()) return
+            historySuppressed = true
+            if (historyTimer) {
+                clearTimeout(historyTimer)
+                historyTimer = null
+            }
+            const info = getCursorInfo(indexOverride)
+            lastRecordedLine = info.line
+            setTimeout(() => {
+                historySuppressed = false
+            }, duration)
+        }
 
         const hoverHighlights = []
         const selectedHighlights = []
@@ -418,9 +500,13 @@ export class MiniCodeEditor {
         const getWordAtInfo = info => {
             if (!info || !info.line) return null
             const line = info.line
-            if (!isWordChar(line[info.idx])) return null
-            let start = info.idx
-            let end = info.idx
+            let idx = info.idx
+            if (!isWordChar(line[idx]) && idx > 0 && isWordChar(line[idx - 1])) {
+                idx -= 1
+            }
+            if (!isWordChar(line[idx])) return null
+            let start = idx
+            let end = idx
             while (start > 0 && isWordChar(line[start - 1])) start--
             while (end < line.length && isWordChar(line[end])) end++
             const lineStart = info.offset - info.idx
@@ -491,11 +577,15 @@ export class MiniCodeEditor {
             if (target.type === 'label') {
                 const pos = typeof target.index === 'number' ? target.index : target.range?.start
                 if (typeof pos !== 'number') return
-                ta.focus()
-                ta.selectionStart = pos
-                ta.selectionEnd = pos
-                if (typeof this.revealRange === 'function') {
-                    this.revealRange({ start: pos, end: pos + 1 }, { ratio: 0.33, highlight: false })
+                if (typeof this.setCursor === 'function') {
+                    this.setCursor(pos, { reveal: true, record: true })
+                } else {
+                    ta.focus()
+                    ta.selectionStart = pos
+                    ta.selectionEnd = pos
+                    if (typeof this.revealRange === 'function') {
+                        this.revealRange({ start: pos, end: pos + 1 }, { ratio: 0.33, highlight: false })
+                    }
                 }
             } else if (target.type === 'symbol') {
                 if (typeof o.onGoToDefinition === 'function') {
@@ -730,12 +820,18 @@ export class MiniCodeEditor {
             if (rule.className === 'kw' && lang.definitions && lang.typeKeywords && lang.typeKeywords.includes(token)) return `<span class="type-keyword">${token}</span>`
             return `<span class="${rule.className}">${token}</span>`
         }
+        const applyRule = (segment, rule) => {
+            if (typeof rule.replace === 'function') {
+                return segment.replace(rule.regex, (...args) => rule.replace(...args))
+            }
+            return segment.replace(rule.regex, m => processToken(m, rule))
+        }
         const colour = t =>
             lang.rules.reduce(
                 (v, r) =>
                     v
                         .split(/(<span[^>]*>.*?<\/span>)/gs)
-                        .map(s => (s.startsWith('<span') ? s : s.replace(r.regex, m => processToken(m, r))))
+                        .map(s => (s.startsWith('<span') ? s : applyRule(s, r)))
                         .join(''),
                 esc(t)
             )
@@ -1197,6 +1293,15 @@ export class MiniCodeEditor {
             triggerAC(false)
         })
 
+        const handleHistoryEvent = () => {
+            markActiveEditor()
+            scheduleHistory()
+        }
+        ta.addEventListener('keyup', handleHistoryEvent)
+        ta.addEventListener('mouseup', handleHistoryEvent)
+        ta.addEventListener('input', handleHistoryEvent)
+        ta.addEventListener('focus', handleHistoryEvent)
+
         // Manual Trigger (Ctrl+Space or Ctrl+Click)
         ta.addEventListener('keydown', e => {
             if (e.key === 'F12') {
@@ -1334,6 +1439,11 @@ export class MiniCodeEditor {
              document.removeEventListener('mousedown', docClick)
              document.removeEventListener('keydown', handleCtrlKey)
              document.removeEventListener('keyup', handleCtrlKey)
+             ta.removeEventListener('keyup', handleHistoryEvent)
+             ta.removeEventListener('mouseup', handleHistoryEvent)
+             ta.removeEventListener('input', handleHistoryEvent)
+             ta.removeEventListener('focus', handleHistoryEvent)
+             if (historyTimer) clearTimeout(historyTimer)
              if (this._ac) this._ac.remove()
              if (this._hint) this._hint.remove()
         }
@@ -1436,6 +1546,25 @@ export class MiniCodeEditor {
 
             showLintHover(hit, 0, 0, hit.start, { highlight: opts.highlight !== false, notify: opts.notify === true })
             return true
+        }
+        this.setCursor = (index, opts = {}) => {
+            const text = ta.value || ''
+            const maxLen = text.length
+            const rawIndex = typeof index === 'number' ? index : 0
+            const safeIndex = Math.max(0, Math.min(rawIndex, maxLen))
+            if (opts.suppressHistory) {
+                suppressHistory(120, safeIndex)
+            }
+            ta.focus()
+            ta.selectionStart = safeIndex
+            ta.selectionEnd = safeIndex
+            if (opts.reveal !== false && typeof this.revealRange === 'function') {
+                const ratio = typeof opts.ratio === 'number' ? opts.ratio : 0.33
+                this.revealRange({ start: safeIndex, end: safeIndex + 1 }, { ratio, highlight: false })
+            }
+            if (opts.record) {
+                scheduleHistory()
+            }
         }
         this.getValue = () => ta.value
         this.getScroll = () => ({ top: ta.scrollTop, left: ta.scrollLeft })
@@ -1606,6 +1735,10 @@ MiniCodeEditor.registerLanguage('asm', {
         {regex: /\/\/.*$/gm, className: 'cmt'},
         {regex: /#.*$/gm, className: 'cmt'},
         {regex: /^\s*([A-Za-z_]\w*):/gm, className: 'function'}, // Labels
+        {
+            regex: /(\b(?:jmp|jump|call)(?:_if(?:_not)?)?\b)(\s+)([A-Za-z_]\w*)/gi,
+            replace: (match, instr, ws, label) => `${instr}${ws}<span class="function">${label}</span>`
+        }, // Label references in jumps/calls
         {regex: /^\b(const)\b/gm, className: 'kw'}, // Const declaration
         // Specific types (Datatypes)
          {regex: /\b(ptr|u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\b/g, className: 'dt'},

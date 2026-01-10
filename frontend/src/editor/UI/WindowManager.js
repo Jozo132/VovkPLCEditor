@@ -1461,6 +1461,132 @@ export default class WindowManager {
         }
     }
 
+    focusCodeLocation(entry) {
+        if (!entry || !entry.programId || !entry.blockId) return false
+        const editor = this.#editor
+        const waitForLayout = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        const findTarget = () => {
+            const program = editor.findProgram(entry.programId)
+            if (program) {
+                const block = program?.blocks?.find(b => b.id === entry.blockId)
+                if (block) return { program, block }
+            }
+            const programs = editor._getLintPrograms?.() || []
+            for (const prog of programs) {
+                const block = prog?.blocks?.find(b => b.id === entry.blockId)
+                if (block) return { program: prog, block }
+            }
+            return { program: null, block: null }
+        }
+        const waitForVisible = async block => {
+            for (let i = 0; i < 6; i++) {
+                if (block?.div) {
+                    const rect = block.div.getBoundingClientRect()
+                    if (rect.width > 0 && rect.height > 0) return true
+                }
+                await waitForLayout()
+            }
+            return false
+        }
+        const waitForEditor = async block => {
+            for (let i = 0; i < 6; i++) {
+                if (block?.props?.text_editor) return block.props.text_editor
+                await waitForLayout()
+            }
+            return block?.props?.text_editor || null
+        }
+        const expandBlock = block => {
+            if (!block?.div) return
+            if (!block.div.classList.contains('minimized')) return
+            block.div.classList.remove('minimized')
+            block.minimized = false
+            const minimizeBtn = block.div.querySelector('.menu-button.minimize')
+            if (minimizeBtn) minimizeBtn.innerText = '-'
+        }
+        const scrollBlockIntoView = (blockDiv, ratio = 0.33) => {
+            if (!blockDiv) return
+            const body = blockDiv.closest('.plc-editor-body')
+            if (!body) return
+            const bodyRect = body.getBoundingClientRect()
+            const blockRect = blockDiv.getBoundingClientRect()
+            const blockTop = blockRect.top - bodyRect.top + body.scrollTop
+            const targetTop = Math.max(0, blockTop - body.clientHeight * ratio)
+            if (Math.abs(body.scrollTop - targetTop) > 1) {
+                body.scrollTop = targetTop
+            }
+            const nextBlockRect = blockDiv.getBoundingClientRect()
+            if (nextBlockRect.top < bodyRect.top || nextBlockRect.bottom > bodyRect.bottom) {
+                blockDiv.scrollIntoView({ block: 'center' })
+            }
+        }
+        const scrollBodyToCode = (blockDiv, codeEditor, index, ratio = 0.33) => {
+            if (!blockDiv || !codeEditor || typeof codeEditor.getCodePosition !== 'function') return
+            const body = blockDiv.closest('.plc-editor-body')
+            if (!body) return
+            const bodyRect = body.getBoundingClientRect()
+            const pos = codeEditor.getCodePosition(index)
+            const delta = pos.viewportY - bodyRect.top
+            const targetTop = Math.max(0, body.scrollTop + delta - body.clientHeight * ratio)
+            if (Math.abs(body.scrollTop - targetTop) > 1) {
+                body.scrollTop = targetTop
+            }
+        }
+        const getIndexFromLine = (text, line) => {
+            if (!line || line <= 1) return 0
+            let current = 1
+            for (let i = 0; i < text.length; i++) {
+                if (text.charCodeAt(i) === 10) {
+                    current += 1
+                    if (current === line) return i + 1
+                }
+            }
+            return text.length
+        }
+        const getTargetIndex = codeEditor => {
+            const text = typeof codeEditor?.getValue === 'function' ? codeEditor.getValue() : ''
+            if (typeof entry.index === 'number') {
+                return Math.max(0, Math.min(entry.index, text.length))
+            }
+            if (typeof entry.line === 'number') {
+                return getIndexFromLine(text, entry.line)
+            }
+            return 0
+        }
+        const run = async () => {
+            let { program, block } = findTarget()
+            if (!block) return
+
+            if (program?.id) {
+                this.openProgram(program.id)
+                await waitForLayout()
+                ;({ program, block } = findTarget())
+                if (!block) return
+            }
+
+            expandBlock(block)
+            if (!block?.div) return
+
+            await waitForVisible(block)
+            scrollBlockIntoView(block.div, 0.33)
+            await waitForLayout()
+
+            const codeEditor = await waitForEditor(block)
+            if (!codeEditor) return
+
+            const index = getTargetIndex(codeEditor)
+            if (typeof codeEditor.setCursor === 'function') {
+                codeEditor.setCursor(index, { reveal: true, suppressHistory: true, ratio: 0.33 })
+            } else if (typeof codeEditor.revealRange === 'function') {
+                codeEditor.revealRange({ start: index, end: index + 1 }, { ratio: 0.33, highlight: false })
+            }
+            await waitForLayout()
+            scrollBodyToCode(block.div, codeEditor, index, 0.33)
+        }
+
+        run()
+        return true
+    }
+
     /** @param {string} id */
     restoreLazyTab(id) {
          const prog = this.#editor.findProgram(id)
@@ -1472,6 +1598,12 @@ export default class WindowManager {
     openProgram(id) {
         const editor = this.#editor
         if (!id) throw new Error('Program ID not found')
+
+        if (id === 'symbols' || id === 'setup') {
+            if (typeof editor._pushWindowHistory === 'function') {
+                editor._pushWindowHistory(id)
+            }
+        }
 
         const existingTab = this.tab_manager.tabs.get(id)
         const existingProgram = editor.findProgram(id)
