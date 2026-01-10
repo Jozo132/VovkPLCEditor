@@ -876,6 +876,8 @@ export class MiniCodeEditor {
             pr.scrollLeft = ta.scrollLeft
             pr.scrollTop = ta.scrollTop
             ln.scrollTop = ta.scrollTop
+            ov.style.width = Math.max(ta.scrollWidth, ta.clientWidth) + 'px'
+            ov.style.height = Math.max(ta.scrollHeight, ta.clientHeight) + 'px'
             ov.style.transform = `translate(${-ta.scrollLeft}px,${-ta.scrollTop}px)`
             if (!ac.classList.contains('hide')) posAC(ta.selectionStart)
         }
