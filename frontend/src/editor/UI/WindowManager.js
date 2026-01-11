@@ -401,10 +401,11 @@ export default class WindowManager {
                 const dir = pathParts.length > 1 ? `/${pathParts.slice(0, -1).join('/')}` : '/'
                 const blockId = problem.blockId || 'unknown'
                 const blockName = problem.blockName || `Block ${blockId}`
+                const blockType = problem.blockType || ''
                 const key = `${cleanPath}::${blockId}`
 
                 if (!groups.has(key)) {
-                    groups.set(key, { fileName, dir, blockId, blockName, key, items: [] })
+                    groups.set(key, { fileName, dir, blockId, blockName, blockType, key, items: [] })
                 }
                 groups.get(key).items.push(problem)
             })
@@ -423,13 +424,17 @@ export default class WindowManager {
                 block.className = 'plc-problems-block-name'
                 block.textContent = group.blockName
 
-                const blockId = document.createElement('span')
-                blockId.className = 'plc-problems-block-id'
-                blockId.textContent = `#${group.blockId}`
-
                 const file = document.createElement('span')
                 file.className = 'plc-problems-file-name'
                 file.textContent = group.fileName
+
+                const arrow = document.createElement('span')
+                arrow.className = 'plc-problems-arrow'
+                arrow.textContent = '->'
+
+                const blockType = document.createElement('span')
+                blockType.className = 'plc-problems-block-type'
+                blockType.textContent = group.blockType ? group.blockType.toUpperCase() : ''
 
                 const dir = document.createElement('span')
                 dir.className = 'plc-problems-file-path'
@@ -440,9 +445,10 @@ export default class WindowManager {
                 count.textContent = group.items.length
 
                 header.appendChild(toggle)
-                header.appendChild(block)
-                header.appendChild(blockId)
                 header.appendChild(file)
+                header.appendChild(arrow)
+                header.appendChild(block)
+                header.appendChild(blockType)
                 header.appendChild(dir)
                 header.appendChild(count)
                 groupEl.appendChild(header)
@@ -462,12 +468,19 @@ export default class WindowManager {
                     const tokenText = problem.token ? ` "${problem.token}"` : ''
                     msg.textContent = `${problem.message || 'Lint error'}${tokenText}`
 
+                    const lang = document.createElement('span')
+                    lang.className = 'plc-problems-item-lang'
+                    const stack = Array.isArray(problem.languageStack) ? problem.languageStack : (problem.language ? [problem.language] : [])
+                    const stackText = stack.filter(Boolean).join(' > ')
+                    lang.textContent = stackText ? `[${stackText}]` : ''
+
                     const meta = document.createElement('span')
                     meta.className = 'plc-problems-item-meta'
                     meta.textContent = `[Ln ${problem.line || 1}, Col ${problem.column || 1}]`
 
                     item.appendChild(icon)
                     item.appendChild(msg)
+                    if (lang.textContent) item.appendChild(lang)
                     item.appendChild(meta)
                     items.appendChild(item)
 

@@ -664,7 +664,7 @@ ul {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 10px;
+    padding: 1px 8px;
     cursor: pointer;
 }
 
@@ -694,13 +694,23 @@ ul {
     font-size: 11px;
 }
 
+.plc-problems-block-type {
+    color: #aaa;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.plc-problems-arrow {
+    color: #666;
+    font-size: 11px;
+}
+
 .plc-problems-file-path {
     color: #777;
     font-size: 11px;
 }
 
 .plc-problems-file-count {
-    margin-left: auto;
     background: #3c3c3c;
     color: #ddd;
     border-radius: 10px;
@@ -741,6 +751,14 @@ ul {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.plc-problems-item-lang {
+    color: #9a9a9a;
+    font-size: 11px;
+    margin-left: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .plc-problems-item-meta {

@@ -966,6 +966,9 @@ export class VovkPLCEditor {
                     const localLine = before.split('\n').length
                     const lastNl = before.lastIndexOf('\n')
                     const localColumn = mappedStart - (lastNl === -1 ? -1 : lastNl)
+                    const language = target.block.language || (target.block.type === 'asm' ? 'plcasm' : (target.block.type || ''))
+                    const stackSource = target.block.language_stack || target.block.languageStack || null
+                    const languageStack = Array.isArray(stackSource) ? stackSource.filter(Boolean) : (language ? [language] : [])
                     problemsList.push({
                         type: problem.type || 'error',
                         message: problem.message || 'Lint error',
@@ -976,6 +979,9 @@ export class VovkPLCEditor {
                         end: mappedEnd,
                         blockId: target.block.id,
                         blockName: target.block.name || '',
+                        blockType: target.block.type || '',
+                        language,
+                        languageStack,
                         programName: target.program?.name || '',
                         programPath: target.program?.full_path || target.program?.path || '',
                         programId: target.program?.id || '',
