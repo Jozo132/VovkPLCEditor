@@ -34,6 +34,23 @@ export const ladderRenderer = {
         programId: block.programId,
         readOnly: !!editor.edit_locked,
         blockId: block.id,
+        previewEntriesProvider: () => {
+            if (!block.cached_symbol_refs && typeof editor._buildSymbolCache === 'function' && typeof editor._ensureAsmCache === 'function') {
+                const cache = editor._buildSymbolCache()
+                editor._ensureAsmCache(block, cache.signature, cache.map, cache.details)
+            }
+            return block.cached_symbol_refs || []
+        },
+        previewValueProvider: entry => {
+            if (!editor.window_manager?.isMonitoringActive?.()) return null
+            const live = editor.live_symbol_values?.get(entry?.name)
+            if (!live || typeof live.text !== 'string') return null
+            let className = ''
+            if (entry?.type === 'bit' || live.type === 'bit') {
+                className = `${live.value ? 'on' : 'off'} bit`
+            }
+            return { text: live.text, className }
+        },
         onLintHover: payload => {
           if (editor.window_manager?.setProblemHover) {
             editor.window_manager.setProblemHover(payload)

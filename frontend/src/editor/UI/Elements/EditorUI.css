@@ -70,7 +70,7 @@
 }
 
 .symbols-table td {
-    padding: 0px 4px; /* Reduced vertical padding */
+    padding: 0px 2px;
 }
 
 .symbols-table input,
@@ -79,8 +79,8 @@
     background: transparent;
     color: #e0e0e0;
     border: 1px solid transparent;
-    padding: 4px 4px;
-    margin: 1px 0;
+    padding: 1px 2px;
+    margin: 0;
     border-radius: 2px;
     font-family: inherit;
     font-size: inherit;
@@ -105,6 +105,10 @@
     opacity: 0.9;
     cursor: default;
     padding-left: 7px; /* Compensate for text shift */
+}
+
+.symbol-live-value {
+    font-weight: 700;
 }
 
 /* Symbol Icon Column */
@@ -142,8 +146,9 @@
     gap: 10px;
 }
 
-/* Add Symbol Button */
-.add-symbol-btn {
+/* Add Symbol + Monitor Buttons */
+.add-symbol-btn,
+.monitor-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -162,14 +167,63 @@
     margin-top: 8px;
 }
 
-.add-symbol-btn:hover {
+.add-symbol-btn:hover,
+.monitor-btn:hover {
     background-color: #4a4a4a;
     color: #ffffff;
 }
 
-.add-symbol-btn:focus {
+.add-symbol-btn:focus,
+.monitor-btn:focus {
     outline: 1px solid #007fd4;
     outline-offset: -1px;
+}
+
+.monitor-btn:focus {
+    outline-color: #1fba5f;
+}
+
+.monitor-btn {
+    width: 80px;
+    font-weight: 700;
+    color: #000;
+    text-align: center;
+    background-color: #6a6a6a;
+    border-color: #7a7a7a;
+}
+
+.monitor-btn:hover {
+    background-color: #7a7a7a;
+    border-color: #8a8a8a;
+    color: #000;
+}
+
+.plc-editor-header .monitor-btn {
+    margin-left: auto;
+    margin-top: 0;
+    align-self: center;
+    flex-shrink: 0;
+}
+
+.monitor-btn.active {
+    background-color: #1fba5f;
+    border-color: #1fba5f;
+    color: #000;
+}
+
+.monitor-btn.active:hover {
+    background-color: #26d66c;
+    border-color: #26d66c;
+    color: #000;
+}
+
+.add-symbol-btn {
+    background-color: #4a4a4a;
+    border-color: #666;
+}
+
+.add-symbol-btn:hover {
+    background-color: #5a5a5a;
 }
 
 /* Delete button */
@@ -359,11 +413,20 @@
         margin: 0 !important;
     }
     
-    .add-symbol-btn {
+    .add-symbol-btn,
+    .monitor-btn {
         height: 28px !important;
         font-size: 11px !important;
         padding: 0 10px !important;
         margin-top: 4px !important;
+    }
+
+    .monitor-btn {
+        width: 100px !important;
+    }
+
+    .plc-editor-header .monitor-btn {
+        margin-top: 0 !important;
     }
     
     /* Shrink columns for mobile */

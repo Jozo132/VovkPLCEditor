@@ -4,6 +4,8 @@ export class MiniCodeEditor {
      * @param {Element} mountElement DOM container (position: relative or static)
      * @param {{language?:string,value?:string,font?:string,
      *          liveProvider?:(symbol:string)=>any,
+     *          previewEntriesProvider?:()=>{start:number,end:number,name?:string,type?:string,address?:string}[],
+     *          previewValueProvider?:(entry:any)=>string|number|{text?:string,className?:string}|null,
      *          autocompleteProvider?:(prefix:string)=>string[],
      *          symbolProvider?:(type?:string)=>string[],
      *          hoverProvider?:(word:string)=>Promise<string|null>|string|null,
@@ -68,6 +70,10 @@ export class MiniCodeEditor {
 .mce-hover-highlight { position: absolute; pointer-events: none; z-index: 4; background: rgba(216, 90, 112, 0.3); border-radius: 2px; }
 .mce-link-highlight { position: absolute; pointer-events: none; z-index: 4; height: 2px; background: #4daafc; border-radius: 1px; opacity: 0.9; }
 .mce-selection-highlight { position: absolute; pointer-events: none; z-index: 3; background: rgba(76, 141, 255, 0.28); border-radius: 2px; }
+.mce-preview-pill { position:absolute; display:inline-flex; align-items:center; justify-content:center; min-height:14px; padding:0 8px; border-radius:6px; background:#464646; color:#fff; border:1px solid #fff; font-size:13px; line-height:1; font-weight:600; white-space:nowrap; pointer-events:none; z-index:6; box-shadow:0 1px 2px rgba(0,0,0,0.45); transform: translateY(-1px); }
+.mce-preview-pill.on { background:#148a45; color:#fff; }
+.mce-preview-pill.off { background:#3a3a3a; color:#fff; }
+.mce-preview-pill.bit { min-width:34px; }
 .mce-marker:hover::after {
     content: attr(data-msg);
     position: absolute; bottom: 100%; left: 0;
@@ -1022,8 +1028,57 @@ export class MiniCodeEditor {
 
         /* live overlay */
         let live = o.liveProvider || (() => undefined)
+        let previewEntriesProvider = typeof o.previewEntriesProvider === 'function' ? o.previewEntriesProvider : null
+        let previewValueProvider = typeof o.previewValueProvider === 'function' ? o.previewValueProvider : null
+        const previewPills = []
+        const clearPreviewPills = () => {
+            previewPills.forEach(p => p.remove())
+            previewPills.length = 0
+        }
+        const getPreviewEntries = () => {
+            if (previewEntriesProvider) return previewEntriesProvider() || []
+            return []
+        }
+        const renderPreviewPills = () => {
+            clearPreviewPills()
+            if (!previewValueProvider) return
+            const entries = getPreviewEntries()
+            if (!entries || !entries.length) return
+            const visibleTop = ta.scrollTop
+            const visibleBottom = ta.scrollTop + ta.clientHeight
+            entries.forEach(entry => {
+                if (!entry || typeof entry.start !== 'number') return
+                const value = previewValueProvider(entry)
+                if (value === null || typeof value === 'undefined' || value === '') return
+                const endIndex = typeof entry.end === 'number' ? entry.end : entry.start
+                const p = caretPx(endIndex)
+                if (p.y + p.h < visibleTop || p.y > visibleBottom) return
+                const pill = document.createElement('span')
+                pill.className = 'mce-preview-pill'
+                let text = ''
+                if (typeof value === 'object' && value !== null) {
+                    text = value.text ?? ''
+                    if (value.className) {
+                        const classes = Array.isArray(value.className)
+                            ? value.className
+                            : String(value.className).split(/\s+/).filter(Boolean)
+                        classes.forEach(cls => pill.classList.add(cls))
+                    }
+                } else {
+                    text = String(value)
+                }
+                if (!text) return
+                pill.textContent = text
+                pill.style.left = `${p.x + 8}px`
+                pill.style.top = `${p.y}px`
+                ov.appendChild(pill)
+                previewPills.push(pill)
+            })
+        }
         const overlay = () => {
             ov.querySelectorAll('.live').forEach(node => node.remove())
+            renderPreviewPills()
+            if (previewValueProvider) return
             const re = /\b([A-Za-z_]\w*)\b/g
             let mx
             while ((mx = re.exec(ta.value))) {
@@ -1048,6 +1103,11 @@ export class MiniCodeEditor {
                 live = fn
                 this.refreshLive()
             }
+        }
+        this.setPreviewProviders = (entriesProvider, valueProvider) => {
+            previewEntriesProvider = typeof entriesProvider === 'function' ? entriesProvider : null
+            previewValueProvider = typeof valueProvider === 'function' ? valueProvider : null
+            this.refreshLive()
         }
 
         /* autocomplete */

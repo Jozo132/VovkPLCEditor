@@ -17,7 +17,8 @@ export default class SymbolsUI {
     live_values = new Map()
     _live_cells = new Map()
     monitoringActive = false
-    monitor_button
+    monitor_buttons = []
+    monitoringAvailable = false
     _live_color_on = '#1fba5f'
     _live_color_off = 'rgba(200, 200, 200, 0.5)'
     
@@ -47,6 +48,7 @@ export default class SymbolsUI {
                 <div class="plc-editor-header">
                     <h2 style="margin-top: 0px; margin-bottom: 3px;">Symbols</h2>
                     <p>Global Variable Table</p>
+                    <button class="plc-btn monitor-btn" data-monitor-toggle="true">Monitor</button>
                 </div>
             </div>
             <div class="plc-editor-body symbols-body">
@@ -71,7 +73,6 @@ export default class SymbolsUI {
             <div class="plc-editor-bottom symbols-bottom-panel">
                 <div class="symbols-toolbar symbols-toolbar-panel">
                     <button class="plc-btn add-symbol-btn">+ Add Symbol</button>
-                    <button class="plc-btn monitor-symbols-btn">Monitor</button>
                     <!-- <button class="plc-btn delete-symbol-btn">Remove Selected</button> -->
                 </div>
             </div>
@@ -84,13 +85,14 @@ export default class SymbolsUI {
         this.add_button = div.querySelector('.add-symbol-btn')
         this.add_button.addEventListener('click', () => this.addSymbol())
 
-        this.monitor_button = div.querySelector('.monitor-symbols-btn')
-        if (this.monitor_button) {
-            this.monitor_button.addEventListener('click', () => {
-                this.setMonitoringActive(!this.monitoringActive)
+        this.monitor_buttons = Array.from(div.querySelectorAll('[data-monitor-toggle="true"]'))
+        this.monitor_buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.master?.window_manager?.toggleMonitoringActive?.()
             })
-            this.updateMonitorButton()
-        }
+        })
+        this.updateMonitoringState(this.master?.window_manager?.isMonitoringActive?.() || false)
+        this.updateMonitoringAvailability(this.master?.window_manager?.isMonitoringAvailable?.() || false)
         
         // Bind sort handlers
         const headers = div.querySelectorAll('th[data-sort]')
@@ -500,20 +502,22 @@ export default class SymbolsUI {
         }
     }
 
-    setMonitoringActive(active = false) {
-        const next = !!active
-        if (this.monitoringActive === next) return
-        this.monitoringActive = next
-        this.updateMonitorButton()
-        if (this.master?.window_manager?.updateLiveMonitorState) {
-            this.master.window_manager.updateLiveMonitorState()
-        }
+    updateMonitoringState(active = false) {
+        this.monitoringActive = !!active
+        this.monitor_buttons.forEach(btn => {
+            btn.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
+            btn.classList.toggle('active', this.monitoringActive)
+        })
     }
 
-    updateMonitorButton() {
-        if (!this.monitor_button) return
-        this.monitor_button.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
-        this.monitor_button.classList.toggle('active', this.monitoringActive)
+    updateMonitoringAvailability(available = false) {
+        this.monitoringAvailable = !!available
+        this.monitor_buttons.forEach(btn => {
+            btn.style.display = this.monitoringAvailable ? '' : 'none'
+        })
+        if (!this.monitoringAvailable) {
+            this.updateMonitoringState(false)
+        }
     }
     
     toggleSelection(symbol, event, tr) {

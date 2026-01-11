@@ -19,6 +19,9 @@ export default class EditorUI {
     /** @type { Element | null } */ frame
     /** @type { HTMLCanvasElement } */ canvas
     master
+    monitor_button
+    monitoringActive = false
+    monitoringAvailable = false
     /** @type { PLC_Program | null } */ program = null
     /** @param { PLCEditor } master * @param { string } id */
     constructor(master, id) {
@@ -106,11 +109,41 @@ export default class EditorUI {
         if (!this.program) throw new Error(`Program not found: ${this.id}`)
         this.name = this.program.name
         this.comment = this.program.comment
+        this.renderHeader()
+        this.draw()
+    }
+
+    updateMonitoringState(active = false) {
+        this.monitoringActive = !!active
+        if (!this.monitor_button) return
+        this.monitor_button.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
+        this.monitor_button.classList.toggle('active', this.monitoringActive)
+    }
+
+    updateMonitoringAvailability(available = false) {
+        this.monitoringAvailable = !!available
+        if (!this.monitor_button) return
+        this.monitor_button.style.display = this.monitoringAvailable ? '' : 'none'
+        if (!this.monitoringAvailable) {
+            this.updateMonitoringState(false)
+        }
+    }
+
+    renderHeader() {
         this.header.innerHTML = /*HTML*/`
             <h2 style="margin-top: 0px; margin-bottom: 3px;">Program: ${this.name || ''}</h2>
             <p>${this.comment || ''}</p>
         `
-        this.draw()
+        const monitorBtn = document.createElement('button')
+        monitorBtn.classList.add('plc-btn', 'monitor-btn')
+        monitorBtn.setAttribute('data-monitor-toggle', 'true')
+        monitorBtn.addEventListener('click', () => {
+            this.master?.window_manager?.toggleMonitoringActive?.()
+        })
+        this.header.appendChild(monitorBtn)
+        this.monitor_button = monitorBtn
+        this.updateMonitoringState(this.master?.window_manager?.isMonitoringActive?.() || false)
+        this.updateMonitoringAvailability(this.master?.window_manager?.isMonitoringAvailable?.() || false)
     }
 
     draw() {
@@ -125,10 +158,7 @@ export default class EditorUI {
         if (this.name !== name || this.comment !== comment) {
             this.name = name
             this.comment = comment
-            this.header.innerHTML = /*HTML*/`
-                <h2 style="margin-top: 0px; margin-bottom: 3px;">Program: ${name || ''}</h2>
-                <p>${comment || ''}</p>
-            `
+            this.renderHeader()
         }
         // draw_program(this.master, this.program)
 

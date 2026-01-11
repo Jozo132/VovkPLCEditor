@@ -74,7 +74,7 @@ export default class ProjectManager {
       if (saved) {
         const project = JSON.parse(saved)
         if (project) {
-          console.log('[ProjectManager] Restoring project from localStorage')
+          // console.log('[ProjectManager] Restoring project from localStorage')
           this.ensureSystemSymbols(project)
           this.load(project) // Use the new load method which includes UI restore
           // Disable default initial program since we restored one
@@ -115,7 +115,7 @@ export default class ProjectManager {
       if (current_state !== this.last_saved_state) {
         localStorage.setItem(LOCAL_STORAGE_KEY, current_state)
         this.last_saved_state = current_state
-        console.log('[ProjectManager] Project saved to localStorage')
+        // console.log('[ProjectManager] Project saved to localStorage')
       }
     } catch (e) {
       console.error('[ProjectManager] Auto-save failed', e)
@@ -141,6 +141,7 @@ export default class ProjectManager {
           delete copy.cached_checksum
           delete copy.cached_symbols_checksum
           delete copy.cached_asm_map
+          delete copy.cached_symbol_refs
           delete copy.programId
           // delete copy.props // Remove rendering props
           if (copy.props) {
@@ -317,7 +318,7 @@ end:                      // Label to jump to
 
     try {
         const result = await runtime.compile(asm)
-        console.log('Compilation result:', result)
+        // console.log('Compilation result:', result)
         cleanup()
         return result
     } catch (e) {

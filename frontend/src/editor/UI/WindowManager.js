@@ -15,6 +15,9 @@ export default class WindowManager {
 
     /** @type {'simulation' | 'device'} */
     active_device = 'simulation'
+    _monitoringActive = false
+    _monitoringAvailable = false
+    _monitoringConnectionState = null
 
     workspace_body
 
@@ -830,6 +833,11 @@ export default class WindowManager {
                     this.#editor.setEditLock(locked)
                 }
             }
+            if (this._monitoringConnectionState !== connected) {
+                this._monitoringConnectionState = connected
+                this.setMonitoringActive(false)
+                this.updateMonitoringAvailability(!!connected)
+            }
             this.updateLiveMonitorState()
         }, 500)
 
@@ -1460,6 +1468,12 @@ export default class WindowManager {
         if (editorUI && typeof editorUI.setLocked === 'function') {
             editorUI.setLocked(!!this.#editor.edit_locked)
         }
+        if (editorUI && typeof editorUI.updateMonitoringState === 'function') {
+            editorUI.updateMonitoringState(this._monitoringActive)
+        }
+        if (editorUI && typeof editorUI.updateMonitoringAvailability === 'function') {
+            editorUI.updateMonitoringAvailability(this._monitoringAvailable)
+        }
         this.windows.set(id, editorUI)
         // Append the editor UI to the workspace
         if (editorUI.div) this.window_frame.appendChild(editorUI.div)
@@ -1495,11 +1509,43 @@ export default class WindowManager {
         }
     }
 
+    isMonitoringActive() {
+        return !!this._monitoringActive
+    }
+
+    isMonitoringAvailable() {
+        return !!this._monitoringAvailable
+    }
+
+    setMonitoringActive(active = false) {
+        const next = !!active
+        if (this._monitoringActive === next) return
+        this._monitoringActive = next
+        for (const win of this.windows.values()) {
+            if (win && typeof win.updateMonitoringState === 'function') {
+                win.updateMonitoringState(next)
+            }
+        }
+        this.updateLiveMonitorState()
+    }
+
+    toggleMonitoringActive() {
+        this.setMonitoringActive(!this._monitoringActive)
+    }
+
+    updateMonitoringAvailability(available = false) {
+        this._monitoringAvailable = !!available
+        for (const win of this.windows.values()) {
+            if (win && typeof win.updateMonitoringAvailability === 'function') {
+                win.updateMonitoringAvailability(this._monitoringAvailable)
+            }
+        }
+    }
+
     updateLiveMonitorState() {
         const editor = this.#editor
         const connected = !!editor?.device_manager?.connected
-        const symbolsUI = this.windows.get('symbols')
-        const shouldMonitor = !!connected && !!symbolsUI && !symbolsUI.hidden && !!symbolsUI.monitoringActive
+        const shouldMonitor = !!connected && this._monitoringActive
         if (shouldMonitor) {
             this._startLiveMemoryMonitor()
             return
@@ -1536,8 +1582,7 @@ export default class WindowManager {
     async _pollLiveSymbols() {
         const editor = this.#editor
         if (!editor?.device_manager?.connected) return
-        const symbolsUI = this.windows.get('symbols')
-        if (!symbolsUI || symbolsUI.hidden || !symbolsUI.monitoringActive) return
+        if (!this._monitoringActive) return
         if (this._liveMemoryInFlight) return
         const symbols = editor.project?.symbols || []
         if (!symbols.length) return

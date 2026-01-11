@@ -620,6 +620,7 @@ export class VovkPLCEditor {
         const symbols = project?.symbols || []
         const offsets = project?.offsets || {}
         const map = new Map()
+        const details = new Map()
         const signatureParts = []
 
         symbols.forEach(symbol => {
@@ -631,14 +632,31 @@ export class VovkPLCEditor {
             }
 
             let addressStr = ''
+            const rawVal = parseFloat(symbol.address) || 0
             if (symbol.type === 'bit') {
-                const val = parseFloat(symbol.address) || 0
-                const byte = Math.floor(val)
-                const bit = Math.round((val - byte) * 10)
+                const byte = Math.floor(rawVal)
+                const bit = Math.round((rawVal - byte) * 10)
                 addressStr = `${baseOffset + byte}.${bit}`
+                details.set(name, {
+                    name,
+                    type: symbol.type || 'bit',
+                    location: symbol.location || '',
+                    address: symbol.address,
+                    addressLabel: addressStr,
+                    absoluteAddress: baseOffset + byte,
+                    bit,
+                })
             } else {
-                const val = parseFloat(symbol.address) || 0
-                addressStr = (baseOffset + Math.floor(val)).toString()
+                addressStr = (baseOffset + Math.floor(rawVal)).toString()
+                details.set(name, {
+                    name,
+                    type: symbol.type || 'byte',
+                    location: symbol.location || '',
+                    address: symbol.address,
+                    addressLabel: addressStr,
+                    absoluteAddress: baseOffset + Math.floor(rawVal),
+                    bit: null,
+                })
             }
 
             map.set(name, addressStr)
@@ -646,7 +664,30 @@ export class VovkPLCEditor {
         })
 
         const signature = this._hashString(signatureParts.join('||')).toString()
-        return { map, signature }
+        return { map, signature, details }
+    }
+
+    _buildSymbolRefs(code, symbolDetails) {
+        const refs = []
+        if (!code || !symbolDetails || symbolDetails.size === 0) return refs
+        const re = /\b[A-Za-z_]\w*\b/g
+        let match = null
+        while ((match = re.exec(code))) {
+            const name = match[0]
+            const detail = symbolDetails.get(name)
+            if (!detail) continue
+            refs.push({
+                name,
+                start: match.index,
+                end: match.index + name.length,
+                type: detail.type,
+                location: detail.location,
+                address: detail.addressLabel,
+                absoluteAddress: detail.absoluteAddress,
+                bit: detail.bit,
+            })
+        }
+        return refs
     }
 
     _replaceSymbolsOnce(code, symbolMap) {
@@ -719,10 +760,13 @@ export class VovkPLCEditor {
         return { code: out, map }
     }
 
-    _ensureAsmCache(block, symbolsSignature, symbolMap) {
+    _ensureAsmCache(block, symbolsSignature, symbolMap, symbolDetails) {
         const code = block.code || ''
         const checksum = this._hashString(code).toString()
         if (block.cached_asm && block.cached_checksum === checksum && block.cached_symbols_checksum === symbolsSignature) {
+            if (!block.cached_symbol_refs) {
+                block.cached_symbol_refs = this._buildSymbolRefs(code, symbolDetails)
+            }
             return block.cached_asm
         }
         const replaced = this._replaceSymbolsOnce(code, symbolMap)
@@ -730,6 +774,7 @@ export class VovkPLCEditor {
         block.cached_checksum = checksum
         block.cached_symbols_checksum = symbolsSignature
         block.cached_asm_map = replaced.map
+        block.cached_symbol_refs = this._buildSymbolRefs(code, symbolDetails)
         return block.cached_asm
     }
 
@@ -777,7 +822,7 @@ export class VovkPLCEditor {
         const blocks = []
         let assembly = ''
         const programs = this._getLintPrograms()
-        const { map, signature } = this._buildSymbolCache()
+        const { map, signature, details } = this._buildSymbolCache()
 
         if (!programs.length) return { assembly, blocks }
 
@@ -790,7 +835,7 @@ export class VovkPLCEditor {
                 }
                 if (!block.id) block.id = this._generateID(block.id)
 
-                const cached = this._ensureAsmCache(block, signature, map)
+                const cached = this._ensureAsmCache(block, signature, map, details)
                 const header = includeHeaders ? `# block:${block.id}\n` : ''
                 assembly += header
                 const codeStart = assembly.length

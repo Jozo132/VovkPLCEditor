@@ -12,6 +12,9 @@ export default class SetupUI {
     body
     master
     locked = false
+    monitoringActive = false
+    monitor_buttons = []
+    monitoringAvailable = false
 
     /** @param { import("../../Editor.js").VovkPLCEditor } master */
     constructor(master) {
@@ -92,6 +95,7 @@ export default class SetupUI {
                 <div class="plc-editor-header">
                     <h2 style="margin-top: 0px; margin-bottom: 3px;">Device Configuration</h2>
                     <p>System Settings and Memory Map</p>
+                    <button class="plc-btn monitor-btn" data-monitor-toggle="true">Monitor</button>
                 </div>
             </div>
             <div class="plc-editor-body setup-body">
@@ -228,6 +232,7 @@ export default class SetupUI {
         
         const compileBtn = this.div.querySelector('#setup-compile')
         const downloadPlcBtn = this.div.querySelector('#setup-download-plc')
+        const monitorButtons = Array.from(this.div.querySelectorAll('[data-monitor-toggle="true"]'))
 
         if (readConfigBtn) {
             readConfigBtn.onclick = async () => {
@@ -270,6 +275,17 @@ export default class SetupUI {
                  // Delegate to centralized handler
                  await this.master.window_manager.handleDownload()
              }
+        }
+
+        if (monitorButtons.length) {
+            this.monitor_buttons = monitorButtons
+            monitorButtons.forEach(btn => {
+                btn.onclick = () => {
+                    this.master?.window_manager?.toggleMonitoringActive?.()
+                }
+            })
+            this.updateMonitoringState(this.master?.window_manager?.isMonitoringActive?.() || false)
+            this.updateMonitoringAvailability(this.master?.window_manager?.isMonitoringAvailable?.() || false)
         }
     }
 
@@ -346,6 +362,26 @@ export default class SetupUI {
                 input.removeAttribute('disabled')
             }
         })
+    }
+
+    updateMonitoringState(active = false) {
+        this.monitoringActive = !!active
+        if (!this.monitor_buttons || !this.monitor_buttons.length) return
+        this.monitor_buttons.forEach(btn => {
+            btn.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
+            btn.classList.toggle('active', this.monitoringActive)
+        })
+    }
+
+    updateMonitoringAvailability(available = false) {
+        this.monitoringAvailable = !!available
+        if (!this.monitor_buttons || !this.monitor_buttons.length) return
+        this.monitor_buttons.forEach(btn => {
+            btn.style.display = this.monitoringAvailable ? '' : 'none'
+        })
+        if (!this.monitoringAvailable) {
+            this.updateMonitoringState(false)
+        }
     }
     
     hide() {
