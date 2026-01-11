@@ -14,6 +14,12 @@ export default class SymbolsUI {
     body
     master
     locked = false
+    live_values = new Map()
+    _live_cells = new Map()
+    monitoringActive = false
+    monitor_button
+    _live_color_on = '#1fba5f'
+    _live_color_off = 'rgba(200, 200, 200, 0.5)'
     
     selectedSymbols = new Set()
     lastFocusedIndex = -1
@@ -52,7 +58,7 @@ export default class SymbolsUI {
                             <th data-sort="location" class="col-loc">Location <span class="sort-icon"></span></th>
                             <th data-sort="type" class="col-type">Type <span class="sort-icon"></span></th>
                             <th data-sort="address" class="col-addr">Address <span class="sort-icon"></span></th>
-                            <th data-sort="initial_value" class="col-init">Initial Value <span class="sort-icon"></span></th>
+                    <th data-sort="value" class="col-init">Value <span class="sort-icon"></span></th>
                             <th data-sort="comment" class="col-comm">Comment <span class="sort-icon"></span></th>
                             <th class="col-mini"></th>
                         </tr>
@@ -65,6 +71,7 @@ export default class SymbolsUI {
             <div class="plc-editor-bottom symbols-bottom-panel">
                 <div class="symbols-toolbar symbols-toolbar-panel">
                     <button class="plc-btn add-symbol-btn">+ Add Symbol</button>
+                    <button class="plc-btn monitor-symbols-btn">Monitor</button>
                     <!-- <button class="plc-btn delete-symbol-btn">Remove Selected</button> -->
                 </div>
             </div>
@@ -76,6 +83,14 @@ export default class SymbolsUI {
         
         this.add_button = div.querySelector('.add-symbol-btn')
         this.add_button.addEventListener('click', () => this.addSymbol())
+
+        this.monitor_button = div.querySelector('.monitor-symbols-btn')
+        if (this.monitor_button) {
+            this.monitor_button.addEventListener('click', () => {
+                this.setMonitoringActive(!this.monitoringActive)
+            })
+            this.updateMonitorButton()
+        }
         
         // Bind sort handlers
         const headers = div.querySelectorAll('th[data-sort]')
@@ -233,15 +248,24 @@ export default class SymbolsUI {
     show() {
         this.hidden = false
         this.div.style.display = 'flex'
+        if (this.master?.window_manager?.updateLiveMonitorState) {
+            this.master.window_manager.updateLiveMonitorState()
+        }
     }
 
     hide() {
         this.hidden = true
         this.div.style.display = 'none'
+        if (this.master?.window_manager?.updateLiveMonitorState) {
+            this.master.window_manager.updateLiveMonitorState()
+        }
     }
     
     close() {
         this.div.remove()
+        if (this.master?.window_manager?.updateLiveMonitorState) {
+            this.master.window_manager.updateLiveMonitorState()
+        }
     }
 
     reload() {
@@ -286,14 +310,19 @@ export default class SymbolsUI {
             let valA = a[column]
             let valB = b[column]
             
-            // Numeric sort for address and initial_value
-            if (column === 'address' || column === 'initial_value') {
-                valA = parseFloat(valA) || 0
-                valB = parseFloat(valB) || 0
-            } else {
-                valA = String(valA || '').toLowerCase()
-                valB = String(valB || '').toLowerCase()
-            }
+        // Numeric sort for address/value
+        if (column === 'address') {
+            valA = parseFloat(valA) || 0
+            valB = parseFloat(valB) || 0
+        } else if (column === 'value') {
+            const liveA = this.live_values.get(a.name)
+            const liveB = this.live_values.get(b.name)
+            valA = typeof liveA?.value === 'number' ? liveA.value : -Infinity
+            valB = typeof liveB?.value === 'number' ? liveB.value : -Infinity
+        } else {
+            valA = String(valA || '').toLowerCase()
+            valB = String(valB || '').toLowerCase()
+        }
             
             if (valA < valB) return direction === 'asc' ? -1 : 1
             if (valA > valB) return direction === 'asc' ? 1 : -1
@@ -304,6 +333,7 @@ export default class SymbolsUI {
     renderTable() {
         if (!this.tbody) return
         this.tbody.innerHTML = ''
+        this._live_cells = new Map()
         const symbols = this.master.project.symbols || []
         
         symbols.forEach((symbol, index) => {
@@ -393,8 +423,12 @@ export default class SymbolsUI {
                 }
             }, null, 'text', cellLocked))
 
-            // Initial Value
-            tr.appendChild(this.createCell('input', symbol.initial_value, val => symbol.initial_value = parseFloat(val) || 0, null, 'number', cellLocked))
+            // Live Value
+            const liveCell = document.createElement('td')
+            liveCell.classList.add('symbol-live-value')
+            this.applyLiveCellState(liveCell, this.live_values.get(symbol.name))
+            if (symbol.name) this._live_cells.set(symbol.name, liveCell)
+            tr.appendChild(liveCell)
 
             // Comment
             tr.appendChild(this.createCell('input', symbol.comment, val => symbol.comment = val, [], 'text', cellLocked))
@@ -433,6 +467,53 @@ export default class SymbolsUI {
             if (input && !this.locked) input.focus()
         }
         return true
+    }
+
+    getLiveValueText(symbol) {
+        if (!symbol || !symbol.name) return '-'
+        const live = this.live_values.get(symbol.name)
+        if (!live || typeof live.text !== 'string') return '-'
+        return live.text
+    }
+
+    applyLiveCellState(cell, live) {
+        if (!cell) return
+        if (!live || typeof live.text !== 'string') {
+            cell.textContent = '-'
+            cell.style.color = ''
+            return
+        }
+        cell.textContent = live.text
+        if (live.type === 'bit') {
+            cell.style.color = live.value ? this._live_color_on : this._live_color_off
+        } else {
+            cell.style.color = ''
+        }
+    }
+
+    updateLiveValues(values = new Map()) {
+        this.live_values = values
+        if (!this._live_cells || !this._live_cells.size) return
+        for (const [name, cell] of this._live_cells.entries()) {
+            const live = this.live_values.get(name)
+            this.applyLiveCellState(cell, live)
+        }
+    }
+
+    setMonitoringActive(active = false) {
+        const next = !!active
+        if (this.monitoringActive === next) return
+        this.monitoringActive = next
+        this.updateMonitorButton()
+        if (this.master?.window_manager?.updateLiveMonitorState) {
+            this.master.window_manager.updateLiveMonitorState()
+        }
+    }
+
+    updateMonitorButton() {
+        if (!this.monitor_button) return
+        this.monitor_button.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
+        this.monitor_button.classList.toggle('active', this.monitoringActive)
     }
     
     toggleSelection(symbol, event, tr) {

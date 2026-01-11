@@ -127,7 +127,7 @@ export default class SetupUI {
 
                     <!-- Action Buttons -->
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
-                        <button id="setup-read-config" class="plc-btn setup-btn" ${(!connected || lockSettings) ? 'disabled' : ''} style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
+                        <button id="setup-read-config" class="plc-btn setup-btn" ${!connected ? 'disabled' : ''} style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
                             <span style="margin-right: 8px; display: flex; transform: translateY(-1.5px);">${iconUpload}</span> Load PLC Configuration
                         </button>
                         
@@ -137,7 +137,7 @@ export default class SetupUI {
                             <span style="margin-right: 8px; display: flex; transform: translateY(-1.5px);">${iconUpload}</span> Upload from PLC
                         </button>
 
-                         <button id="setup-compile" class="plc-btn setup-btn" ${!connected ? 'disabled' : ''} style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
+                         <button id="setup-compile" class="plc-btn setup-btn" style="background: #3c3c3c; color: #eee; border: 1px solid #555;">
                             <span style="margin-right: 8px; display: flex; transform: translateY(-1.5px);">${iconCompile}</span> Compile Project
                         </button>
 
@@ -311,26 +311,24 @@ export default class SetupUI {
         }
 
         // Update Buttons
-        const btns = ['#setup-read-config', '#setup-upload-plc']
-        btns.forEach(sel => {
-            const btn = this.div.querySelector(sel)
-            if (btn) {
-                if (connected && !this.locked) {
-                    btn.removeAttribute('disabled')
-                } else {
-                    btn.setAttribute('disabled', 'disabled')
-                }
-            }
-        })
-
-        const compileBtn = this.div.querySelector('#setup-compile')
-        if (compileBtn) {
+        const readConfigBtn = this.div.querySelector('#setup-read-config')
+        if (readConfigBtn) {
             if (connected) {
-                compileBtn.removeAttribute('disabled')
+                readConfigBtn.removeAttribute('disabled')
             } else {
-                compileBtn.setAttribute('disabled', 'disabled')
+                readConfigBtn.setAttribute('disabled', 'disabled')
             }
         }
+
+        const uploadBtn = this.div.querySelector('#setup-upload-plc')
+        if (uploadBtn) {
+            if (connected && !this.locked) {
+                uploadBtn.removeAttribute('disabled')
+            } else {
+                uploadBtn.setAttribute('disabled', 'disabled')
+            }
+        }
+
         const downloadBtn = this.div.querySelector('#setup-download-plc')
         if (downloadBtn) {
             if (connected) {

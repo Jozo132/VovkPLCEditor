@@ -311,6 +311,7 @@ export class VovkPLCEditor {
         runId: 0,
     }
     edit_locked = false
+    live_symbol_values = new Map()
 
     /** @type {Object | null} */
     initial_program = null

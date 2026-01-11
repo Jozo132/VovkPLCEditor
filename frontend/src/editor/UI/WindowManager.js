@@ -118,7 +118,7 @@ export default class WindowManager {
             <div class="plc-workspace-footer" style="height: 22px; background: #007acc; color: #fff; display: flex; align-items: center; padding: 0px; margin: 0px; font-size: 12px; justify-content: space-between;">
                 <div style="display: flex; gap: 10px; align-items: center; margin-left: 15px;">
                     <div class="footer-item"><span class="codicon codicon-remote"></span> VovkPLC Editor</div>
-                    <button id="footer-compile" class="footer-btn" style="background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; opacity: 0.5; pointer-events: none; font-size: 11px;">
+                    <button id="footer-compile" class="footer-btn" style="background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; opacity: 1; pointer-events: all; font-size: 11px;">
                         <span style="display: flex; transform: translateY(-1.5px);"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-6a.5.5 0 0 0-1 0v6z"/><path d="M3 11.5h2v2h-2zM7 11.5h2v2h-2zM11 11.5h2v2h-2zM5 8.5h2v2h-2zM9 8.5h2v2h-2z"/></svg></span> Compile
                     </button>
                     <button id="footer-download" class="footer-btn" style="background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; opacity: 0.5; pointer-events: none; font-size: 11px;">
@@ -807,8 +807,8 @@ export default class WindowManager {
 
             // Enable/Disable buttons based on connection
             if (compileBtn) {
-                compileBtn.style.opacity = connected ? '1' : '0.5'
-                compileBtn.style.pointerEvents = connected ? 'all' : 'none'
+                compileBtn.style.opacity = '1'
+                compileBtn.style.pointerEvents = 'all'
             }
             if (downloadBtn) {
                 downloadBtn.style.opacity = connected ? '1' : '0.5'
@@ -830,6 +830,7 @@ export default class WindowManager {
                     this.#editor.setEditLock(locked)
                 }
             }
+            this.updateLiveMonitorState()
         }, 500)
 
         const navigation = this.workspace.querySelector('.plc-navigation')
@@ -930,12 +931,6 @@ export default class WindowManager {
     }
 
     async handleCompile() {
-        const connected = this.#editor.device_manager && this.#editor.device_manager.connected
-        if (!connected) {
-            this.logToConsole('Connect to a device to compile.', 'warning')
-            this.logToConsole('----------------------------------------', 'info')
-            return
-        }
         if (!this.#editor.runtime_ready) {
             this.logToConsole('WASM Runtime is not ready yet.', 'error')
             this.logToConsole('----------------------------------------', 'info')
@@ -1486,6 +1481,9 @@ export default class WindowManager {
         const exists = this.windows.get(id)
         exists?.close()
         this.windows.delete(id)
+        if (id === 'symbols') {
+            this.updateLiveMonitorState()
+        }
         
         const active_program = this.#editor.findProgram(id)
         if (active_program) active_program.host = undefined
@@ -1494,6 +1492,165 @@ export default class WindowManager {
             this.#editor.window_manager.openProgram(next_id)
         } else {
             this.#editor.window_manager.active_program = undefined
+        }
+    }
+
+    updateLiveMonitorState() {
+        const editor = this.#editor
+        const connected = !!editor?.device_manager?.connected
+        const symbolsUI = this.windows.get('symbols')
+        const shouldMonitor = !!connected && !!symbolsUI && !symbolsUI.hidden && !!symbolsUI.monitoringActive
+        if (shouldMonitor) {
+            this._startLiveMemoryMonitor()
+            return
+        }
+        if (this._liveMemoryTimer || (editor?.live_symbol_values && editor.live_symbol_values.size)) {
+            this._stopLiveMemoryMonitor()
+        }
+    }
+
+    _startLiveMemoryMonitor() {
+        if (this._liveMemoryTimer) return
+        this._pollLiveSymbols()
+        this._liveMemoryTimer = setInterval(() => {
+            this._pollLiveSymbols()
+        }, 100)
+    }
+
+    _stopLiveMemoryMonitor() {
+        if (this._liveMemoryTimer) {
+            clearInterval(this._liveMemoryTimer)
+            this._liveMemoryTimer = null
+        }
+        this._liveMemoryInFlight = false
+        const editor = this.#editor
+        if (editor && editor.live_symbol_values) {
+            editor.live_symbol_values = new Map()
+        }
+        const symbols = this.windows.get('symbols')
+        if (symbols && typeof symbols.updateLiveValues === 'function') {
+            symbols.updateLiveValues(new Map())
+        }
+    }
+
+    async _pollLiveSymbols() {
+        const editor = this.#editor
+        if (!editor?.device_manager?.connected) return
+        const symbolsUI = this.windows.get('symbols')
+        if (!symbolsUI || symbolsUI.hidden || !symbolsUI.monitoringActive) return
+        if (this._liveMemoryInFlight) return
+        const symbols = editor.project?.symbols || []
+        if (!symbols.length) return
+        const memoryLimitValue = Number(editor.device_manager?.deviceInfo?.memory)
+        const memoryLimit = Number.isFinite(memoryLimitValue) && memoryLimitValue > 0
+            ? memoryLimitValue
+            : null
+
+        const offsets = editor.project?.offsets || {}
+        const groups = new Map()
+        const typeSizes = {
+            bit: 1,
+            byte: 1,
+            int: 2,
+            dint: 4,
+            real: 4,
+        }
+        const normalizeAddress = (symbol) => {
+            const baseOffset = symbol?.location && offsets[symbol.location]
+                ? (offsets[symbol.location].offset || 0)
+                : 0
+            const addrVal = parseFloat(symbol?.address) || 0
+            if (symbol?.type === 'bit') {
+                const byte = Math.floor(addrVal)
+                const bit = Math.round((addrVal - byte) * 10)
+                return { absolute: baseOffset + byte, bit, size: 1 }
+            }
+            const size = typeSizes[symbol?.type] || 1
+            return { absolute: baseOffset + Math.floor(addrVal), bit: null, size }
+        }
+
+        symbols.forEach(symbol => {
+            if (!symbol || !symbol.name) return
+            const layout = normalizeAddress(symbol)
+            const end = layout.absolute + layout.size
+            const key = symbol.location || 'memory'
+            if (!groups.has(key)) {
+                groups.set(key, { min: layout.absolute, max: end, items: [] })
+            }
+            const group = groups.get(key)
+            group.min = Math.min(group.min, layout.absolute)
+            group.max = Math.max(group.max, end)
+            group.items.push({ symbol, layout })
+        })
+
+        this._liveMemoryInFlight = true
+        try {
+            const liveValues = new Map()
+            for (const group of groups.values()) {
+                const readStart = Math.max(0, group.min)
+                const readEnd = memoryLimit !== null ? Math.min(group.max, memoryLimit) : group.max
+                const size = Math.max(0, readEnd - readStart)
+                if (!size) continue
+                let raw = await editor.device_manager.readMemory(readStart, size)
+                let bytes = null
+                if (raw instanceof Uint8Array) {
+                    bytes = raw
+                } else if (Array.isArray(raw)) {
+                    bytes = Uint8Array.from(raw)
+                } else if (raw && raw.buffer) {
+                    bytes = new Uint8Array(raw.buffer, raw.byteOffset || 0, raw.byteLength || raw.length || 0)
+                }
+                if (!bytes || !bytes.length) continue
+                const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+
+                group.items.forEach(({ symbol, layout }) => {
+                    const offset = layout.absolute - readStart
+                    const type = symbol.type || 'byte'
+                    let value = null
+                    let text = '-'
+                    if (offset < 0 || offset >= bytes.length) {
+                        liveValues.set(symbol.name, { value: null, text, type })
+                        return
+                    }
+                    if (type === 'bit') {
+                        const byteVal = bytes[offset]
+                        const bit = layout.bit || 0
+                        value = (byteVal >> bit) & 1
+                        text = value ? 'ON' : 'OFF'
+                    } else if (type === 'byte') {
+                        value = bytes[offset]
+                        text = String(value)
+                    } else if (type === 'int') {
+                        if (offset + 2 <= bytes.length) {
+                            value = view.getInt16(offset, true)
+                            text = String(value)
+                        }
+                    } else if (type === 'dint') {
+                        if (offset + 4 <= bytes.length) {
+                            value = view.getInt32(offset, true)
+                            text = String(value)
+                        }
+                    } else if (type === 'real') {
+                        if (offset + 4 <= bytes.length) {
+                            value = view.getFloat32(offset, true)
+                            text = Number.isFinite(value) ? value.toFixed(3) : String(value)
+                        }
+                    } else {
+                        value = bytes[offset]
+                        text = String(value)
+                    }
+                    liveValues.set(symbol.name, { value, text, type })
+                })
+            }
+            editor.live_symbol_values = liveValues
+            const symbolsUI = this.windows.get('symbols')
+            if (symbolsUI && typeof symbolsUI.updateLiveValues === 'function') {
+                symbolsUI.updateLiveValues(liveValues)
+            }
+        } catch (e) {
+            // Ignore transient read errors while connected
+        } finally {
+            this._liveMemoryInFlight = false
         }
     }
 

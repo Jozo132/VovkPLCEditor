@@ -130,7 +130,45 @@ export default class DeviceManager {
    */
   async readMemory(address, size) {
     if (!this.connection) throw new Error("Device not connected")
-    return this.connection.readMemory(address, size)
+    const start = Math.max(0, Math.floor(Number(address) || 0))
+    const requestedSize = Math.max(0, Math.floor(Number(size) || 0))
+    if (!requestedSize) return new Uint8Array(0)
+
+    const memoryLimitValue = Number(this.deviceInfo?.memory)
+    const memoryLimit = Number.isFinite(memoryLimitValue) && memoryLimitValue > 0
+      ? memoryLimitValue
+      : null
+    const end = memoryLimit !== null ? Math.min(start + requestedSize, memoryLimit) : start + requestedSize
+    const finalSize = Math.max(0, end - start)
+    if (!finalSize) return new Uint8Array(0)
+
+    const maxChunk = 64
+    const chunks = []
+    let total = 0
+    for (let offset = 0; offset < finalSize; offset += maxChunk) {
+      const chunkSize = Math.min(maxChunk, finalSize - offset)
+      const part = await this.connection.readMemory(start + offset, chunkSize)
+      let bytes = null
+      if (part instanceof Uint8Array) {
+        bytes = part
+      } else if (Array.isArray(part)) {
+        bytes = Uint8Array.from(part)
+      } else if (part && part.buffer) {
+        bytes = new Uint8Array(part.buffer, part.byteOffset || 0, part.byteLength || part.length || 0)
+      }
+      if (bytes && bytes.length) {
+        chunks.push(bytes)
+        total += bytes.length
+      }
+    }
+    if (!chunks.length) return new Uint8Array(0)
+    const merged = new Uint8Array(total)
+    let cursor = 0
+    for (const chunk of chunks) {
+      merged.set(chunk, cursor)
+      cursor += chunk.length
+    }
+    return merged
   }
 
   async writeMemory(address, data) {

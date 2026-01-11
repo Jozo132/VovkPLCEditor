@@ -72,7 +72,11 @@ export default class SerialConnection extends ConnectionBase {
         const available = await this._waitForReply();
         if (!available) throw new Error("No response from device");
         const line = this.serial.readLine() || "";
-        const hex = this.plc.parseHex(line);
+        let raw = line.trim();
+        if (raw.startsWith('OK')) {
+            raw = raw.substring(2).trim();
+        }
+        const hex = this.plc.parseHex(raw);
         const buffer = new Uint8Array(hex);
         return buffer;
     }

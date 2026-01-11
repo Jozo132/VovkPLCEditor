@@ -42,10 +42,10 @@ const SYSTEM_SYMBOLS = [
     { name: 'S_30min', location: 'control', type: 'bit', address: 6.6, initial_value: 0, comment: '30 minute square wave' },
     { name: 'S_1hr', location: 'control', type: 'bit', address: 6.7, initial_value: 0, comment: '1 hour square wave' },
 
-    { name: 'elapsed_days', location: 'control', type: 'byte', address: 8.0, initial_value: 0, comment: 'Elapsed days' },
-    { name: 'elapsed_hours', location: 'control', type: 'byte', address: 9.0, initial_value: 0, comment: 'Elapsed hours' },
-    { name: 'elapsed_minutes', location: 'control', type: 'byte', address: 10.0, initial_value: 0, comment: 'Elapsed minutes' },
-    { name: 'elapsed_seconds', location: 'control', type: 'byte', address: 11.0, initial_value: 0, comment: 'Elapsed seconds' },
+    { name: 'elapsed_seconds', location: 'control', type: 'byte', address: 8.0, initial_value: 0, comment: 'Elapsed seconds' },
+    { name: 'elapsed_minutes', location: 'control', type: 'byte', address: 9.0, initial_value: 0, comment: 'Elapsed minutes' },
+    { name: 'elapsed_hours', location: 'control', type: 'byte', address: 10.0, initial_value: 0, comment: 'Elapsed hours' },
+    { name: 'elapsed_days', location: 'control', type: 'byte', address: 11.0, initial_value: 0, comment: 'Elapsed days' },
 
     { name: 'system_uptime', location: 'control', type: 'dint', address: 12.0, initial_value: 0, comment: 'System uptime in seconds' },
 ].map(s => ({ ...s, readonly: true }))
