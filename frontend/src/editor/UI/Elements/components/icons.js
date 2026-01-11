@@ -107,6 +107,15 @@ const setup_icon_source = {
     `
 }
 
+const memory_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <path fill="#9CDCFE" d="M5 6h14v10H5V6zm2 2v6h2V8H7zm4 0v6h2V8h-2zm4 0v6h2V8h-2z"/>
+        <path fill="#9CDCFE" d="M7 4h2v2H7V4zm4 0h2v2h-2V4zm4 0h2v2h-2V4zM7 16h2v2H7v-2zm4 0h2v2h-2v-2zm4 0h2v2h-2v-2z"/>
+    `
+}
+
 const download_icon_source = {
     width: 24,
     height: 24,
@@ -127,6 +136,7 @@ await icon_dealer.importIcon({ type: 'folder', name: 'plc-icon-folder', image: `
 await icon_dealer.importIcon({ type: 'program', name: 'plc-icon-gears', image: `url('${ImageRenderer.renderSVG(program_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'symbols', name: 'plc-icon-symbols', image: `url('${ImageRenderer.renderSVG(symbols_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'setup', name: 'plc-icon-setup', image: `url('${ImageRenderer.renderSVG(setup_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'memory', name: 'plc-icon-memory', image: `url('${ImageRenderer.renderSVG(memory_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'add', name: 'plc-icon-add', image: `url('${ImageRenderer.renderSVG(plus_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'delete', name: 'plc-icon-delete', image: `url('${ImageRenderer.renderSVG(delete_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'download', name: 'plc-icon-download', image: `url('${ImageRenderer.renderSVG(download_icon_source)}')` })

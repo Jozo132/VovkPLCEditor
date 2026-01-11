@@ -41,7 +41,7 @@ const createNavHistory = editor => ({
             return !!program?.blocks?.find(b => b.id === entry.blockId)
         }
         if (entry.type === 'window') {
-            if (entry.windowId === 'symbols' || entry.windowId === 'setup') return true
+            if (entry.windowId === 'symbols' || entry.windowId === 'setup' || entry.windowId === 'memory') return true
             return !!editor.findProgram(entry.windowId)
         }
         return false
@@ -587,7 +587,7 @@ export class VovkPLCEditor {
         }
         project.files.forEach(file => {
             if (file.type === 'program') return checkProgram(file)
-            const system_types = ['symbols', 'setup']
+            const system_types = ['symbols', 'setup', 'memory']
             if (system_types.includes(file.type)) return
             // @ts-ignore
             throw new Error(`Invalid child type: ${file.type}`)

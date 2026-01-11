@@ -27,7 +27,7 @@ const folder_item_html = ({ minimized, draggable, selected }) => /*HTML*/`
 
 /** @type { (params: { draggable: boolean, selected: boolean, type: string }) => string } */
 const custom_item_html = ({ draggable, selected, type }) => {
-    const typename = ['folder', 'program', 'symbols', 'setup'].includes(type) ? type : 'custom'
+    const typename = ['folder', 'program', 'symbols', 'setup', 'memory'].includes(type) ? type : 'custom'
     return /*HTML*/`
         <div class="plc-navigation-item ${selected ? 'selected' : ''}">
             <div class="plc-navigation-${typename}" tabindex="0" draggable="${draggable}">
@@ -49,6 +49,7 @@ const default_root_state = {
     files: [
         { id: 'setup', type: 'setup', name: 'setup', path: '/', full_path: '/setup', comment: 'Device Configuration', blocks: [] },
         { id: 'symbols', type: 'symbols', name: 'symbols', path: '/', full_path: '/symbols', comment: 'Symbols Table', blocks: [] },
+        { id: 'memory', type: 'memory', name: 'memory', path: '/', full_path: '/memory', comment: 'Memory Map', blocks: [] },
         { type: 'program', name: 'main', path: '/', full_path: '/main', comment: '', blocks: [] },
         // { type: 'custom', name: 'custom', path: '/', full_path: '/custom', comment: '', blocks: [] },
     ],
@@ -67,6 +68,8 @@ const sortTree = (a, b) => {
     if (b.full_path === '/setup') return 1
     if (a.full_path === '/symbols') return -1
     if (b.full_path === '/symbols') return 1
+    if (a.full_path === '/memory') return -1
+    if (b.full_path === '/memory') return 1
     if (a.type === 'folder' && b.type !== 'folder') return -1
     if (a.type !== 'folder' && b.type === 'folder') return 1
     const a_name = (a.full_path || a.path).split('/').pop() || ''
@@ -417,7 +420,7 @@ export default class NavigationTreeManager {
 
             const item = this.findItem(element)
             const full_path = item ? item.full_path : ''
-            const fixed = new Set(['/main', '/project', '/symbols', '/setup'])
+            const fixed = new Set(['/main', '/project', '/symbols', '/setup', '/memory'])
             const is_fixed = fixed.has(full_path)
 
             if (className === 'plc-navigation-folder') {
@@ -425,7 +428,7 @@ export default class NavigationTreeManager {
                 if (is_fixed) return ctx_fixed_folder
                 return ctx_edit_folder
             }
-            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-symbols' || className === 'plc-navigation-setup') {
+            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-symbols' || className === 'plc-navigation-setup' || className === 'plc-navigation-memory') {
                 if (connected) return ctx_online_program
                 if (is_fixed) return ctx_fixed_program
                 return ctx_edit_program
@@ -459,6 +462,11 @@ export default class NavigationTreeManager {
         })
         editor.context_manager.addListener({
             className: 'plc-navigation-setup',
+            onOpen: on_context_open_navigation_tree,
+            onClose: on_context_close_navigation_tree,
+        })
+        editor.context_manager.addListener({
+            className: 'plc-navigation-memory',
             onOpen: on_context_open_navigation_tree,
             onClose: on_context_close_navigation_tree,
         })
@@ -771,6 +779,8 @@ export default class NavigationTreeManager {
                 'plc-navigation-program',
                 'plc-navigation-custom',
                 'plc-navigation-symbols',
+                'plc-navigation-setup',
+                'plc-navigation-memory',
                 'plc-navigation-tree',
             ]
             const isMatch = matches.some(match => className === match)

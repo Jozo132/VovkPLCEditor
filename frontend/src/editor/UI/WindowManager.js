@@ -6,6 +6,7 @@ import TabManager from './Elements/TabManager.js'
 import EditorUI from './Elements/EditorUI.js'
 import SymbolsUI from './Elements/SymbolsUI.js'
 import SetupUI from './Elements/SetupUI.js'
+import MemoryUI from './Elements/MemoryUI.js'
 
 /** @typedef { EditorUI | SymbolsUI | SetupUI } WindowType */
 
@@ -1475,6 +1476,8 @@ export default class WindowManager {
             editorUI = new SymbolsUI(this.#editor)
         } else if (id === 'setup') {
             editorUI = new SetupUI(this.#editor)
+        } else if (id === 'memory') {
+            editorUI = new MemoryUI(this.#editor)
         } else {
             editorUI = new EditorUI(this.#editor, id)
         }
@@ -1850,7 +1853,7 @@ export default class WindowManager {
         const editor = this.#editor
         if (!id) throw new Error('Program ID not found')
 
-        if (id === 'symbols' || id === 'setup') {
+        if (id === 'symbols' || id === 'setup' || id === 'memory') {
             if (typeof editor._pushWindowHistory === 'function') {
                 editor._pushWindowHistory(id)
             }
