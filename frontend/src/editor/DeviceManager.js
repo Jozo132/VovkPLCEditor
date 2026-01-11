@@ -181,6 +181,18 @@ export default class DeviceManager {
     return this.connection.formatMemory(address, size, value)
   }
 
+  async getHealth() {
+    if (!this.connection) throw new Error("Device not connected")
+    if (typeof this.connection.getHealth !== 'function') throw new Error("Device health not supported")
+    return this.connection.getHealth()
+  }
+
+  async resetHealth() {
+    if (!this.connection) throw new Error("Device not connected")
+    if (typeof this.connection.resetHealth !== 'function') throw new Error("Device health not supported")
+    return this.connection.resetHealth()
+  }
+
   async downloadProgram(bytecode) {
     if (!this.connection) throw new Error("Device not connected")
     return this.connection.downloadProgram(bytecode)

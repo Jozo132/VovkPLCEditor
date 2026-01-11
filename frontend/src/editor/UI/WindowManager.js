@@ -20,6 +20,11 @@ export default class WindowManager {
     _monitoringActive = false
     _monitoringAvailable = false
     _monitoringConnectionState = null
+    _healthConnectionState = null
+    _healthTimer = null
+    _healthInFlight = false
+    _healthResetInFlight = false
+    _healthSnapshot = null
 
     workspace_body
 
@@ -65,6 +70,22 @@ export default class WindowManager {
                         <h4>Project</h4>
                         <div class="plc-navigation-tree">
                             <!-- Navigation tree will be displayed here -->
+                        </div>
+                        <div class="plc-device-health">
+                            <div class="plc-device-health-header">
+                                <span class="plc-device-health-title">Device Health</span>
+                                <button class="plc-device-health-reset" title="Reset max values">Reset</button>
+                            </div>
+                            <div class="plc-device-health-body">
+                                <div class="plc-device-health-row">
+                                    <span class="plc-device-health-label">Cycle</span>
+                                    <span class="plc-device-health-value" data-field="cycle">-</span>
+                                </div>
+                                <div class="plc-device-health-row">
+                                    <span class="plc-device-health-label">RAM</span>
+                                    <span class="plc-device-health-value" data-field="ram">-</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="resizer right"></div>
@@ -797,6 +818,23 @@ export default class WindowManager {
         if (!device_info) throw new Error('Device info element not found')
         this.device_info = device_info
 
+        const device_health = workspace.querySelector('.plc-device-health')
+        if (!device_health) throw new Error('Device health element not found')
+        this.device_health = device_health
+        this.device_health_values = {
+            cycle: device_health.querySelector('[data-field="cycle"]'),
+            ram: device_health.querySelector('[data-field="ram"]'),
+        }
+        if (!this.device_health_values.cycle || !this.device_health_values.ram) {
+            throw new Error('Device health value elements not found')
+        }
+        const device_health_reset = device_health.querySelector('.plc-device-health-reset')
+        if (!device_health_reset) throw new Error('Device health reset button not found')
+        device_health_reset.addEventListener('click', () => this.#on_device_health_reset_click())
+        this.device_health_reset = device_health_reset
+        this._renderDeviceHealth(null)
+        this._setHealthConnected(false)
+
         const device_select_element = workspace.querySelector('.plc-device-dropdown select')
         if (!device_select_element) throw new Error('Device select element not found')
         device_select_element.addEventListener('change', () => this.#on_device_select_change())
@@ -853,6 +891,16 @@ export default class WindowManager {
                 this.setMonitoringActive(false)
                 this.updateMonitoringAvailability(!!connected)
             }
+            if (this._healthConnectionState !== connected) {
+                this._healthConnectionState = connected
+                if (connected) {
+                    this._setHealthConnected(true)
+                    this._startHealthPolling()
+                } else {
+                    this._stopHealthPolling()
+                    this._setHealthConnected(false)
+                }
+            }
             this.updateLiveMonitorState()
         }, 500)
 
@@ -884,6 +932,94 @@ export default class WindowManager {
         this.device_select_element.value = value
         this.active_device = value
         // Trigger generic change handling if any exists beyond just setting the var
+    }
+
+    #on_device_health_reset_click = async () => {
+        if (this._healthResetInFlight) return
+        const editor = this.#editor
+        if (!editor?.device_manager?.connected) return
+        this._healthResetInFlight = true
+        try {
+            await editor.device_manager.resetHealth()
+        } catch (err) {
+            console.error('Failed to reset device health:', err)
+        } finally {
+            this._healthResetInFlight = false
+        }
+        this._pollDeviceHealth()
+    }
+
+    _setHealthConnected(connected = false) {
+        const isConnected = !!connected
+        if (this.device_health_reset) {
+            if (isConnected) this.device_health_reset.removeAttribute('disabled')
+            else this.device_health_reset.setAttribute('disabled', 'disabled')
+        }
+        if (!isConnected) {
+            this._healthSnapshot = null
+            this._renderDeviceHealth(null)
+        }
+    }
+
+    _formatHealthNumber(value) {
+        if (!Number.isFinite(value)) return '-'
+        return Number(value).toLocaleString('en-US')
+    }
+
+    _renderDeviceHealth(health) {
+        if (!this.device_health_values) return
+        const cycle = this.device_health_values.cycle
+        const ram = this.device_health_values.ram
+        if (!cycle || !ram) return
+        if (!health) {
+            cycle.textContent = '-'
+            ram.textContent = '-'
+            return
+        }
+        const lastCycle = this._formatHealthNumber(health.last_cycle_time_us)
+        const maxCycle = this._formatHealthNumber(health.max_cycle_time_us)
+        const usedRam = this._formatHealthNumber(health.ram_used)
+        const maxRam = this._formatHealthNumber(health.max_ram_used)
+        cycle.textContent = `${lastCycle} us / ${maxCycle} us`
+        ram.textContent = `${usedRam} B / ${maxRam} B`
+    }
+
+    _startHealthPolling() {
+        if (this._healthTimer) return
+        this._pollDeviceHealth()
+        this._healthTimer = setInterval(() => {
+            this._pollDeviceHealth()
+        }, 5000)
+    }
+
+    _stopHealthPolling() {
+        if (this._healthTimer) {
+            clearInterval(this._healthTimer)
+            this._healthTimer = null
+        }
+        this._healthInFlight = false
+    }
+
+    async _pollDeviceHealth() {
+        if (this._healthInFlight) return
+        const editor = this.#editor
+        if (!editor?.device_manager?.connected) return
+        this._healthInFlight = true
+        try {
+            const health = await editor.device_manager.getHealth()
+            if (health) {
+                this._healthSnapshot = health
+                this._renderDeviceHealth(health)
+            } else if (!this._healthSnapshot) {
+                this._renderDeviceHealth(null)
+            }
+        } catch (err) {
+            if (!this._healthSnapshot) {
+                this._renderDeviceHealth(null)
+            }
+        } finally {
+            this._healthInFlight = false
+        }
     }
 
     focusSymbolByName(name) {
@@ -1156,14 +1292,23 @@ export default class WindowManager {
                 // @ts-ignore
                 device_online_button.innerText = before
                 device_info.innerHTML = editor.device_manager.error || ''
+                this._healthConnectionState = false
+                this._stopHealthPolling()
+                this._setHealthConnected(false)
                 return
             }
             const info = editor.device_manager.deviceInfo
             if (info) device_info.innerHTML = `${info.arch} v${info.version.split(' ')[0]}`
             else device_info.innerHTML = 'Unknown device'
+            this._healthConnectionState = true
+            this._setHealthConnected(true)
+            this._startHealthPolling()
         } else {
             device_info.innerHTML = ''
             await editor.device_manager.disconnect()
+            this._healthConnectionState = false
+            this._stopHealthPolling()
+            this._setHealthConnected(false)
         }
         device_online_button.removeAttribute('disabled')
         if (!device_select_element_was_disabled) device_select_element.removeAttribute('disabled')

@@ -8,6 +8,12 @@ export default class ConnectionBase {
     /** @type { () => Promise<any> } */
     async getInfo() { throw new Error("getInfo() not implemented"); }
 
+    /** @type { () => Promise<{ last_cycle_time_us: number, max_cycle_time_us: number, ram_used: number, max_ram_used: number }> } */
+    async getHealth() { throw new Error("getHealth() not implemented"); }
+
+    /** @type { () => Promise<void> } */
+    async resetHealth() { throw new Error("resetHealth() not implemented"); }
+
     /** @type { () => Promise<void> } */
     async reboot() { throw new Error("reboot() not implemented"); }
 

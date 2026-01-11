@@ -176,6 +176,42 @@ export default class SerialConnection extends ConnectionBase {
         console.error(`Invalid info response:`, raw)
     }
 
+    async getHealth() {
+        const command = "PH"
+        const cmdHex = this.plc.stringToHex(command)
+        const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
+        this.serial.write(command + checksum.toUpperCase() + "\n")
+        const available = await this._waitForReply()
+        if (!available) throw new Error("No response from device")
+        const line = this.serial.readLine() || ""
+        let raw = line.trim()
+        if (!raw) throw new Error("Invalid health response")
+        if (!raw.startsWith('PH')) {
+            const idx = raw.indexOf('PH')
+            if (idx >= 0) raw = raw.slice(idx)
+        }
+        if (raw.startsWith('PH')) raw = raw.slice(2)
+        const hex = raw.replace(/[^0-9a-fA-F]/g, '')
+        if (hex.length < 32) throw new Error("Invalid health response")
+        const parseU32 = value => parseInt(value, 16) >>> 0
+        return {
+            last_cycle_time_us: parseU32(hex.slice(0, 8)),
+            max_cycle_time_us: parseU32(hex.slice(8, 16)),
+            ram_used: parseU32(hex.slice(16, 24)),
+            max_ram_used: parseU32(hex.slice(24, 32)),
+        }
+    }
+
+    async resetHealth() {
+        const command = "RH"
+        const cmdHex = this.plc.stringToHex(command)
+        const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
+        this.serial.write(command + checksum.toUpperCase() + "\n")
+        const available = await this._waitForReply()
+        if (!available) throw new Error("No response from device")
+        this.serial.readLine()
+    }
+
     async _waitForReply(timeout = 1000) {
         const start = Date.now();
         while (!this.serial.available()) {

@@ -70,6 +70,20 @@ export default class SimulationConnection extends ConnectionBase {
         // Implement monitoring logic if applicable
     }
 
+    async getHealth() {
+        if (!this.plc || typeof this.plc.getDeviceHealth !== 'function') {
+            throw new Error("Device health not supported")
+        }
+        return this.plc.getDeviceHealth()
+    }
+
+    async resetHealth() {
+        if (!this.plc || typeof this.plc.resetDeviceHealth !== 'function') {
+            throw new Error("Device health not supported")
+        }
+        return this.plc.resetDeviceHealth()
+    }
+
     _startRunLoop() {
         if (this._runTimer) return
         this._runTimer = setInterval(() => {
