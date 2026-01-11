@@ -309,6 +309,10 @@ end:                      // Label to jump to
     // Hook up console locally to capture WASM output
     const runtime = this.#editor.runtime
     if (!runtime) throw new Error('Runtime not initialized')
+    const offsets = this.#editor.project?.offsets
+    if (offsets && typeof runtime.setRuntimeOffsets === 'function') {
+        await runtime.setRuntimeOffsets(offsets)
+    }
     const cleanup = async() => {
         await runtime.setSilent(true)
     }
@@ -335,8 +339,8 @@ end:                      // Label to jump to
         control: { offset: 0, size: 16 },
         input: { offset: 16, size: 16 },
         output: { offset: 32, size: 16 },
-        memory: { offset: 48, size: 16 },
-        system: { offset: 64, size: 16 }
+        system: { offset: 48, size: 16 },
+        marker: { offset: 64, size: 16 }
       },
       symbols: [...SYSTEM_SYMBOLS],
       info: {

@@ -134,10 +134,10 @@ export default class SerialConnection extends ConnectionBase {
                 raw = parts.join('PLC INFO - ') // This should not happen, but just in case we will remove the first instance of 'PLC INFO - '
             }
             raw = raw.trim()
-            if (raw.startsWith("[") && raw.endsWith("]")) { // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,16,16,32,16,Simulator]'
+            if (raw.startsWith("[") && raw.endsWith("]")) { // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,0,16,16,16,32,16,48,16,64,16,Simulator]'
                 const content = raw.substring(1, raw.length - 1)
                 const parts = content.split(",")
-                const info = {
+                const base = {
                     header: parts[0],
                     arch: parts[1],
                     version: `${parts[2]}.${parts[3]}.${parts[4]} Build ${parts[5]}`,
@@ -145,13 +145,31 @@ export default class SerialConnection extends ConnectionBase {
                     stack: +parts[7],
                     memory: +parts[8],
                     program: +parts[9],
+                }
+                if (parts.length >= 21) {
+                    return {
+                        ...base,
+                        control_offset: +parts[10],
+                        control_size: +parts[11],
+                        input_offset: +parts[12],
+                        input_size: +parts[13],
+                        output_offset: +parts[14],
+                        output_size: +parts[15],
+                        system_offset: +parts[16],
+                        system_size: +parts[17],
+                        marker_offset: +parts[18],
+                        marker_size: +parts[19],
+                        device: parts[20]
+                    }
+                }
+                return {
+                    ...base,
                     input_offset: +parts[10],
                     input_size: +parts[11],
                     output_offset: +parts[12],
                     output_size: +parts[13],
                     device: parts[14]
                 }
-                return info
             }
         }
 

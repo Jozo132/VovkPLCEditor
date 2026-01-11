@@ -14,6 +14,7 @@
 /* Location Colors - Distinct from Types */
 .symbol-cell-select.val-input { color: #89d185 !important; } /* Green */
 .symbol-cell-select.val-output { color: #d68d5e !important; } /* Orange */
+.symbol-cell-select.val-marker { color: #c586c0 !important; } /* Purple */
 .symbol-cell-select.val-memory { color: #c586c0 !important; } /* Purple */
 .symbol-cell-select.val-control { color: #4fc1ff !important; } /* Light Blue */
 .symbol-cell-select.val-system { color: #a0a0a0 !important; } /* Grey */

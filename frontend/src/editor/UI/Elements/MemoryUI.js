@@ -1,4 +1,5 @@
 import { CSSimporter } from "../../../utils/tools.js"
+import { normalizeOffsets } from "../../../utils/offsets.js"
 
 const importCSS = CSSimporter(import.meta.url)
 await importCSS('./EditorUI.css')
@@ -217,7 +218,7 @@ export default class MemoryUI {
     updateSidebar() {
         if (!this.sidebar) return
         const project = this.master.project || {}
-        const offsets = project.offsets || {}
+        const offsets = normalizeOffsets(project.offsets || {})
         const size = this._getMemoryLimit()
         const entries = []
 
@@ -228,7 +229,7 @@ export default class MemoryUI {
             size
         })
 
-        const order = ['control', 'input', 'output', 'memory', 'system']
+        const order = ['control', 'input', 'output', 'system', 'marker']
         order.forEach(key => {
             const cfg = offsets[key]
             if (!cfg) return
@@ -275,7 +276,7 @@ export default class MemoryUI {
         const info = this.master.device_manager?.deviceInfo
         const deviceMemory = Number(info?.memory)
         if (Number.isFinite(deviceMemory) && deviceMemory > 0) return deviceMemory
-        const offsets = this.master.project?.offsets || {}
+        const offsets = normalizeOffsets(this.master.project?.offsets || {})
         let max = 0
         Object.values(offsets).forEach(cfg => {
             if (!cfg) return

@@ -5,17 +5,23 @@ export default class SimulationConnection extends ConnectionBase {
     deviceInfo = null
     _runTimer = null
     _runIntervalMs = 50
+    editor
 
     /**
      * @param { PLCEditor } editor - The PLC editor instance
      */
     constructor(editor) {
         super();
+        this.editor = editor
         this.plc = editor.runtime; // Use the inherited runtime from the editor
     }
 
     async connect() {
         await this.plc.initialize();
+        const offsets = this.editor?.project?.offsets
+        if (offsets && typeof this.plc.setRuntimeOffsets === 'function') {
+            await this.plc.setRuntimeOffsets(offsets)
+        }
         this._startRunLoop()
     }
     async disconnect() {

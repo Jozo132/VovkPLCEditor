@@ -6,8 +6,8 @@ export const plc_project = {
         control: { offset: 0, size: 16 },
         input: { offset: 16, size: 16 },
         output: { offset: 32, size: 16 },
-        memory: { offset: 48, size: 16 },
-        system: { offset: 64, size: 16 },
+        system: { offset: 48, size: 16 },
+        marker: { offset: 64, size: 16 },
     },
     symbols: [
         { name: 'button1', location: 'input', type: 'bit', address: 0.0, initial_value: 0, comment: 'Test input' },

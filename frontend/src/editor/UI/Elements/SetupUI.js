@@ -1,4 +1,5 @@
 import { CSSimporter } from "../../../utils/tools.js"
+import { ensureOffsets, normalizeOffsets } from "../../../utils/offsets.js"
 import { Popup } from "./components/popup.js"
 
 const importCSS = CSSimporter(import.meta.url)
@@ -55,13 +56,14 @@ export default class SetupUI {
                 control: { offset: 0, size: 1024 },
                 input: { offset: 1024, size: 1024 },
                 output: { offset: 2048, size: 1024 },
-                memory: { offset: 3072, size: 4096 },
-                system: { offset: 7168, size: 1024 }
+                system: { offset: 3072, size: 1024 },
+                marker: { offset: 4096, size: 4096 }
             }
         }
 
         const info = project.info
-        const offsets = project.offsets
+        project.offsets = ensureOffsets(project.offsets)
+        const offsets = normalizeOffsets(project.offsets)
         
         let deviceInfo = null
         let connected = false
@@ -80,8 +82,11 @@ export default class SetupUI {
         const dInfo = deviceInfo || {
             device: '-', arch: '-', version: '-', date: '-',
             program: '-', memory: '-', stack: '-', 
+            control_size: '-', control_offset: '-',
             input_size: '-', input_offset: '-',
-            output_size: '-', output_offset: '-'
+            output_size: '-', output_offset: '-',
+            system_size: '-', system_offset: '-',
+            marker_size: '-', marker_offset: '-'
         }
         
         // Custom SVG Icons
@@ -124,8 +129,11 @@ export default class SetupUI {
                             ${this.renderCompareRow('Firmware Ver', info.version || '-', dInfo.version, connected)}
                             ${this.renderCompareRow('Built Date', info.date || '-', dInfo.date, connected)}
                             ${this.renderCompareRow('Capacity', (info.capacity || 0) + ' bytes', dInfo.program !== '-' ? (parseInt(dInfo.program) || 0) + ' bytes' : '-', connected)}
-                            ${this.renderCompareRow('IO Inputs', `${offsets.input.size}B @ ${offsets.input.offset}`, dInfo.input_size !== '-' ? `${dInfo.input_size}B @ ${dInfo.input_offset}` : '-', connected)}
-                            ${this.renderCompareRow('IO Outputs', `${offsets.output.size}B @ ${offsets.output.offset}`, dInfo.output_size !== '-' ? `${dInfo.output_size}B @ ${dInfo.output_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Controls', `${offsets.control.size}B @ ${offsets.control.offset}`, dInfo.control_size !== '-' ? `${dInfo.control_size}B @ ${dInfo.control_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Inputs', `${offsets.input.size}B @ ${offsets.input.offset}`, dInfo.input_size !== '-' ? `${dInfo.input_size}B @ ${dInfo.input_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Outputs', `${offsets.output.size}B @ ${offsets.output.offset}`, dInfo.output_size !== '-' ? `${dInfo.output_size}B @ ${dInfo.output_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Systems', `${offsets.system.size}B @ ${offsets.system.offset}`, dInfo.system_size !== '-' ? `${dInfo.system_size}B @ ${dInfo.system_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Markers', `${offsets.marker.size}B @ ${offsets.marker.offset}`, dInfo.marker_size !== '-' ? `${dInfo.marker_size}B @ ${dInfo.marker_offset}` : '-', connected)}
                         </tbody>
                     </table>
 
@@ -166,8 +174,8 @@ export default class SetupUI {
                             ${this.renderOffsetRow('Control (C)', 'control', offsets.control)}
                             ${this.renderOffsetRow('Input (I)', 'input', offsets.input)}
                             ${this.renderOffsetRow('Output (Q)', 'output', offsets.output)}
-                            ${this.renderOffsetRow('Memory (M)', 'memory', offsets.memory)}
                             ${this.renderOffsetRow('System (S)', 'system', offsets.system)}
+                            ${this.renderOffsetRow('Marker (M)', 'marker', offsets.marker)}
                         </tbody>
                     </table>
                 </div>
@@ -299,12 +307,22 @@ export default class SetupUI {
         if (info.stack) project.info.stack = info.stack
         
         // Map known offsets if available in info
+        if (typeof info.control_offset !== 'undefined') {
+            project.offsets.control = { offset: info.control_offset, size: info.control_size }
+        }
         if (typeof info.input_offset !== 'undefined') {
             project.offsets.input = { offset: info.input_offset, size: info.input_size }
         }
         if (typeof info.output_offset !== 'undefined') {
             project.offsets.output = { offset: info.output_offset, size: info.output_size }
         }
+        if (typeof info.system_offset !== 'undefined') {
+            project.offsets.system = { offset: info.system_offset, size: info.system_size }
+        }
+        if (typeof info.marker_offset !== 'undefined') {
+            project.offsets.marker = { offset: info.marker_offset, size: info.marker_size }
+        }
+        project.offsets = ensureOffsets(project.offsets)
         
         this.render() // Refresh UI
     }

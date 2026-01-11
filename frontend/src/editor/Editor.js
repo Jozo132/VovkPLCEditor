@@ -1,4 +1,5 @@
 import {CSSimporter, debug_components} from '../utils/tools.js'
+import { ensureOffsets, normalizeOffsets } from '../utils/offsets.js'
 import {PLC_Program, PLC_Project} from '../utils/types.js'
 
 const importCSS = CSSimporter(import.meta.url)
@@ -349,8 +350,8 @@ export class VovkPLCEditor {
                 control: {offset: 0, size: 16},
                 input: {offset: 16, size: 16},
                 output: {offset: 32, size: 16},
-                memory: {offset: 48, size: 16},
-                system: {offset: 64, size: 16},
+                system: {offset: 48, size: 16},
+                marker: {offset: 64, size: 16},
             },
             symbols: [
                 {name: 'button1', location: 'input', type: 'bit', address: 0.0, initial_value: 0, comment: 'Test input'},
@@ -567,6 +568,14 @@ export class VovkPLCEditor {
     _prepareProject(project) {
         // Clear reserved IDs when loading a new project to prevent conflicts with old IDs
         this.reserved_ids = []
+        project.offsets = ensureOffsets(project.offsets || {})
+        if (project.symbols && project.symbols.length) {
+            project.symbols.forEach(symbol => {
+                if (symbol && symbol.location === 'memory') {
+                    symbol.location = 'marker'
+                }
+            })
+        }
 
         /** @param { PLC_Program } program */
         const checkProgram = program => {
@@ -618,7 +627,7 @@ export class VovkPLCEditor {
     _buildSymbolCache() {
         const project = this.project
         const symbols = project?.symbols || []
-        const offsets = project?.offsets || {}
+        const offsets = normalizeOffsets(project?.offsets || {})
         const map = new Map()
         const details = new Map()
         const signatureParts = []
@@ -905,6 +914,10 @@ export class VovkPLCEditor {
         const promise = (async () => {
             let problems = []
             try {
+                const offsets = this.project?.offsets
+                if (offsets && typeof this.runtime.setRuntimeOffsets === 'function') {
+                    await this.runtime.setRuntimeOffsets(offsets)
+                }
                 problems = await this.runtime.lint(assembly)
             } catch (e) {
                 console.error('Lint failed', e)

@@ -1,5 +1,6 @@
 import {PLC_Project, PLCEditor} from '../../utils/types.js'
 import {ElementSynthesisMany, getEventPath, isVisible} from '../../utils/tools.js'
+import { normalizeOffsets } from '../../utils/offsets.js'
 import {Popup} from './Elements/components/popup.js'
 import NavigationTreeManager from './Elements/NavigationTreeManager.js'
 import TabManager from './Elements/TabManager.js'
@@ -1607,7 +1608,7 @@ export default class WindowManager {
             ? memoryLimitValue
             : null
 
-        const offsets = editor.project?.offsets || {}
+        const offsets = normalizeOffsets(editor.project?.offsets || {})
         const groups = new Map()
         const typeSizes = {
             bit: 1,
@@ -1617,8 +1618,9 @@ export default class WindowManager {
             real: 4,
         }
         const normalizeAddress = (symbol) => {
-            const baseOffset = symbol?.location && offsets[symbol.location]
-                ? (offsets[symbol.location].offset || 0)
+            const locationKey = symbol?.location === 'memory' ? 'marker' : symbol?.location
+            const baseOffset = locationKey && offsets[locationKey]
+                ? (offsets[locationKey].offset || 0)
                 : 0
             const addrVal = parseFloat(symbol?.address) || 0
             if (symbol?.type === 'bit') {
@@ -1634,7 +1636,7 @@ export default class WindowManager {
             if (!symbol || !symbol.name) return
             const layout = normalizeAddress(symbol)
             const end = layout.absolute + layout.size
-            const key = symbol.location || 'memory'
+            const key = (symbol.location === 'memory' ? 'marker' : symbol.location) || 'marker'
             if (!groups.has(key)) {
                 groups.set(key, { min: layout.absolute, max: end, items: [] })
             }

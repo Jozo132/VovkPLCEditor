@@ -13,7 +13,7 @@ export let MenuListener
 /** @typedef { 'locked' | 'unlocked' | 'editing' | 'live'  | 'editing_live' } PLC_ContextState * @type { PLC_ContextState } */
 export let PLC_ContextState
 
-/** @typedef { 'control' | 'input' | 'output' | 'memory' } PLC_Symbol_Location * @type { PLC_Symbol_Location } */
+/** @typedef { 'control' | 'input' | 'output' | 'system' | 'marker' | 'memory' } PLC_Symbol_Location * @type { PLC_Symbol_Location } */
 export let PLC_Symbol_Location
 
 /** @typedef { 'bit' | 'byte' | 'int' | 'dint' | 'real' } PLC_Symbol_Type * @type { PLC_Symbol_Type } */
@@ -48,8 +48,8 @@ export let PLC_ProjectItem
 *         control: { offset: number, size: number }
 *         input: { offset: number, size: number }
 *         output: { offset: number, size: number }
-*         memory: { offset: number, size: number }
 *         system: { offset: number, size: number }
+*         marker: { offset: number, size: number }
 *     }
 *     symbols: PLC_Symbol[]
 *     folders: string[]

@@ -339,6 +339,7 @@ export default class SymbolsUI {
         const symbols = this.master.project.symbols || []
         
         symbols.forEach((symbol, index) => {
+            if (symbol?.location === 'memory') symbol.location = 'marker'
             const tr = document.createElement('tr')
             tr.dataset.symbolName = symbol.name || ''
             if (this.selectedSymbols.has(symbol)) {
@@ -401,7 +402,7 @@ export default class SymbolsUI {
             tr.appendChild(this.createCell('input', symbol.name, val => symbol.name = val, [], 'text', cellLocked))
 
             // Location
-            tr.appendChild(this.createCell('select', symbol.location, val => symbol.location = val, ['control', 'input', 'output', 'memory', 'system'], 'text', cellLocked))
+            tr.appendChild(this.createCell('select', symbol.location, val => symbol.location = val, ['control', 'input', 'output', 'system', 'marker'], 'text', cellLocked))
 
             // Type
             tr.appendChild(this.createCell('select', symbol.type, val => symbol.type = val, ['bit', 'byte', 'int', 'dint', 'real'], 'text', cellLocked))
@@ -675,7 +676,7 @@ export default class SymbolsUI {
 
         const newSymbol = {
             name: 'newItem',
-            location: 'memory',
+            location: 'marker',
             type: 'bit',
             address: 0,
             initial_value: 0,

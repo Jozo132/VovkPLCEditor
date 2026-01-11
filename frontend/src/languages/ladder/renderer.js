@@ -9,9 +9,11 @@ import { PLC_Ladder, PLC_LadderBlock } from "./language.js"
 /** @typedef */
 const memory_locations = [
     { short: 'C', name: 'control', label: 'Control' },
-    { short: 'I', name: 'input', label: 'Input' },
-    { short: 'Q', name: 'output', label: 'Output' },
-    { short: 'M', name: 'memory', label: 'Memory' },
+    { short: 'X', name: 'input', label: 'Input' },
+    { short: 'Y', name: 'output', label: 'Output' },
+    { short: 'S', name: 'system', label: 'System' },
+    { short: 'M', name: 'marker', label: 'Marker' },
+    { short: 'M', name: 'memory', label: 'Marker' },
 ]
 
 /** @type { PLC_Symbol[] } */

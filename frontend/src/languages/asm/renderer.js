@@ -109,6 +109,7 @@ export const ladderRenderer = {
                 const locationColors = {
                     input: '#89d185',
                     output: '#d68d5e',
+                    marker: '#c586c0',
                     memory: '#c586c0',
                     control: '#4fc1ff',
                     system: '#a0a0a0'
