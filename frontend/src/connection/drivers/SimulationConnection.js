@@ -3,6 +3,8 @@ import { PLCEditor } from "../../utils/types.js";
 
 export default class SimulationConnection extends ConnectionBase {
     deviceInfo = null
+    _runTimer = null
+    _runIntervalMs = 50
 
     /**
      * @param { PLCEditor } editor - The PLC editor instance
@@ -14,9 +16,10 @@ export default class SimulationConnection extends ConnectionBase {
 
     async connect() {
         await this.plc.initialize();
+        this._startRunLoop()
     }
     async disconnect() {
-        // Optional: clear internal state if needed
+        this._stopRunLoop()
     }
 
     async getInfo() {
@@ -33,7 +36,7 @@ export default class SimulationConnection extends ConnectionBase {
     }
 
     async stop() {
-        // No stop implementation in WASM simulation
+        this._stopRunLoop()
     }
 
     async downloadProgram(bytecode) {
@@ -59,5 +62,23 @@ export default class SimulationConnection extends ConnectionBase {
 
     async monitor() {
         // Implement monitoring logic if applicable
+    }
+
+    _startRunLoop() {
+        if (this._runTimer) return
+        this._runTimer = setInterval(() => {
+            try {
+                this.plc.run()
+            } catch (e) {
+                // Ignore transient simulation errors
+            }
+        }, this._runIntervalMs)
+    }
+
+    _stopRunLoop() {
+        if (this._runTimer) {
+            clearInterval(this._runTimer)
+            this._runTimer = null
+        }
     }
 }
