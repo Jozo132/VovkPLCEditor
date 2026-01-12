@@ -1658,11 +1658,19 @@ export default class WindowManager {
 
                 const compiledBytecode = this.#editor.project?.binary
                 if (compiledBytecode) {
+                         // Delay 1: After Compile, Before Offsets
+                         await new Promise(r => setTimeout(r, 200))
+                         
                          if (this.#editor.device_manager?.connection && typeof this.#editor.device_manager.connection.plc?.setRuntimeOffsets === 'function') {
                               await this.#editor.device_manager.connection.plc.setRuntimeOffsets(this.#editor.project.offsets || {})
                          }
     
+                         // Delay 2: After Offsets, Before Download
+                         await new Promise(r => setTimeout(r, 200))
                          await this.#editor.device_manager.connection.downloadProgram(compiledBytecode)
+                         
+                         // Delay 3: After Download, Before Monitoring
+                         await new Promise(r => setTimeout(r, 200))
                          this.setMonitoringActive(true)
                 }
             }
