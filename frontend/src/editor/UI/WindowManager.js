@@ -1,8 +1,10 @@
 import {PLC_Project, PLCEditor} from '../../utils/types.js'
 import {ElementSynthesisMany, getEventPath, isVisible} from '../../utils/tools.js'
-import { normalizeOffsets } from '../../utils/offsets.js'
+import {normalizeOffsets} from '../../utils/offsets.js'
 import {Popup} from './Elements/components/popup.js'
 import NavigationTreeManager from './Elements/NavigationTreeManager.js'
+import WatchPanel from './Elements/WatchPanel.js'
+import DataFetcher from '../DataFetcher.js'
 import TabManager from './Elements/TabManager.js'
 import EditorUI from './Elements/EditorUI.js'
 import SymbolsUI from './Elements/SymbolsUI.js'
@@ -51,56 +53,87 @@ export default class WindowManager {
                 <p></p>
             </div>
             <div class="plc-workspace-body">
-                <div class="plc-navigation no-select resizable" style="width: 220px">
+                <div class="plc-navigation no-select resizable">
                     <div class="plc-navigation-container">
                         <!--h3>Navigation</h3-->
-                        <div class="plc-device">
-                            <!-- Left side: dropdown with options 'Device' and 'Simulation,  the right side: button for going online with text content 'Go online'  -->
-                            <div class="plc-device-dropdown">
-                                <select id="plc-device-select-field">
-                                    <option value="simulation">Simulation</option>
-                                    <!-- More options will be added dynamically -->
-                                </select>
-                            </div>
-                            <div class="plc-device-online green" tabindex="0">Go online</div>
-                        </div>
-                        <div class="plc-device-info">
-                            <!-- Device info will be displayed here -->
-                        </div>
-                        <h4>Project</h4>
-                        <div class="plc-navigation-tree">
-                            <!-- Navigation tree will be displayed here -->
-                        </div>
-                        <div class="plc-device-health">
-                            <div class="plc-device-health-header">
-                                <span class="plc-device-health-title">Device Health</span>
-                                <button class="plc-device-health-reset" title="Reset max values">Reset</button>
-                            </div>
-                            <div class="plc-device-health-body">
-                        <div class="plc-device-health-row plc-device-health-row-head">
-                            <span class="plc-device-health-label"></span>
-                            <span class="plc-device-health-col">Cycle</span>
-                            <span class="plc-device-health-col">RAM Free</span>
-                        </div>
-                                <div class="plc-device-health-row">
-                                    <span class="plc-device-health-label">Last</span>
-                                    <span class="plc-device-health-value" data-field="cycle-last">-</span>
-                                    <span class="plc-device-health-value" data-field="ram-free">-</span>
+                        
+                        <div class="plc-sidebar-panels" style="display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;">
+                             
+                             <div class="plc-sidebar-panel-wrapper" id="wrapper-connection" style="display: flex; flex-direction: column; flex: 0 0 auto; min-height: 22px;">
+                                <div class="plc-connection-header" title="Click to toggle collapse">
+                                    <span class="codicon codicon-chevron-down plc-connection-chevron" style="margin-right: 6px;"></span>
+                                    <span class="plc-connection-title" style="font-weight: bold; color: #bbb;">CONNECTION</span>
                                 </div>
-                                <div class="plc-device-health-row">
-                                    <span class="plc-device-health-label">Max/Min</span>
-                                    <span class="plc-device-health-value" data-field="cycle-max">-</span>
-                                    <span class="plc-device-health-value" data-field="ram-min">-</span>
+                                <div class="plc-connection-body" style="padding: 4px; display: flex; flex-direction: column;">
+                                    <div class="plc-device" style="display: flex; gap: 4px; margin-bottom: 4px;">
+                                        <!-- Left side: dropdown with options 'Device' and 'Simulation,  the right side: button for going online with text content 'Go online'  -->
+                                        <div class="plc-device-dropdown" style="flex: 1;">
+                                            <select id="plc-device-select-field" style="width: 100%; height: 22px; font-size: 11px; background: #3c3c3c; border: 1px solid #3c3c3c; color: #f0f0f0;">
+                                                <option value="simulation">Simulation</option>
+                                                <!-- More options will be added dynamically -->
+                                            </select>
+                                        </div>
+                                        <div class="plc-device-online green" tabindex="0" style="height: 22px; line-height: 20px; padding: 0 6px; font-size: 11px; display: flex; align-items: center; justify-content: center; border: 1px solid transparent; min-width: 60px;">Go online</div>
+                                    </div>
+                                    <div class="plc-device-info">
+                                        <!-- Device info will be displayed here -->
+                                    </div>
                                 </div>
+                             </div>
+
+                             <div class="plc-panel-resizer" style="height: 1px; cursor: ns-resize; background: #2b2b2b; min-height: 1px; z-index: 10;"></div>
+
+                             <div class="plc-sidebar-panel-wrapper" id="wrapper-project" style="display: flex; flex-direction: column; flex: 1; min-height: 22px; overflow: hidden;">
+                                <div class="plc-navigation-tree" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+                                    <!-- Navigation tree will be displayed here -->
+                                </div>
+                             </div>
+                            
+                            <div class="plc-panel-resizer" style="height: 1px; cursor: ns-resize; background: #2b2b2b; min-height: 1px; z-index: 10;"></div>
+
+                            <div class="plc-sidebar-panel-wrapper" id="wrapper-health" style="display: flex; flex-direction: column; flex: 0 0 auto; min-height: 22px;">
+                                <div class="plc-device-health resizable-panel" id="panel-health">
+                                    <div class="plc-device-health-header" title="Click to toggle collapse">
+                                        <span class="codicon codicon-chevron-down plc-device-health-chevron" style="margin-right: 6px;"></span>
+                                        <span class="plc-icon plc-icon-sidebar-health" style="margin-right: 4px; transform: scale(0.8);"></span>
+                                        <span class="plc-device-health-title" style="font-weight: bold; color: #bbb;">DEVICE HEALTH</span>
+                                        <div style="flex:1"></div>
+                                        <button class="plc-device-health-reset" title="Reset max values" style="background:none; border:none; color: #ccc; cursor: pointer;">Reset</button>
+                                    </div>
+                                    <div class="plc-device-health-body">
+                                <div class="plc-device-health-row plc-device-health-row-head">
+                                    <span class="plc-device-health-label"></span>
+                                    <span class="plc-device-health-col">Cycle</span>
+                                    <span class="plc-device-health-col">RAM Free</span>
+                                </div>
+                                        <div class="plc-device-health-row">
+                                            <span class="plc-device-health-label">Last</span>
+                                            <span class="plc-device-health-value" data-field="cycle-last">-</span>
+                                            <span class="plc-device-health-value" data-field="ram-free">-</span>
+                                        </div>
+                                        <div class="plc-device-health-row">
+                                            <span class="plc-device-health-label">Min</span>
+                                            <span class="plc-device-health-value" data-field="cycle-max">-</span>
+                                            <span class="plc-device-health-value" data-field="ram-min">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="plc-panel-resizer" style="height: 1px; cursor: ns-resize; background: #2b2b2b; min-height: 1px; z-index: 10;"></div>
+
+                            <div class="plc-sidebar-panel-wrapper" id="wrapper-watch" style="display: flex; flex-direction: column; flex: 1; min-height: 22px; overflow: hidden;">
+                                <div class="plc-watch-container" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;"></div>
                             </div>
                         </div>
                     </div>
-                    <div class="resizer right"></div>
-                    <div class="plc-navigation-bar">
+                    <div class="plc-navigation-bar" title="Toggle Sidebar">
                         <div class="menu-button">-</div>
                         <span class="thick text-rotate" style="margin: auto auto; margin-top: 5px; font-size: 0.6em;">Navigation</span>
                     </div>
                 </div>
+
+                <div class="plc-app-resizer" id="resizer-nav" style="width: 4px; background: #252526; cursor: ew-resize; z-index: 10;"></div>
                 
                 <div class="plc-center-column" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; position: relative;">
                     <div class="plc-window" style="flex: 1; min-height: 0;"> <!-- min-height: 0 is important for flex scrolling -->
@@ -136,12 +169,13 @@ export default class WindowManager {
                     </div>
                 </div>
 
+                <div class="plc-app-resizer" id="resizer-tools" style="width: 4px; background: #252526; cursor: ew-resize; z-index: 10;"></div>
+
                 <div class="plc-tools no-select resizable minimized" style="width: 200px">
-                    <div class="plc-tools-bar">
+                    <div class="plc-tools-bar" title="Toggle Sidebar">
                         <div class="menu-button">+</div>
                         <span class="thick text-rotate" style="margin: auto auto; margin-top: 5px; font-size: 0.6em;">Tools</span>
                     </div>
-                    <div class="resizer left"></div>
                     <div class="plc-tools-container">
                         <h3>Tools</h3>
                     </div>
@@ -160,19 +194,14 @@ export default class WindowManager {
                 </div>
 
                 <div style="display: flex; gap: 15px; margin-right: 15px">
-                     <span id="footer-device-status">Disconnected</span>
+                     <span id="footer-device-status"></span>
                 </div>
             </div>
         `)
 
         this.workspace_body.forEach(element => workspace.appendChild(element))
 
-        const navigation_minimize_button = workspace.querySelector('.plc-navigation-bar .menu-button')
-        const tools_minimize_button = workspace.querySelector('.plc-tools-bar .menu-button')
-        if (!navigation_minimize_button) throw new Error('Navigation minimize button not found')
-        if (!tools_minimize_button) throw new Error('Tools minimize button not found')
-        navigation_minimize_button.addEventListener('click', () => this.#on_navigation_minimize_toggle())
-        tools_minimize_button.addEventListener('click', () => this.#on_tools_minimize_toggle())
+        this.#initOuterLayout(workspace)
 
         // Footer Events
         const compileBtn = workspace.querySelector('#footer-compile')
@@ -195,7 +224,7 @@ export default class WindowManager {
         consoleBody.style.minHeight = `${consoleHeaderHeight}px`
 
         // Initial console state management
-        this._consoleState = this._consoleState || { activeTab: 'output', lastHeight: 150, minimized: true }
+        this._consoleState = this._consoleState || {activeTab: 'output', lastHeight: 150, minimized: true}
         const consoleState = this._consoleState
         consoleState.lastHeight = typeof consoleState.lastHeight === 'number' ? consoleState.lastHeight : 150
         consoleState.activeTab = consoleState.activeTab === 'problems' ? 'problems' : 'output'
@@ -231,9 +260,7 @@ export default class WindowManager {
             if (!wasMinimized && !opts.force) return
             consoleBody.classList.remove('minimized')
             consoleState.minimized = false
-            const nextHeight = typeof height === 'number' && height > consoleHeaderHeight
-                ? height
-                : (consoleState.lastHeight && consoleState.lastHeight > consoleHeaderHeight ? consoleState.lastHeight : 150)
+            const nextHeight = typeof height === 'number' && height > consoleHeaderHeight ? height : consoleState.lastHeight && consoleState.lastHeight > consoleHeaderHeight ? consoleState.lastHeight : 150
             consoleState.lastHeight = nextHeight
             consoleBody.style.height = `${nextHeight}px`
         }
@@ -267,14 +294,14 @@ export default class WindowManager {
             this._selectedProblemShowTooltip = false
             this._selectedProblemKey = null
             this._selectedProblemProgramId = null
-            clearSelectedHighlight({ hideTooltip: true })
+            clearSelectedHighlight({hideTooltip: true})
         }
 
         const ensureProblemVisible = entry => {
             if (!entry) return
             const item = entry.element
             if (item && item.scrollIntoView) {
-                item.scrollIntoView({ block: 'nearest' })
+                item.scrollIntoView({block: 'nearest'})
             }
         }
 
@@ -285,7 +312,7 @@ export default class WindowManager {
             if (this._selectedProblemIndex === nextIndex) {
                 if (opts.showTooltip) {
                     this._selectedProblemShowTooltip = true
-                    this._problemsFlat[nextIndex].show({ showTooltip: true, focus: false, mode: 'selected' })
+                    this._problemsFlat[nextIndex].show({showTooltip: true, focus: false, mode: 'selected'})
                 }
                 return
             }
@@ -300,7 +327,7 @@ export default class WindowManager {
             this._selectedProblemProgramId = entry.programId || null
             entry.ensureGroupOpen()
             ensureProblemVisible(entry)
-            entry.show({ showTooltip: !!opts.showTooltip, focus: true, mode: 'selected' })
+            entry.show({showTooltip: !!opts.showTooltip, focus: true, mode: 'selected'})
         }
 
         this.setConsoleTab = setActiveConsoleTab
@@ -333,7 +360,7 @@ export default class WindowManager {
                 consoleBody.classList.add('minimized')
                 consoleBody.style.height = `${consoleHeaderHeight}px`
             } else {
-                openConsole(nextHeight, { force: true })
+                openConsole(nextHeight, {force: true})
             }
         }
         this.setProblemHover = payload => {
@@ -371,7 +398,7 @@ export default class WindowManager {
         }
         this._problemsCollapsed = this._problemsCollapsed || new Set()
         this.setConsoleProblems = input => {
-            const list = Array.isArray(input) ? input : (input && Array.isArray(input.problems) ? input.problems : [])
+            const list = Array.isArray(input) ? input : input && Array.isArray(input.problems) ? input.problems : []
             const status = !Array.isArray(input) && input && input.status ? input.status : 'idle'
             this._problemsFlat = []
             const prevSelectedKey = this._selectedProblemKey
@@ -408,7 +435,7 @@ export default class WindowManager {
                 checking.textContent = 'Checking for problems ...'
                 problemsBody.appendChild(checking)
                 clearHoverHighlight()
-                clearSelectedHighlight({ hideTooltip: true })
+                clearSelectedHighlight({hideTooltip: true})
                 return
             }
 
@@ -418,7 +445,7 @@ export default class WindowManager {
                 empty.textContent = 'No problems detected'
                 problemsBody.appendChild(empty)
                 clearHoverHighlight()
-                clearSelectedHighlight({ hideTooltip: true })
+                clearSelectedHighlight({hideTooltip: true})
                 return
             }
 
@@ -435,7 +462,7 @@ export default class WindowManager {
                 const key = `${cleanPath}::${blockId}`
 
                 if (!groups.has(key)) {
-                    groups.set(key, { fileName, dir, blockId, blockName, blockType, key, items: [] })
+                    groups.set(key, {fileName, dir, blockId, blockName, blockType, key, items: []})
                 }
                 groups.get(key).items.push(problem)
             })
@@ -500,7 +527,7 @@ export default class WindowManager {
 
                     const lang = document.createElement('span')
                     lang.className = 'plc-problems-item-lang'
-                    const stack = Array.isArray(problem.languageStack) ? problem.languageStack : (problem.language ? [problem.language] : [])
+                    const stack = Array.isArray(problem.languageStack) ? problem.languageStack : problem.language ? [problem.language] : []
                     const stackText = stack.filter(Boolean).join(' > ')
                     lang.textContent = stackText ? `[${stackText}]` : ''
 
@@ -516,14 +543,14 @@ export default class WindowManager {
 
                     const entryKey = `${problem.blockId || 'unknown'}:${problem.start || 0}:${problem.message || ''}:${problem.token || ''}`
                     const showProblem = (opts = {}) => {
-                        const normalized = typeof opts === 'object' && opts ? opts : { showTooltip: !!opts }
-                        const { showTooltip = false, focus = false, mode = 'hover' } = normalized
+                        const normalized = typeof opts === 'object' && opts ? opts : {showTooltip: !!opts}
+                        const {showTooltip = false, focus = false, mode = 'hover'} = normalized
                         const isSelected = mode === 'selected'
 
                         if (!isSelected) {
                             clearHoverHighlight()
                         } else {
-                            clearSelectedHighlight({ hideTooltip: !showTooltip })
+                            clearSelectedHighlight({hideTooltip: !showTooltip})
                         }
 
                         const run = async () => {
@@ -532,9 +559,9 @@ export default class WindowManager {
                                 const programs = this.#editor?._getLintPrograms?.() || []
                                 for (const program of programs) {
                                     const found = program?.blocks?.find(b => b.id === problem.blockId)
-                                    if (found) return { program, block: found }
+                                    if (found) return {program, block: found}
                                 }
-                                return { program: null, block: null }
+                                return {program: null, block: null}
                             }
                             const waitForLayout = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
                             const waitForVisible = async block => {
@@ -567,7 +594,7 @@ export default class WindowManager {
                                 }
                                 const nextBlockRect = blockDiv.getBoundingClientRect()
                                 if (nextBlockRect.top < bodyRect.top || nextBlockRect.bottom > bodyRect.bottom) {
-                                    blockDiv.scrollIntoView({ block: 'center' })
+                                    blockDiv.scrollIntoView({block: 'center'})
                                 }
                             }
                             const expandBlock = block => {
@@ -591,13 +618,13 @@ export default class WindowManager {
                                 }
                             }
 
-                            let { program: targetProgram, block: targetBlock } = findTarget()
+                            let {program: targetProgram, block: targetBlock} = findTarget()
                             if (!targetBlock) return
 
                             if (focus && targetProgram?.id) {
                                 this.openProgram(targetProgram.id)
                                 await waitForLayout()
-                                ;({ program: targetProgram, block: targetBlock } = findTarget())
+                                ;({program: targetProgram, block: targetBlock} = findTarget())
                                 if (!targetBlock) return
                                 expandBlock(targetBlock)
                                 await waitForLayout()
@@ -617,13 +644,13 @@ export default class WindowManager {
                             const editor = await waitForEditor(targetBlock)
                             if (!editor) return
 
-                            const range = { start: problem.start, end: problem.end }
+                            const range = {start: problem.start, end: problem.end}
                             if (focus && typeof editor.revealRange === 'function') {
                                 editor.revealRange(range, {
                                     ratio: 0.33,
                                     showTooltip: !!showTooltip,
                                     highlight: !isSelected,
-                                    tooltipHighlight: !isSelected
+                                    tooltipHighlight: !isSelected,
                                 })
                                 await waitForLayout()
                                 scrollBodyToCode(targetBlock.div, editor, problem.start, 0.33)
@@ -635,15 +662,15 @@ export default class WindowManager {
                                     editor.setSelectedHighlight(range)
                                 }
                                 if (showTooltip && typeof editor.showLintTooltip === 'function') {
-                                    editor.showLintTooltip(range, { highlight: !isSelected })
+                                    editor.showLintTooltip(range, {highlight: !isSelected})
                                 }
                             }
 
                             if (isSelected && typeof editor.setSelectedHighlight === 'function') {
                                 editor.setSelectedHighlight(range)
-                                this._selectedProblemHighlight = { editor }
+                                this._selectedProblemHighlight = {editor}
                             } else if (!isSelected && typeof editor.setHoverHighlight === 'function') {
-                                this._activeProblemHover = { editor }
+                                this._activeProblemHover = {editor}
                             }
                         }
 
@@ -675,7 +702,7 @@ export default class WindowManager {
 
                     item.addEventListener('mouseenter', () => {
                         activeHoverEntry = entry
-                        showProblem({ showTooltip: true, focus: false, mode: 'hover' })
+                        showProblem({showTooltip: true, focus: false, mode: 'hover'})
                     })
 
                     item.addEventListener('mouseleave', () => {
@@ -688,7 +715,7 @@ export default class WindowManager {
                                 selected.show({
                                     showTooltip: this._selectedProblemShowTooltip,
                                     focus: false,
-                                    mode: 'selected'
+                                    mode: 'selected',
                                 })
                                 return
                             }
@@ -696,7 +723,7 @@ export default class WindowManager {
                     })
 
                     item.addEventListener('click', () => {
-                        applyProblemSelection(this._problemsFlat.indexOf(entry), { showTooltip: true })
+                        applyProblemSelection(this._problemsFlat.indexOf(entry), {showTooltip: true})
                         if (problemsBody) problemsBody.focus()
                     })
                 })
@@ -724,7 +751,7 @@ export default class WindowManager {
 
             if (this._selectedProblemKey) {
                 const idx = this._problemsFlat.findIndex(e => e.key === this._selectedProblemKey)
-                if (idx >= 0) applyProblemSelection(idx, { showTooltip: false })
+                if (idx >= 0) applyProblemSelection(idx, {showTooltip: false})
             } else {
                 clearProblemSelection()
             }
@@ -738,13 +765,13 @@ export default class WindowManager {
                 const key = e.key
                 if (key === 'ArrowDown' || key === 'ArrowUp' || key === 'Tab') {
                     e.preventDefault()
-                    const dir = (key === 'ArrowUp' || (key === 'Tab' && e.shiftKey)) ? -1 : 1
-                    const nextIndex = this._selectedProblemIndex >= 0 ? this._selectedProblemIndex + dir : (dir > 0 ? 0 : this._problemsFlat.length - 1)
-                    applyProblemSelection(nextIndex, { showTooltip: false, keyboard: true })
+                    const dir = key === 'ArrowUp' || (key === 'Tab' && e.shiftKey) ? -1 : 1
+                    const nextIndex = this._selectedProblemIndex >= 0 ? this._selectedProblemIndex + dir : dir > 0 ? 0 : this._problemsFlat.length - 1
+                    applyProblemSelection(nextIndex, {showTooltip: false, keyboard: true})
                 } else if (key === 'Enter') {
                     e.preventDefault()
                     if (this._selectedProblemIndex >= 0) {
-                        applyProblemSelection(this._selectedProblemIndex, { showTooltip: true, keyboard: true })
+                        applyProblemSelection(this._selectedProblemIndex, {showTooltip: true, keyboard: true})
                     }
                 } else if (key === 'Escape') {
                     e.preventDefault()
@@ -828,18 +855,32 @@ export default class WindowManager {
         const device_health = workspace.querySelector('.plc-device-health')
         if (!device_health) throw new Error('Device health element not found')
         this.device_health = device_health
+
+        const healthHeader = device_health.querySelector('.plc-device-health-header')
+        const healthBody = device_health.querySelector('.plc-device-health-body')
+        const healthChevron = device_health.querySelector('.plc-device-health-chevron')
+        let healthMinimized = false
+        /*
+        healthHeader.addEventListener('click', (e) => {
+             if (e.target.closest('button')) return
+             healthMinimized = !healthMinimized
+             if (healthMinimized) {
+                 healthBody.style.display = 'none'
+                 healthChevron.classList.replace('codicon-chevron-down', 'codicon-chevron-right')
+             } else {
+                 healthBody.style.display = 'flex'
+                 healthChevron.classList.replace('codicon-chevron-right', 'codicon-chevron-down')
+             }
+        })
+        */
+
         this.device_health_values = {
             cycleLast: device_health.querySelector('[data-field="cycle-last"]'),
             cycleMax: device_health.querySelector('[data-field="cycle-max"]'),
             ramFree: device_health.querySelector('[data-field="ram-free"]'),
             ramMin: device_health.querySelector('[data-field="ram-min"]'),
         }
-        if (
-            !this.device_health_values.cycleLast ||
-            !this.device_health_values.cycleMax ||
-            !this.device_health_values.ramFree ||
-            !this.device_health_values.ramMin
-        ) {
+        if (!this.device_health_values.cycleLast || !this.device_health_values.cycleMax || !this.device_health_values.ramFree || !this.device_health_values.ramMin) {
             throw new Error('Device health value elements not found')
         }
         const device_health_reset = device_health.querySelector('.plc-device-health-reset')
@@ -848,6 +889,25 @@ export default class WindowManager {
         this.device_health_reset = device_health_reset
         this._renderDeviceHealth(null)
         this._setHealthConnected(false)
+
+        const watchContainer = workspace.querySelector('.plc-watch-container')
+        if (!watchContainer) throw new Error('Watch container not found')
+        this.watch_panel = new WatchPanel(editor, watchContainer)
+        
+        // Load Watch Items
+        try {
+            const savedWatch = localStorage.getItem('vovk_plc_watch')
+            if (savedWatch) {
+                const items = JSON.parse(savedWatch)
+                if (Array.isArray(items)) this.watch_panel.setEntries(items)
+            }
+        } catch(e) { console.warn('Failed to load watch items', e) }
+        
+        // Save on change
+        this.watch_panel.onListChange = (items) => {
+             localStorage.setItem('vovk_plc_watch', JSON.stringify(items))
+        }
+
 
         const device_select_element = workspace.querySelector('.plc-device-dropdown select')
         if (!device_select_element) throw new Error('Device select element not found')
@@ -864,8 +924,8 @@ export default class WindowManager {
             const connected = this.#editor.device_manager && this.#editor.device_manager.connected
             const status = workspace.querySelector('#footer-device-status')
             if (status) {
-                status.innerText = connected ? 'Connected' : 'Disconnected'
-                status.style.display = 'flex'
+                status.innerText = connected ? 'Connected' : ''
+                status.style.display = connected ? 'flex' : 'none'
                 status.style.alignItems = 'center'
                 status.style.height = '100%'
                 status.style.padding = '0 10px'
@@ -893,13 +953,6 @@ export default class WindowManager {
                 setupWin.updateConnectionStatus(connected)
             }
 
-            const locked = !!connected
-            if (this._edit_lock_state !== locked) {
-                this._edit_lock_state = locked
-                if (typeof this.#editor.setEditLock === 'function') {
-                    this.#editor.setEditLock(locked)
-                }
-            }
             if (this._monitoringConnectionState !== connected) {
                 this._monitoringConnectionState = connected
                 this.setMonitoringActive(false)
@@ -926,12 +979,243 @@ export default class WindowManager {
         if (!window_frame) throw new Error('Window frame not found')
         this.window_frame = window_frame
 
+        // this.#initPanelResizables(workspace)
+
         const tools = this.workspace.querySelector('.plc-tools')
         if (!tools) throw new Error('Tools not found')
         this.div_tools = tools
 
         this.tree_manager = new NavigationTreeManager(editor)
         this.tab_manager = new TabManager(editor)
+        
+        this.data_fetcher = new DataFetcher(editor)
+        editor.data_fetcher = this.data_fetcher
+        
+        this.#initPanelResizables(workspace)
+        this.#initContextMenus(workspace)
+    }
+
+    #initContextMenus(workspace) {
+        if (!this.#editor.context_manager) return
+
+        // Connection Panel
+        const connectionHeader = workspace.querySelector('.plc-connection-header')
+        if (connectionHeader) {
+            this.#editor.context_manager.addListener({
+                target: connectionHeader,
+                onOpen: () => [
+                    { type: 'item', label: this.active_device === 'simulation' ? 'Switch to Device' : 'Switch to Simulation', name: 'toggle_device' },
+                    { type: 'item', label: this.active_mode === 'online' ? 'Disconnect' : 'Go Online', name: 'toggle_online' }
+                ],
+                onClose: (key) => {
+                    if (key === 'toggle_device') {
+                       const next = this.active_device === 'simulation' ? 'device' : 'simulation'
+                       this.setActiveDevice(next)
+                    }
+                    if (key === 'toggle_online') this.#on_device_online_click()
+                }
+            })
+        }
+
+        // Project Panel
+        const projectHeader = workspace.querySelector('.plc-navigation-panel-header')
+        if (projectHeader) {
+            this.#editor.context_manager.addListener({
+                 target: projectHeader,
+                 onOpen: () => [
+                     // { type: 'item', label: 'Refresh', name: 'refresh' },
+                     { type: 'item', label: 'Collapse All', name: 'collapse_all' }
+                 ],
+                 onClose: (key) => {
+                     // if (key === 'refresh') this.tree_manager?.refresh?.()
+                     if (key === 'collapse_all') this.tree_manager?.collapseItems?.()
+                 }
+            })
+        }
+
+        // Health Panel
+        const healthHeader = workspace.querySelector('.plc-device-health-header')
+        if (healthHeader) {
+            this.#editor.context_manager.addListener({
+                target: healthHeader,
+                onOpen: () => [
+                    { type: 'item', label: 'Reset Max Values', name: 'reset' }
+                ],
+                onClose: (key) => {
+                     if (key === 'reset') this.#on_device_health_reset_click()
+                }
+            })
+        }
+        
+        // Watch Panel Header
+        const watchHeader = workspace.querySelector('.plc-device-watch-header')
+        if (watchHeader) {
+             this.#editor.context_manager.addListener({
+                target: watchHeader,
+                onOpen: () => [
+                     { type: 'item', label: 'Clear Watch Table', name: 'clear' }
+                ],
+                onClose: (key) => {
+                    if (key === 'clear') {
+                         this.watch_panel?.setEntries?.([])
+                    }
+                }
+             })
+        }
+    }
+
+    #initPanelResizables(workspace) {
+        const wrappers = [
+             { el: workspace.querySelector('#wrapper-connection') },
+             { el: workspace.querySelector('#wrapper-project') },
+             { el: workspace.querySelector('#wrapper-health') },
+             { el: workspace.querySelector('#wrapper-watch') }
+        ]
+        const resizers = Array.from(workspace.querySelectorAll('.plc-panel-resizer'))
+        if (wrappers.some(w => !w.el)) return
+
+        // State tracking: stored as normalized flex ratios (pixels)
+        // Default: roughly equal or standard distribution
+        let state = [
+            { minimized: false, flex: 100 },
+            { minimized: false, flex: 200 },
+            { minimized: false, flex: 200 },
+            { minimized: false, flex: 200 }
+        ]
+
+        // Load Persistence
+        try {
+            const saved = localStorage.getItem('vovk_plc_layout')
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                // If saved state length differs (old version), ignore it or migrate ideally.
+                // Resetting if length doesn't match to avoid errors.
+                if (Array.isArray(parsed) && parsed.length === wrappers.length) {
+                    state = parsed
+                }
+            }
+        } catch(e) { console.warn('Failed to load layout', e) }
+
+        const applyLayout = () => {
+            wrappers.forEach((w, i) => {
+                const s = state[i]
+                const header = w.el.querySelector('.plc-connection-header, .plc-navigation-panel-header, .plc-device-health-header, .plc-device-watch-header')
+                const chevron = header ? header.querySelector('.codicon') : null
+                const content = w.el.querySelector('.plc-connection-body, .plc-navigation-panel-content, .plc-device-health-body, .plc-device-watch-content')
+                
+                if (s.minimized) {
+                     // Minimized: fixed height
+                     w.el.style.flex = "0 0 22px"
+                     w.el.style.overflow = "hidden"
+                     w.el.classList.add('minimized')
+                     
+                     if (content) content.style.display = 'none'
+                     if (chevron) chevron.classList.replace('codicon-chevron-down', 'codicon-chevron-right')
+                } else {
+                     // Expanded: flex grow proportional to last size
+                     const flexVal = Math.max(s.flex, 50) // Ensure at least some weight
+                     w.el.style.flex = `${flexVal} 1 0px`
+                     w.el.style.overflow = "hidden" // Keep content contained
+                     w.el.classList.remove('minimized')
+                     
+                     if (content) content.style.display = ''
+                     if (chevron) chevron.classList.replace('codicon-chevron-right', 'codicon-chevron-down')
+                }
+            })
+            // Save state
+            localStorage.setItem('vovk_plc_layout', JSON.stringify(state))
+        }
+
+        const togglePanel = (index) => {
+            state[index].minimized = !state[index].minimized
+            applyLayout()
+        }
+
+        // Initialize headers
+        wrappers.forEach((w, i) => {
+            const header = w.el.querySelector('.plc-connection-header, .plc-navigation-panel-header, .plc-device-health-header, .plc-device-watch-header')
+            if (header) {
+                header.onclick = (e) => {
+                    if (e.target.closest('button, input, select')) return
+                    togglePanel(i)
+                }
+                header.style.cursor = 'pointer'
+            }
+        })
+
+        let isResizing = false
+        let currentResizerIndex = -1
+        
+        const handleMouseDown = (e, index) => {
+            isResizing = true
+            currentResizerIndex = index
+            document.body.style.cursor = 'ns-resize'
+            e.preventDefault()
+        }
+
+        const handleMouseMove = (e) => {
+            if (!isResizing) return
+            e.preventDefault()
+            
+            // wrappers[index] vs wrappers[index+1]
+            const topIndex = currentResizerIndex
+            const bottomIndex = currentResizerIndex + 1
+            const topWrapper = wrappers[topIndex].el
+            const bottomWrapper = wrappers[bottomIndex].el
+
+            const topRect = topWrapper.getBoundingClientRect()
+            const bottomRect = bottomWrapper.getBoundingClientRect()
+            
+            const totalHeight = topRect.height + bottomRect.height
+            const topTop = topRect.top
+            
+            let newTopHeight = (e.clientY - topTop)
+            
+            // Constraints
+            if (newTopHeight < 22) newTopHeight = 22
+            if (newTopHeight > totalHeight - 22) newTopHeight = totalHeight - 22
+            
+            const newBottomHeight = totalHeight - newTopHeight
+
+            // Update State: Use pixel height as the new flex-grow weight
+            state[topIndex].flex = newTopHeight
+            state[bottomIndex].flex = newBottomHeight
+            
+            // Auto-expand/minimize based on drag
+            if (newTopHeight > 28 && state[topIndex].minimized) {
+                state[topIndex].minimized = false
+            }
+            if (newTopHeight <= 24 && !state[topIndex].minimized) {
+                state[topIndex].minimized = true
+            }
+
+            if (newBottomHeight > 28 && state[bottomIndex].minimized) {
+                state[bottomIndex].minimized = false
+            }
+            if (newBottomHeight <= 24 && !state[bottomIndex].minimized) {
+                state[bottomIndex].minimized = true
+            }
+            
+            applyLayout()
+        }
+
+        const handleMouseUp = () => {
+            if (isResizing) {
+                isResizing = false
+                currentResizerIndex = -1
+                document.body.style.cursor = ''
+            }
+        }
+
+        resizers.forEach((resizer, i) => {
+            resizer.addEventListener('mousedown', (e) => handleMouseDown(e, i))
+        })
+
+        document.addEventListener('mousemove', handleMouseMove)
+        document.addEventListener('mouseup', handleMouseUp)
+        
+        // Initial Draw
+        applyLayout()
     }
 
     #on_device_select_change = () => {
@@ -1006,6 +1290,23 @@ export default class WindowManager {
         cycleMax.textContent = withUnit(health.max_cycle_time_us, 'us')
         ramFree.textContent = format(health.ram_free)
         ramMin.textContent = format(health.min_ram_free)
+
+        if (this._last_known_health_dimmed) {
+            Object.values(this.device_health_values).forEach(el => el.style.opacity = '0.5')
+        } else {
+            Object.values(this.device_health_values).forEach(el => el.style.opacity = '1')
+        }
+    }
+    
+    setHealthDimmed(dimmed) {
+        this._last_known_health_dimmed = dimmed
+        if (this.device_health_values) {
+              Object.values(this.device_health_values).forEach(el => el.style.opacity = dimmed ? '0.5' : '1')
+        }
+    }
+
+    updateWatchValues() {
+        this.watch_panel?.updateValues()
     }
 
     _startHealthPolling() {
@@ -1025,6 +1326,8 @@ export default class WindowManager {
     }
 
     async _pollDeviceHealth() {
+        if (!this._monitoringConnectionState) return // Requires connection
+        if (!this._monitoringActive) return // Requires monitoring active (don't update if paused)
         if (this._healthInFlight) return
         const editor = this.#editor
         if (!editor?.device_manager?.connected) return
@@ -1113,77 +1416,81 @@ export default class WindowManager {
         body.scrollTop = body.scrollHeight
     }
 
-    async handleCompile() {
+    async handleCompile(options = {}) {
+        const silent = !!options.silent
+
         if (!this.#editor.runtime_ready) {
-            this.logToConsole('WASM Runtime is not ready yet.', 'error')
-            this.logToConsole('----------------------------------------', 'info')
-            return
+            if (!silent) {
+                this.logToConsole('WASM Runtime is not ready yet.', 'error')
+                this.logToConsole('----------------------------------------', 'info')
+            }
+            return false
         }
 
         try {
-            if (typeof this.setConsoleTab === 'function') {
-                this.setConsoleTab('output')
+            if (!silent) {
+                if (typeof this.setConsoleTab === 'function') {
+                    this.setConsoleTab('output')
+                }
+                this.logToConsole('Compiling project...', 'info')
             }
-            this.logToConsole('Compiling project...', 'info')
             const startTime = performance.now()
             const result = await this.#editor.project_manager.compile()
             const endTime = performance.now()
 
             // Store result for download
+            this.#editor.project.binary = ((str) => {
+                const matches = str.match(/.{1,2}/g) || []
+                return matches.map(hex => parseInt(hex, 16))
+            })(result.output)
+
             this.#editor.project.compiledBytecode = result.output
             this.#editor.project.compiledSize = result.size
 
-            const MAX_PROGRAM_SIZE = 1024 // 1KB limit for now
-            const percent = +((result.size / MAX_PROGRAM_SIZE) * 100).toFixed(1)
-            const total_bars = 16
-            const filled_bars = Math.round((Math.min(100, percent) / 100) * total_bars)
-            const empty_bars = total_bars - filled_bars
-            const bar = '[' + '='.repeat(filled_bars) + ' '.repeat(empty_bars) + ']'
+            if (!silent) {
+                const MAX_PROGRAM_SIZE = 1024 // 1KB limit for now
+                const percent = +((result.size / MAX_PROGRAM_SIZE) * 100).toFixed(1)
+                const total_bars = 16
+                const filled_bars = Math.round((Math.min(100, percent) / 100) * total_bars)
+                const empty_bars = total_bars - filled_bars
+                const bar = '[' + '='.repeat(filled_bars) + ' '.repeat(empty_bars) + ']'
 
-            // Calculate Checksum
-            let checksumMsg = ''
-            let hexPreview = ''
-            if (this.#editor.runtime && this.#editor.runtime.parseHex && this.#editor.runtime.crc8) {
-                try {
-                    const bytes = this.#editor.runtime.parseHex(result.output)
-                    const checksum = this.#editor.runtime.crc8(bytes)
+                // Calculate Checksum
+                let checksumMsg = ''
+                let hexPreview = ''
+                if (this.#editor.runtime && this.#editor.runtime.parseHex && this.#editor.runtime.crc8) {
+                    try {
+                        const bytes = this.#editor.runtime.parseHex(result.output)
+                        const checksum = this.#editor.runtime.crc8(bytes)
 
-                    if (this.lastCompiledChecksum === checksum) {
-                        checksumMsg = " No changes."
+                        if (this.lastCompiledChecksum === checksum) {
+                            checksumMsg = ' No changes.'
+                        }
+                        this.lastCompiledChecksum = checksum
+
+                        // Preview first 24 bytes
+                        const subset = bytes.slice(0, 24)
+                        hexPreview = subset.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
+                        if (bytes.length > 24) hexPreview += '...'
+                    } catch (e) {
+                        console.warn('Checksum calculation failed', e)
                     }
-                    // else {
-                    //    checksumMsg = ` Checksum: ${checksum.toString(16).toUpperCase().padStart(2, '0')}`
-                    // }
-                    this.lastCompiledChecksum = checksum
-
-                    // Preview first 24 bytes
-                    const subset = bytes.slice(0, 24)
-                    hexPreview = subset.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
-                    if (bytes.length > 24) hexPreview += '...'
-                } catch (e) {
-                    console.warn('Checksum calculation failed', e)
                 }
-            }
 
-            this.logToConsole(`Compilation finished in ${(endTime - startTime).toFixed(2)}ms${checksumMsg}`, 'success')
-            this.logToConsole(`${bar} ${result.size}/${MAX_PROGRAM_SIZE} bytes (${percent}%)`, result.size > MAX_PROGRAM_SIZE ? 'error' : 'info')
-
-            if (hexPreview) this.logToConsole('Bytecode: ' + hexPreview)
-
-            // Auto open console
-            if (typeof this.openConsole === 'function') {
-                this.openConsole(150)
-            } else {
-                const consoleEl = this.workspace.querySelector('.plc-console')
-                if (consoleEl) {
-                    consoleEl.classList.remove('minimized')
-                    consoleEl.style.height = '150px'
+                this.logToConsole(`Compilation finished in ${(endTime - startTime).toFixed(2)}ms${checksumMsg}`, 'success')
+                this.logToConsole(`Used ${result.size} bytes (${percent}%).`, 'info')
+                if (hexPreview) {
+                    this.logToConsole(hexPreview, 'info')
                 }
+                this.logToConsole('----------------------------------------', 'info')
             }
-            this.logToConsole('----------------------------------------', 'info')
+            return true
         } catch (e) {
-            this.logToConsole(`Compilation failed: ${e.message}`, 'error')
-            this.logToConsole('----------------------------------------', 'info')
+            if (!silent) {
+                this.logToConsole(`Compilation failed: ${e.message}`, 'error')
+                this.logToConsole('----------------------------------------', 'info')
+            }
+            return false
         }
     }
 
@@ -1226,11 +1533,11 @@ export default class WindowManager {
             }
             // Strict version check might be too aggressive if we just want compatibility, but the user asked for "any details"
             if (deviceInfo.version && projectInfo.version && deviceInfo.version !== projectInfo.version) {
-                 mismatches.push(`Version: Device (<b>${deviceInfo.version}</b>) vs Project (<b>${projectInfo.version}</b>)`)
+                mismatches.push(`Version: Device (<b>${deviceInfo.version}</b>) vs Project (<b>${projectInfo.version}</b>)`)
             }
 
             if (mismatches.length > 0) {
-                const details = `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${deviceInfo.type  || '?'}</b> ${deviceInfo.arch ? ('(' + deviceInfo.arch + ')') : ''} <span style="opacity: 0.7">${deviceInfo.version ? 'v' + deviceInfo.version : ''}</span></span>`
+                const details = `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${deviceInfo.type || '?'}</b> ${deviceInfo.arch ? '(' + deviceInfo.arch + ')' : ''} <span style="opacity: 0.7">${deviceInfo.version ? 'v' + deviceInfo.version : ''}</span></span>`
                 const description = `The connected device details do not match the project configuration:<br><br>${mismatches.join('<br>')}<br><br>Upload anyway?${details}`
                 const confirm = await Popup.confirm({
                     title: 'Device Mismatch',
@@ -1238,7 +1545,7 @@ export default class WindowManager {
                     confirm_text: 'Upload',
                     cancel_text: 'Cancel',
                     confirm_button_color: '#d1852e',
-                    confirm_text_color: '#FFF'
+                    confirm_text_color: '#FFF',
                 })
                 if (!confirm) {
                     this.logToConsole('Upload aborted due to device mismatch.', 'warning')
@@ -1246,7 +1553,7 @@ export default class WindowManager {
                     return
                 }
             } else {
-                const details = `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${deviceInfo.type || '?'}</b> ${deviceInfo.arch ? ('(' + deviceInfo.arch + ')') : ''} <span style="opacity: 0.7">${deviceInfo.version ? 'v' + deviceInfo.version : ''}</span></span>`
+                const details = `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${deviceInfo.type || '?'}</b> ${deviceInfo.arch ? '(' + deviceInfo.arch + ')' : ''} <span style="opacity: 0.7">${deviceInfo.version ? 'v' + deviceInfo.version : ''}</span></span>`
                 const confirm = await Popup.confirm({
                     title: 'Upload Program',
                     description: `Upload ${compiledSize} bytes to the device? This will overwrite the current program.${details}`,
@@ -1260,10 +1567,10 @@ export default class WindowManager {
                 }
             }
         } else {
-             const dInfo = deviceInfo || this.#editor.device_manager.deviceInfo
-             const details = dInfo ? `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${dInfo.type || '?'}</b> ${dInfo.arch ? ('(' + dInfo.arch + ')') : ''} <span style="opacity: 0.7">${dInfo.version ? 'v' + dInfo.version : ''}</span></span>` : ''
-             
-             const confirm = await Popup.confirm({
+            const dInfo = deviceInfo || this.#editor.device_manager.deviceInfo
+            const details = dInfo ? `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${dInfo.type || '?'}</b> ${dInfo.arch ? '(' + dInfo.arch + ')' : ''} <span style="opacity: 0.7">${dInfo.version ? 'v' + dInfo.version : ''}</span></span>` : ''
+
+            const confirm = await Popup.confirm({
                 title: 'Upload Program',
                 description: `Upload ${compiledSize} bytes to the device? This will overwrite the current program.${details}`,
                 confirm_text: 'Upload',
@@ -1322,11 +1629,43 @@ export default class WindowManager {
                 return
             }
             const info = editor.device_manager.deviceInfo
-            if (info) device_info.innerHTML = `${info.arch} v${info.version.split(' ')[0]}`
+            if (info) {
+                device_info.innerHTML = `
+                    <div class="device-name">${info.device || 'Unknown Device'}</div>
+                    <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
+                `
+            }
             else device_info.innerHTML = 'Unknown device'
             this._healthConnectionState = true
             this._setHealthConnected(true)
             this._startHealthPolling()
+
+            // Simulation Auto-Load Sequence
+            if (this.active_device === 'simulation') {
+                const compileSuccess = await this.handleCompile({ silent: true })
+                
+                if (!compileSuccess) {
+                    await editor.device_manager.disconnect()
+                    device_online_button.removeAttribute('disabled')
+                    if (!device_select_element_was_disabled) device_select_element.removeAttribute('disabled')
+                    // @ts-ignore
+                    device_online_button.innerText = before
+                    this._healthConnectionState = false
+                    this._stopHealthPolling()
+                    this._setHealthConnected(false)
+                    return
+                }
+
+                const compiledBytecode = this.#editor.project?.binary
+                if (compiledBytecode) {
+                         if (this.#editor.device_manager?.connection && typeof this.#editor.device_manager.connection.plc?.setRuntimeOffsets === 'function') {
+                              await this.#editor.device_manager.connection.plc.setRuntimeOffsets(this.#editor.project.offsets || {})
+                         }
+    
+                         await this.#editor.device_manager.connection.downloadProgram(compiledBytecode)
+                         this.setMonitoringActive(true)
+                }
+            }
         } else {
             device_info.innerHTML = ''
             await editor.device_manager.disconnect()
@@ -1349,9 +1688,7 @@ export default class WindowManager {
             device_online_button.classList.add('green')
         }
         this.active_mode = mode
-        if (typeof editor.setEditLock === 'function') {
-            editor.setEditLock(mode === 'online')
-        }
+        this.updateLiveMonitorState()
     }
 
     #on_navigation_minimize_toggle = () => {
@@ -1625,6 +1962,10 @@ export default class WindowManager {
         this.refreshDeviceOptions()
         // this.#editor.draw()
 
+        if (this.watch_panel && typeof this.watch_panel.refresh === 'function') {
+            this.watch_panel.refresh()
+        }
+
         // Open main program
         // if (project.files) {
         //     const main = project.files.find(f => f.name === 'main' && f.path === '/' && f.type === 'program')
@@ -1677,14 +2018,14 @@ export default class WindowManager {
         }
         // Remove highlight from the tree
         this.#editor.window_manager.removeHighlight()
-        
+
         const exists = this.windows.get(id)
         exists?.close()
         this.windows.delete(id)
         if (id === 'symbols') {
             this.updateLiveMonitorState()
         }
-        
+
         const active_program = this.#editor.findProgram(id)
         if (active_program) active_program.host = undefined
         const next_id = this.#editor.window_manager.tab_manager.closeTab(id)
@@ -1731,33 +2072,68 @@ export default class WindowManager {
     updateLiveMonitorState() {
         const editor = this.#editor
         const connected = !!editor?.device_manager?.connected
-        const shouldMonitor = !!connected && this._monitoringActive
+        const monitoring = this._monitoringActive
+        const shouldMonitor = !!connected && monitoring
+        
+        // Locking Logic:
+        // Unlock editing when Connected (Online), but Lock when Monitoring.
+        const isLocked = shouldMonitor
+        if (this._edit_lock_state !== isLocked) {
+             this._edit_lock_state = isLocked
+             if (typeof editor.setEditLock === 'function') {
+                 editor.setEditLock(isLocked)
+             }
+        }
+        
+        // Notify WatchPanel and MemoryUI
+        const watchPanelInstance = this._getWatchPanelInstance()
+        if (watchPanelInstance && typeof watchPanelInstance.setMonitoringState === 'function') {
+            watchPanelInstance.setMonitoringState(shouldMonitor)
+        }
+        
+        const memoryWin = this.windows.get('memory')
+        if (memoryWin && typeof memoryWin.setMonitoringState === 'function') {
+            memoryWin.setMonitoringState(shouldMonitor)
+        }
+        
         if (shouldMonitor) {
+            if (this.data_fetcher && !this.data_fetcher.fetching) this.data_fetcher.start()
             this._startLiveMemoryMonitor()
-            return
+            if (editor && typeof editor.setMonitoringDimmed === 'function') {
+                 editor.setMonitoringDimmed(false)
+            }
+            this.setHealthDimmed(false)
+            this._pollDeviceHealth()
+        } else {
+             if (this.data_fetcher && this.data_fetcher.fetching) this.data_fetcher.stop()
+             if (editor && typeof editor.setMonitoringDimmed === 'function') {
+                 editor.setMonitoringDimmed(true)
+             }
+             this.setHealthDimmed(true)
         }
-        if (this._liveMemoryTimer || (editor?.live_symbol_values && editor.live_symbol_values.size)) {
-            this._stopLiveMemoryMonitor()
-        }
+    }
+    
+    // Helper to find watch panel instance (since we didn't save it)
+    _getWatchPanelInstance() {
+         // It might be attached to the DOM element property if we were using web components, but we are not.
+         // We should have saved it in constructor.
+         // Let's assume we can fix constructor to save it.
+         return this.watch_panel
     }
 
     _startLiveMemoryMonitor() {
-        if (this._liveMemoryTimer) return
-        this._pollLiveSymbols()
-        this._liveMemoryTimer = setInterval(() => {
-            this._pollLiveSymbols()
-        }, 100)
+        if (this._codeMonitorRegistered) return
+        this._updateCodeMonitorRegistrations()
+        this._codeMonitorRegistered = true
     }
 
     _stopLiveMemoryMonitor() {
-        if (this._liveMemoryTimer) {
-            clearInterval(this._liveMemoryTimer)
-            this._liveMemoryTimer = null
-        }
-        this._liveMemoryInFlight = false
+        if (!this._codeMonitorRegistered) return
+        this.data_fetcher.unregisterAll('code-monitor')
+        this._codeMonitorRegistered = false
         const editor = this.#editor
         if (editor && editor.live_symbol_values) {
-            editor.live_symbol_values = new Map()
+            editor.live_symbol_values.clear()
         }
         const symbols = this.windows.get('symbols')
         if (symbols && typeof symbols.updateLiveValues === 'function') {
@@ -1765,18 +2141,16 @@ export default class WindowManager {
         }
     }
 
-    async _pollLiveSymbols() {
+    _updateCodeMonitorRegistrations() {
         const editor = this.#editor
         if (!editor?.device_manager?.connected) return
-        if (!this._monitoringActive) return
-        if (this._liveMemoryInFlight) return
+        
         const projectSymbols = editor.project?.symbols || []
         const offsets = normalizeOffsets(editor.project?.offsets || {})
-        const addressRefs = typeof editor._getAsmAddressRefsForLive === 'function'
-            ? editor._getAsmAddressRefsForLive(offsets)
-            : []
+        const addressRefs = typeof editor._getAsmAddressRefsForLive === 'function' ? editor._getAsmAddressRefsForLive(offsets) : []
         const symbolEntries = []
         const seenNames = new Set()
+        
         projectSymbols.forEach(symbol => {
             if (!symbol || !symbol.name) return
             seenNames.add(symbol.name)
@@ -1795,11 +2169,10 @@ export default class WindowManager {
                 bit: typeof ref.bit === 'number' ? ref.bit : null,
             })
         })
+        
         if (!symbolEntries.length) return
         const memoryLimitValue = Number(editor.device_manager?.deviceInfo?.memory)
-        const memoryLimit = Number.isFinite(memoryLimitValue) && memoryLimitValue > 0
-            ? memoryLimitValue
-            : null
+        const memoryLimit = Number.isFinite(memoryLimitValue) && memoryLimitValue > 0 ? memoryLimitValue : null
 
         const groups = new Map()
         const typeSizes = {
@@ -1809,19 +2182,29 @@ export default class WindowManager {
             dint: 4,
             real: 4,
         }
-        const normalizeAddress = (symbol) => {
-            const locationKey = symbol?.location === 'memory' ? 'marker' : symbol?.location
-            const baseOffset = locationKey && offsets[locationKey]
-                ? (offsets[locationKey].offset || 0)
-                : 0
+        const normalizeAddress = symbol => {
+            // If absoluteAddress is present, use it directly (refs from code)
+            if (typeof symbol.absoluteAddress === 'number') {
+                const explicitBit = typeof symbol?.bit === 'number' ? symbol.bit : null
+                if (symbol.type === 'bit' || explicitBit !== null) {
+                    return {absolute: symbol.absoluteAddress, bit: explicitBit, size: 1}
+                }
+                const size = typeSizes[symbol?.type] || 1
+                return {absolute: symbol.absoluteAddress, bit: null, size}
+            }
+
+            const locationKey = symbol?.location === 'memory' ? null : symbol?.location
+            const baseOffset = locationKey && offsets[locationKey] ? offsets[locationKey].offset || 0 : 0
             const addrVal = parseFloat(symbol?.address) || 0
-            if (symbol?.type === 'bit') {
+            const explicitBit = typeof symbol?.bit === 'number' ? symbol.bit : null
+
+            if (symbol?.type === 'bit' || explicitBit !== null) {
                 const byte = Math.floor(addrVal)
-                const bit = Math.round((addrVal - byte) * 10)
-                return { absolute: baseOffset + byte, bit, size: 1 }
+                const bit = explicitBit !== null ? explicitBit : Math.round((addrVal - byte) * 10)
+                return {absolute: baseOffset + byte, bit, size: 1}
             }
             const size = typeSizes[symbol?.type] || 1
-            return { absolute: baseOffset + Math.floor(addrVal), bit: null, size }
+            return {absolute: baseOffset + Math.floor(addrVal), bit: null, size}
         }
 
         symbolEntries.forEach(symbol => {
@@ -1830,82 +2213,93 @@ export default class WindowManager {
             const end = layout.absolute + layout.size
             const key = (symbol.location === 'memory' ? 'marker' : symbol.location) || 'marker'
             if (!groups.has(key)) {
-                groups.set(key, { min: layout.absolute, max: end, items: [] })
+                groups.set(key, {min: layout.absolute, max: end, items: []})
             }
             const group = groups.get(key)
             group.min = Math.min(group.min, layout.absolute)
             group.max = Math.max(group.max, end)
-            group.items.push({ symbol, layout })
+            group.items.push({symbol, layout})
         })
 
-        this._liveMemoryInFlight = true
-        try {
-            const liveValues = new Map()
-            for (const group of groups.values()) {
-                const readStart = Math.max(0, group.min)
-                const readEnd = memoryLimit !== null ? Math.min(group.max, memoryLimit) : group.max
-                const size = Math.max(0, readEnd - readStart)
-                if (!size) continue
-                let raw = await editor.device_manager.readMemory(readStart, size)
-                let bytes = null
-                if (raw instanceof Uint8Array) {
-                    bytes = raw
-                } else if (Array.isArray(raw)) {
-                    bytes = Uint8Array.from(raw)
-                } else if (raw && raw.buffer) {
-                    bytes = new Uint8Array(raw.buffer, raw.byteOffset || 0, raw.byteLength || raw.length || 0)
-                }
-                if (!bytes || !bytes.length) continue
-                const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+        // Unregister any previous
+        this.data_fetcher.unregisterAll('code-monitor')
+        if (!editor.live_symbol_values) editor.live_symbol_values = new Map()
 
-                group.items.forEach(({ symbol, layout }) => {
-                    const offset = layout.absolute - readStart
-                    const type = symbol.type || 'byte'
-                    let value = null
-                    let text = '-'
-                    if (offset < 0 || offset >= bytes.length) {
-                        liveValues.set(symbol.name, { value: null, text, type })
-                        return
-                    }
-                    if (type === 'bit') {
-                        const byteVal = bytes[offset]
-                        const bit = layout.bit || 0
-                        value = (byteVal >> bit) & 1
-                        text = value ? 'ON' : 'OFF'
-                    } else if (type === 'byte') {
-                        value = bytes[offset]
-                        text = String(value)
-                    } else if (type === 'int') {
-                        if (offset + 2 <= bytes.length) {
-                            value = view.getInt16(offset, true)
-                            text = String(value)
-                        }
-                    } else if (type === 'dint') {
-                        if (offset + 4 <= bytes.length) {
-                            value = view.getInt32(offset, true)
-                            text = String(value)
-                        }
-                    } else if (type === 'real') {
-                        if (offset + 4 <= bytes.length) {
-                            value = view.getFloat32(offset, true)
-                            text = Number.isFinite(value) ? value.toFixed(3) : String(value)
-                        }
-                    } else {
-                        value = bytes[offset]
-                        text = String(value)
-                    }
-                    liveValues.set(symbol.name, { value, text, type })
-                })
+        for (const group of groups.values()) {
+            const readStart = Math.max(0, group.min)
+            const readEnd = memoryLimit !== null ? Math.min(group.max, memoryLimit) : group.max
+            const size = Math.max(0, readEnd - readStart)
+            if (!size) continue
+
+            this.data_fetcher.register('code-monitor', readStart, size, (data) => {
+                this._processMonitorData(data, readStart, group.items)
+            })
+        }
+    }
+
+    _processMonitorData(raw, readStart, items) {
+        const editor = this.#editor
+        let bytes = null
+        if (raw instanceof Uint8Array) {
+            bytes = raw
+        } else if (Array.isArray(raw)) {
+            bytes = Uint8Array.from(raw)
+        } else if (raw && raw.buffer) {
+            bytes = new Uint8Array(raw.buffer, raw.byteOffset || 0, raw.byteLength || raw.length || 0)
+        } // Missing else if raw is null?
+
+        if (!bytes || !bytes.length) return
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+        const liveValues = editor.live_symbol_values || new Map()
+
+        items.forEach(({symbol, layout}) => {
+            const offset = layout.absolute - readStart
+            const type = symbol.type || 'byte'
+            let value = null
+            let text = '-'
+            
+            if (offset < 0 || offset >= bytes.length) {
+                // Do not overwrite with null if partial update fails for some reason, 
+                // but actually if offset is out of bounds of *this* chunk, it shouldn't happen 
+                // because we registered based on items range.
+                return
             }
-            editor.live_symbol_values = liveValues
-            const symbolsUI = this.windows.get('symbols')
-            if (symbolsUI && typeof symbolsUI.updateLiveValues === 'function') {
-                symbolsUI.updateLiveValues(liveValues)
+            
+            // Check end bound
+            const size = (type === 'bit' || type === 'byte') ? 1 : 
+                         (type === 'int') ? 2 : 
+                         (type === 'dint' || type === 'real') ? 4 : 1
+            
+            if (offset + size > bytes.length) return
+
+            if (type === 'bit') {
+                const byteVal = bytes[offset]
+                const bit = layout.bit || 0
+                value = (byteVal >> bit) & 1
+                text = value ? 'ON' : 'OFF'
+            } else if (type === 'byte') {
+                value = bytes[offset]
+                text = String(value)
+            } else if (type === 'int') {
+                value = view.getInt16(offset, true)
+                text = String(value)
+            } else if (type === 'dint') {
+                value = view.getInt32(offset, true)
+                text = String(value)
+            } else if (type === 'real') {
+                value = view.getFloat32(offset, true)
+                text = Number.isFinite(value) ? value.toFixed(3) : String(value)
+            } else {
+                value = bytes[offset]
+                text = String(value)
             }
-        } catch (e) {
-            // Ignore transient read errors while connected
-        } finally {
-            this._liveMemoryInFlight = false
+            liveValues.set(symbol.name, {value, text, type})
+        })
+
+        editor.live_symbol_values = liveValues // Ensure reference
+        const symbolsUI = this.windows.get('symbols')
+        if (symbolsUI && typeof symbolsUI.updateLiveValues === 'function') {
+            symbolsUI.updateLiveValues(liveValues)
         }
     }
 
@@ -1917,14 +2311,14 @@ export default class WindowManager {
             const program = editor.findProgram(entry.programId)
             if (program) {
                 const block = program?.blocks?.find(b => b.id === entry.blockId)
-                if (block) return { program, block }
+                if (block) return {program, block}
             }
             const programs = editor._getLintPrograms?.() || []
             for (const prog of programs) {
                 const block = prog?.blocks?.find(b => b.id === entry.blockId)
-                if (block) return { program: prog, block }
+                if (block) return {program: prog, block}
             }
-            return { program: null, block: null }
+            return {program: null, block: null}
         }
         const waitForVisible = async block => {
             for (let i = 0; i < 6; i++) {
@@ -1964,7 +2358,7 @@ export default class WindowManager {
             }
             const nextBlockRect = blockDiv.getBoundingClientRect()
             if (nextBlockRect.top < bodyRect.top || nextBlockRect.bottom > bodyRect.bottom) {
-                blockDiv.scrollIntoView({ block: 'center' })
+                blockDiv.scrollIntoView({block: 'center'})
             }
         }
         const scrollBodyToCode = (blockDiv, codeEditor, index, ratio = 0.33) => {
@@ -2001,13 +2395,13 @@ export default class WindowManager {
             return 0
         }
         const run = async () => {
-            let { program, block } = findTarget()
+            let {program, block} = findTarget()
             if (!block) return
 
             if (program?.id) {
                 this.openProgram(program.id)
                 await waitForLayout()
-                ;({ program, block } = findTarget())
+                ;({program, block} = findTarget())
                 if (!block) return
             }
 
@@ -2023,9 +2417,9 @@ export default class WindowManager {
 
             const index = getTargetIndex(codeEditor)
             if (typeof codeEditor.setCursor === 'function') {
-                codeEditor.setCursor(index, { reveal: true, suppressHistory: true, ratio: 0.33 })
+                codeEditor.setCursor(index, {reveal: true, suppressHistory: true, ratio: 0.33})
             } else if (typeof codeEditor.revealRange === 'function') {
-                codeEditor.revealRange({ start: index, end: index + 1 }, { ratio: 0.33, highlight: false })
+                codeEditor.revealRange({start: index, end: index + 1}, {ratio: 0.33, highlight: false})
             }
             await waitForLayout()
             scrollBodyToCode(block.div, codeEditor, index, 0.33)
@@ -2037,9 +2431,9 @@ export default class WindowManager {
 
     /** @param {string} id */
     restoreLazyTab(id) {
-         const prog = this.#editor.findProgram(id)
-         if (!prog) return
-         this.tab_manager.addLazyTab(id)
+        const prog = this.#editor.findProgram(id)
+        if (!prog) return
+        this.tab_manager.addLazyTab(id)
     }
 
     /** @param { string | null | undefined } id */
@@ -2100,5 +2494,124 @@ export default class WindowManager {
             minimize.innerHTML = '+'
         }
         // this.draw()
+    }
+
+    #initOuterLayout(workspace) {
+        const nav = workspace.querySelector('.plc-navigation');
+        const tools = workspace.querySelector('.plc-tools');
+        const resizerNav = workspace.querySelector('#resizer-nav');
+        const resizerTools = workspace.querySelector('#resizer-tools');
+        const navBar = workspace.querySelector('.plc-navigation-bar');
+        const toolsBar = workspace.querySelector('.plc-tools-bar');
+
+        let state = {
+            nav: { width: 300, minimized: false },
+            tools: { width: 250, minimized: true }
+        };
+
+        try {
+            const saved = localStorage.getItem('vovk_plc_outer_layout');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed.nav) state.nav = { ...state.nav, ...parsed.nav };
+                if (parsed.tools) state.tools = { ...state.tools, ...parsed.tools };
+            }
+        } catch(e) {}
+
+        const apply = () => {
+            const navBtn = nav?.querySelector('.menu-button');
+            const navContent = nav?.querySelector('.plc-navigation-container');
+            
+            if (state.nav.minimized) {
+                nav.classList.add('minimized');
+                nav.style.flex = '0 0 auto';
+                nav.style.width = '30px'; 
+                nav.style.overflow = 'hidden';
+                if (navContent) navContent.style.display = 'none';
+                if (navBtn) navBtn.innerText = '+';
+                if (resizerNav) resizerNav.style.pointerEvents = 'none';
+            } else {
+                nav.classList.remove('minimized');
+                nav.style.flex = `0 0 ${state.nav.width}px`;
+                nav.style.width = `${state.nav.width}px`;
+                if (navContent) navContent.style.display = '';
+                if (navBtn) navBtn.innerText = '-';
+                if (resizerNav) resizerNav.style.pointerEvents = 'all';
+            }
+
+            const toolsBtn = tools?.querySelector('.menu-button');
+            const toolsContent = tools?.querySelector('.plc-tools-container');
+
+            if (state.tools.minimized) {
+                tools.classList.add('minimized');
+                tools.style.flex = '0 0 auto';
+                tools.style.width = '30px';
+                tools.style.overflow = 'hidden';
+                if (toolsContent) toolsContent.style.display = 'none';
+                if (toolsBtn) toolsBtn.innerText = '+';
+                if (resizerTools) resizerTools.style.pointerEvents = 'none';
+            } else {
+                tools.classList.remove('minimized');
+                tools.style.flex = `0 0 ${state.tools.width}px`;
+                tools.style.width = `${state.tools.width}px`;
+                if (toolsContent) toolsContent.style.display = '';
+                if (toolsBtn) toolsBtn.innerText = '-';
+                if (resizerTools) resizerTools.style.pointerEvents = 'all';
+            }
+
+            localStorage.setItem('vovk_plc_outer_layout', JSON.stringify(state));
+        }
+
+        if (navBar) {
+            navBar.onclick = (e) => {
+                state.nav.minimized = !state.nav.minimized;
+                apply();
+            };
+            navBar.style.cursor = 'pointer';
+        }
+        if (toolsBar) {
+            toolsBar.onclick = (e) => {
+                state.tools.minimized = !state.tools.minimized;
+                apply();
+            };
+            toolsBar.style.cursor = 'pointer';
+        }
+
+        const setupDrag = (resizer, side) => {
+            if (!resizer) return;
+            resizer.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                document.body.style.cursor = 'ew-resize';
+                const startX = e.clientX;
+                const startWidth = side === 'left' ? state.nav.width : state.tools.width;
+
+                const onMove = (evt) => {
+                    const diff = evt.clientX - startX;
+                    let newWidth = side === 'left' ? startWidth + diff : startWidth - diff;
+                    
+                    if (newWidth < 150) newWidth = 150;
+                    if (newWidth > 800) newWidth = 800;
+
+                    if (side === 'left') state.nav.width = newWidth;
+                    else state.tools.width = newWidth;
+
+                    apply();
+                };
+
+                const onUp = () => {
+                    document.body.style.cursor = '';
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                };
+
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            });
+        }
+
+        setupDrag(resizerNav, 'left');
+        setupDrag(resizerTools, 'right');
+
+        apply();
     }
 }

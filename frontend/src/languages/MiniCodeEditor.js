@@ -70,9 +70,9 @@ export class MiniCodeEditor {
 .mce-hover-highlight { position: absolute; pointer-events: none; z-index: 4; background: rgba(216, 90, 112, 0.3); border-radius: 2px; }
 .mce-link-highlight { position: absolute; pointer-events: none; z-index: 4; height: 2px; background: #4daafc; border-radius: 1px; opacity: 0.9; }
 .mce-selection-highlight { position: absolute; pointer-events: none; z-index: 3; background: rgba(76, 141, 255, 0.28); border-radius: 2px; }
-.mce-preview-pill { position:absolute; display:inline-flex; align-items:center; justify-content:center; min-height:14px; padding:0 8px; border-radius:6px; background:#464646; color:#fff; border:1px solid #fff; font-size:13px; line-height:1; font-weight:600; white-space:nowrap; pointer-events:none; z-index:6; box-shadow:0 1px 2px rgba(0,0,0,0.45); transform: translateY(-1px); }
-.mce-preview-pill.on { background:#148a45; color:#fff; }
-.mce-preview-pill.off { background:#3a3a3a; color:#fff; }
+.mce-preview-pill { position:absolute; display:inline-flex; align-items:center; justify-content:center; min-height:14px; padding:0 8px; border-radius:6px; background:#464646; color:#fff; border:1px solid #464646; font-size:13px; line-height:1; font-weight:600; white-space:nowrap; pointer-events:none; z-index:6; box-shadow:0 1px 2px rgba(0,0,0,0.45); transform: translateY(-1px); }
+.mce-preview-pill.on { background:#3a3a3a; color:#1fba5f; border-color:#1fba5f; }
+.mce-preview-pill.off { background:#3a3a3a; color:rgba(200, 200, 200, 0.5); border-color:#555; }
 .mce-preview-pill.bit { min-width:34px; }
 .mce-marker:hover::after {
     content: attr(data-msg);

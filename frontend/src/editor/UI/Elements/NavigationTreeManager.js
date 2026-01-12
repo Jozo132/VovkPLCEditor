@@ -338,7 +338,32 @@ export default class NavigationTreeManager {
         const container = workspace.querySelector('.plc-navigation-tree')
         if (!container) throw new Error('Navigation tree container not found')
         container.innerHTML = ''
-        this.container = container
+        
+        // Match WatchPanel structure
+        const panel = ElementSynthesis(/*HTML*/`
+            <div class="plc-navigation-panel resizable-panel" id="panel-project">
+                <div class="plc-navigation-panel-header" title="Click to toggle collapse">
+                    <span class="codicon codicon-chevron-down plc-navigation-panel-chevron"></span>
+                    <span class="plc-icon plc-icon-sidebar-project" style="margin-right: 4px; transform: scale(0.8);"></span>
+                    <span class="plc-navigation-panel-title">Project</span>
+                </div>
+                <div class="plc-navigation-panel-content"></div>
+            </div>
+        `)
+        container.appendChild(panel)
+        
+        this.panel = panel
+        this.header = panel.querySelector('.plc-navigation-panel-header')
+        this.content = panel.querySelector('.plc-navigation-panel-content')
+        this.chevron = panel.querySelector('.plc-navigation-panel-chevron')
+        
+        this.container = this.content // Redirect items to content
+        
+        // Remove internal toggle logic - handled by WindowManager
+        /*
+        this.minimized = false
+        this.header.addEventListener('click', () => { ... })
+        */
 
         this.state = new Proxy({
             selected: null,
@@ -869,5 +894,14 @@ export default class NavigationTreeManager {
             return true // Keep all other files
         }) // Delete all files that start with the path
         this.draw_navigation_tree()
+    }
+
+    collapseItems() {
+        if (!this.root) return
+        this.root.forEach(state => {
+            if (state.type === 'folder' && state.item && typeof state.item.collapse === 'function') {
+                state.item.collapse()
+            }
+        })
     }
 }

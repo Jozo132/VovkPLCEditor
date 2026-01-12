@@ -141,7 +141,7 @@
 }
 
 .symbols-toolbar {
-    margin-bottom: 10px;
+    margin-bottom: 2px;
     display: flex;
     gap: 10px;
 }
@@ -152,25 +152,26 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 32px;
-    padding: 0 15px;
+    height: 22px;
+    padding: 0 10px;
     cursor: pointer;
-    border-radius: 3px;
-    font-size: 13px;
-    border: 1px solid #555;
+    border-radius: 2px;
+    font-size: 11px;
+    border: 1px solid #3e3e3e;
     outline: none;
     box-sizing: border-box;
     font-weight: 500;
     transition: background 0.1s;
-    background-color: #3c3c3c;
-    color: #eee;
-    margin-top: 8px;
+    background-color: #222222;
+    color: #eeeeee;
+    margin-top: 0px;
 }
 
 .add-symbol-btn:hover,
 .monitor-btn:hover {
-    background-color: #4a4a4a;
+    background-color: #333333;
     color: #ffffff;
+    border-color: #555555;
 }
 
 .add-symbol-btn:focus,
@@ -217,14 +218,7 @@
     color: #000;
 }
 
-.add-symbol-btn {
-    background-color: #4a4a4a;
-    border-color: #666;
-}
 
-.add-symbol-btn:hover {
-    background-color: #5a5a5a;
-}
 
 /* Delete button */
 .symbol-delete-btn {
@@ -233,7 +227,8 @@
     border: none;
     cursor: pointer;
     opacity: 0.8;
-    padding: 4px 8px;
+    padding: 0;
+    margin: auto auto;
     width: 100%;
     text-align: center;
 }
@@ -337,7 +332,7 @@
 }
 
 .symbols-toolbar-panel {
-    padding: 10px;
+    padding: 2px 4px;
 }
 
 .col-mini { width: 30px; }

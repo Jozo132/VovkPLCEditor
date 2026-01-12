@@ -210,9 +210,18 @@ export default class MemoryUI {
         if (!this.monitoringAvailable) {
             this.updateMonitoringState(false)
         }
-        if (!this.hidden) {
-            this.updateMemory(true)
+    }
+
+    setMonitoringState(isMonitoring) {
+        // Called by WindowManager
+        this.monitoringActive = !!isMonitoring
+        if (this.canvas) {
+             this.canvas.style.opacity = this.monitoringActive ? '1' : '0.5'
         }
+        this.monitor_buttons.forEach(btn => {
+            btn.classList.toggle('active', this.monitoringActive)
+            btn.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
+        })
     }
 
     updateSidebar() {

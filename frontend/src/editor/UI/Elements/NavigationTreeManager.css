@@ -5,149 +5,158 @@
     --plc-tree-indentation: 0px;
 }
 
-
-.plc-navigation-tree {
+.plc-navigation-panel {
     display: flex;
     flex-direction: column;
-    padding: 2px;
-    width: calc(100% - 4px);
-    min-height: 300px;
-    overflow-x: hidden;
-    overflow-y: auto;
-    font-size: 12px;
-    background: #333B;
+    /* height: 100%; */
+    flex: 1; 
+    background: #1e1e1e;
     overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-.plc-navigation-tree-folder {
+.plc-navigation-panel-header {
+    display: flex;
+    align-items: center;
+    padding: 3px 8px; /* Compact */
+    background: #252526;
+    border-bottom: 1px solid #333;
+    cursor: pointer;
+    user-select: none;
+    color: #ccc;
+    font-weight: 700;
+}
+
+.plc-navigation-panel-header:hover {
+    color: #fff;
+}
+
+.plc-navigation-panel-header .codicon {
+    margin-right: 6px;
+    font-size: 14px;
+}
+
+.plc-navigation-panel-title {
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.plc-navigation-panel-content {
     display: flex;
     flex-direction: column;
-    padding: 0px;
-    width: 100%;
-    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
-}
-.plc-navigation-tree-folder.minimized { display: none; }
-
-/* .plc-navigation-children:empty::before {
-    content: "empty";
-    display: block;
-    padding-left: 26px; 
-    font-style: italic;
-    color: #999;
-} */
-
-.plc-title {
-    align-items: center;
-    padding: 0px;
-    width: 100%;
-    cursor: pointer;
-    user-select: none;
-    font-size: 12px;
-    color: #DDD;
+    overflow-x: hidden;
+    padding: 2px;
 }
 
-.plc-navigation-item > :first-child > .plc-title {
-    background: #6783;
-}
-
-.plc-navigation-item > :first-child:hover > .plc-title {
-    background: #555;
-}
-
-.plc-navigation-item.selected > :first-child > .plc-title {
-    color: rgb(159, 205, 255);
-    background: #678A;
-}
-
-.plc-navigation-item.selected > :first-child:hover > .plc-title {
-    background: #555;
-}
-
-.plc-navigation-tree-item  {
-    align-items: left;
-    padding: 0px;
-    width: 100%;
-    /* height: 20px; */
-    cursor: pointer;
-    user-select: none;
-    background: #6789;
-}
-
-/** plc-navigation-item contains three elements, aligned to the left with 2px padding-left */
-.plc-navigation-item > :first-child {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    padding: 0px;
-    width: 100%;
-    cursor: pointer;
-}
-
-.plc-navigation-item > :first-child > div {
-    height: 20px;
-}
+/* Tree Items Styles */
 
 .plc-navigation-item {
     display: flex;
     flex-direction: column;
-    align-items: left;
-    padding: 0px;
-    margin-top: 2px;
     width: 100%;
+}
+
+.plc-navigation-folder, 
+.plc-navigation-program, 
+.plc-navigation-custom,
+.plc-navigation-symbols,
+.plc-navigation-setup,
+.plc-navigation-memory {
+    display: flex;
+    align-items: center;
     cursor: pointer;
+    padding: 1px 0; /* Narrower rows */
+    color: #cccccc;
     user-select: none;
 }
 
-.plc-navigation-item > .plc-navigation-children {
-    margin-left: var(--plc-tree-indentation);
+.plc-navigation-folder:hover, 
+.plc-navigation-program:hover,
+.plc-navigation-custom:hover,
+.plc-navigation-symbols:hover,
+.plc-navigation-setup:hover,
+.plc-navigation-memory:hover {
+    background-color: #2a2d2e;
 }
 
+.plc-navigation-item.selected > 
+:is(.plc-navigation-folder, .plc-navigation-program, .plc-navigation-custom, .plc-navigation-symbols, .plc-navigation-setup, .plc-navigation-memory) {
+    background-color: #37373d;
+    color: #ffffff;
+}
+
+.plc-title {
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Base styles for icons injected by icons.js */
+.plc-icon::before {
+    content: '';
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+/* Indentation logic helpers - typically done via padding-left on children or nested divs */
+.plc-navigation-children {
+    display: flex;
+    flex-direction: column;
+    margin-left: 12px;
+    border-left: 1px solid #333; 
+}
 
 .plc-navigation-item.minimized > .plc-navigation-children {
     display: none;
 }
 
-.plc-icon {
-    display: flex;
-    flex-direction: row;
-}
-.plc-icon::before {
-    align-self: center;
-    text-align: center;
-    content: " ";
-    justify-content: center;
-    user-select: none;
-    width: 20px;
-    height: 20px;
-    margin-right: 2px;
-    background-size: 80% 80%;
-    background-repeat: no-repeat;
-    background-position: center center;
-}
-.plc-icon::before img {
-    display: inline-block;
-    outline: none;
-    padding: 2px;
-}
-
-.plc-navigation-item div {
-    margin-left: var(--plc-minimize-width);
-}
-.plc-navigation-folder {
-    width: 105% !important;
-    margin-left: 0px !important;
-}
+/* Twistie / Minimize Icon */
 .plc-navigation-folder .minimize {
-    height: 20px;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 2px;
 }
-.plc-navigation-folder .minimize::after {
-    content: "-";
-    display: inline-block;
-    width: var(--plc-minimize-width);
-    height: 20px;
-}
-.plc-navigation-item.minimized > .plc-navigation-folder .minimize::after { content: "+"; }
-/* .plc-navigation-item:not(.minimized) > .plc-navigation-folder .minimize::after { content: "-"; } */
 
-.plc-navigation-item:has(> .plc-navigation-children:empty) > .plc-navigation-folder .minimize::after { content: ""; }
+/* Using SVG background images instead of Font Icon to ensure rendering */
+.plc-navigation-item.minimized > .plc-navigation-folder .minimize::before {
+    content: '';
+    display: block;
+    width: 16px; 
+    height: 16px;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%23CCCCCC' fill-rule='evenodd' clip-rule='evenodd' d='M10.072 8.024L5.715 3.667l.618-.62L11 7.716v.618L6.333 13l-.618-.619 4.357-4.357z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.plc-navigation-item:not(.minimized) > .plc-navigation-folder .minimize::before {
+    content: '';
+    display: block;
+    width: 16px; 
+    height: 16px;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%23CCCCCC' fill-rule='evenodd' clip-rule='evenodd' d='M7.976 10.072l4.357-4.357.62.618L8.284 11h-.618L3 6.333l.619-.618 4.357 4.357z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+/* Generic Codicon Styles for Headers */
+.codicon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+.codicon::before { content: ''; display: block; width: 16px; height: 16px; background-repeat: no-repeat; background-position: center; }
+.codicon-chevron-right::before { background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%23CCCCCC' fill-rule='evenodd' clip-rule='evenodd' d='M10.072 8.024L5.715 3.667l.618-.62L11 7.716v.618L6.333 13l-.618-.619 4.357-4.357z'/%3E%3C/svg%3E"); }
+.codicon-chevron-down::before { background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%23CCCCCC' fill-rule='evenodd' clip-rule='evenodd' d='M7.976 10.072l4.357-4.357.62.618L8.284 11h-.618L3 6.333l.619-.618 4.357 4.357z'/%3E%3C/svg%3E"); }

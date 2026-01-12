@@ -238,43 +238,72 @@ ul {
 
 
 .plc-device-info {
-    height: 22px;
+    margin-top: 4px;
+    padding: 6px 10px;
+    background-color: #222;
+    border: 1px solid #333;
+    border-radius: 3px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-height: 20px;
+}
+
+.plc-device-info .device-name {
+    font-size: 11px;
+    font-weight: 700;
+    color: #d4d4d4;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.plc-device-info .device-meta {
+    font-size: 10px;
+    color: #888;
+    font-family: 'Consolas', monospace;
 }
 
 .plc-device-health {
-    align-self: stretch;
-    margin: 6px;
-    padding: 6px 8px;
-    background: #3a3a3a;
-    border: 1px solid #555;
-    border-radius: 3px;
+    width: 100%;
+    background: #1e1e1e;
     color: #ddd;
     font-size: 11px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
 }
 
 .plc-device-health-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    font-weight: 600;
-    color: #eee;
+    padding: 6px 8px;
+    background: #252526;
+    border-bottom: 1px solid #333;
+    cursor: pointer;
+    user-select: none;
+    color: #ccc;
+    font-weight: 700;
+}
+
+.plc-device-health-title {
+    font-size: 11px;
+    text-transform: uppercase;
 }
 
 .plc-device-health-reset {
-    background: #2f2f2f;
-    border: 1px solid #666;
+    background: #333;
+    border: 1px solid #444;
     color: #eee;
     padding: 2px 6px;
     font-size: 10px;
     border-radius: 2px;
     cursor: pointer;
+    margin-left: auto;
 }
 
 .plc-device-health-reset:hover {
-    background: #3a3a3a;
+    background: #444;
 }
 
 .plc-device-health-reset:disabled {
@@ -286,6 +315,7 @@ ul {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    padding: 8px 10px;
 }
 
 .plc-device-health-row {
@@ -293,6 +323,7 @@ ul {
     grid-template-columns: minmax(40px, 1fr) minmax(70px, 1fr) minmax(70px, 1fr);
     align-items: center;
     column-gap: 8px;
+    padding: 1px 0; /* Narrower rows */
 }
 
 .plc-device-health-label {
@@ -327,10 +358,14 @@ ul {
     background: #2A2A2A;
 }
 
+.plc-navigation:not(.minimized), .plc-tools:not(.minimized) {
+    min-width: 250px;
+}
+
 .plc-navigation-container, .plc-tools-container {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     width: 100%;
     background: #444;
 }
@@ -894,4 +929,69 @@ ul {
     .plc-console-body {
         font-size: 7px !important;
     }
+}
+
+/* Sidebar Panel Header Overrides - Enforce Narrow Compact Height */
+.plc-sidebar-panel-header, 
+.plc-navigation-panel-header,
+.plc-device-health-header,
+.plc-device-watch-header,
+.plc-connection-header {
+    height: 22px !important;
+    min-height: 22px !important;
+    max-height: 22px !important;
+    line-height: 22px !important;
+    font-size: 11px !important;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    background-color: #252526 !important;
+    border-bottom: 1px solid #1e1e1e !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 0 4px !important;
+    cursor: pointer;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    /* Reset inherited styles */
+    margin: 0 !important;
+}
+
+.plc-sidebar-panel-wrapper,
+.plc-sidebar-panels {
+    background-color: #1e1e1e !important;
+}
+
+/* Internal Sidebar Resizers */
+.plc-panel-resizer {
+    height: 1px !important; 
+    min-height: 1px !important;
+    background: #3f3f3f !important;
+    margin: 0 !important;
+    border: none !important;
+    opacity: 1 !important;
+}
+
+.plc-panel-resizer:hover {
+    background: #007acc !important;
+}
+
+/* Reset button in header */
+.plc-device-health-reset {
+    padding: 0 4px !important;
+    height: 16px !important;
+    line-height: 14px !important; /* Center vertically in 16px */
+    font-size: 10px !important;
+    margin: 0 !important;
+    display: flex;
+    align-items: center;
+}
+
+/* Adjust icons */
+.plc-connection-header .codicon,
+.plc-navigation-panel-header .codicon,
+.plc-device-health-header .codicon,
+.plc-device-watch-header .codicon {
+    font-size: 12px !important;
 }

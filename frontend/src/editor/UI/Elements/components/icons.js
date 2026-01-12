@@ -132,6 +132,30 @@ const upload_icon_source = {
     `
 }
 
+const sidebar_project_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <path fill="#C5C5C5" d="M19.005 3a.996.996 0 0 0-.995-.99H13.88l-2.022-2H2a2 2 0 0 0-2 2v18a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V5a2.002 2.002 0 0 0-2-2zM12 18H4v-4h8zm0-6H4V8h8zm8 6h-6v-4h6zm0-6h-6V8h6z"/>
+    `
+}
+
+const sidebar_health_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <path fill="#C5C5C5" d="M21 10.5h-5.2l-1.3 6.9-3.9-12.8-3.4 8.7H2v2h6.8l1.6-4.2 4 13.9 3.5-9.6H22v-2z"/>
+    `
+}
+
+const sidebar_watch_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <path fill="#C5C5C5" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+    `
+}
+
 await icon_dealer.importIcon({ type: 'folder', name: 'plc-icon-folder', image: `url('${ImageRenderer.renderSVG(folder_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'program', name: 'plc-icon-gears', image: `url('${ImageRenderer.renderSVG(program_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'symbols', name: 'plc-icon-symbols', image: `url('${ImageRenderer.renderSVG(symbols_icon_source)}')` })
@@ -141,3 +165,6 @@ await icon_dealer.importIcon({ type: 'add', name: 'plc-icon-add', image: `url('$
 await icon_dealer.importIcon({ type: 'delete', name: 'plc-icon-delete', image: `url('${ImageRenderer.renderSVG(delete_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'download', name: 'plc-icon-download', image: `url('${ImageRenderer.renderSVG(download_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'upload', name: 'plc-icon-upload', image: `url('${ImageRenderer.renderSVG(upload_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'sidebar-project', name: 'plc-icon-sidebar-project', image: `url('${ImageRenderer.renderSVG(sidebar_project_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'sidebar-health', name: 'plc-icon-sidebar-health', image: `url('${ImageRenderer.renderSVG(sidebar_health_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'sidebar-watch', name: 'plc-icon-sidebar-watch', image: `url('${ImageRenderer.renderSVG(sidebar_watch_icon_source)}')` })

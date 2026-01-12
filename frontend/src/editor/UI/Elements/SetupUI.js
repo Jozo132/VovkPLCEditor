@@ -38,6 +38,19 @@ export default class SetupUI {
 
         // Listen for device updates (connection status, info loaded, etc)
         this.master.workspace.addEventListener('plc-device-update', this._handleDeviceUpdate)
+
+        // Context Menu
+        if (this.master.context_manager) {
+             this.master.context_manager.addListener({
+                 target: this.div,
+                 onOpen: () => [
+                     { type: 'item', label: 'Refresh Configuration', name: 'refresh' }
+                 ],
+                 onClose: (key) => {
+                     if (key === 'refresh') this.render()
+                 }
+             })
+        }
     }
 
     close() {
@@ -124,7 +137,7 @@ export default class SetupUI {
                             </tr>
                         </thead>
                         <tbody>
-                            ${this.renderCompareRow('Device Type', info.type || '-', dInfo.device, connected)}
+                            ${this.renderCompareRow('Device Name', info.type || '-', dInfo.device, connected)}
                             ${this.renderCompareRow('Architecture', info.arch || '-', dInfo.arch, connected)}
                             ${this.renderCompareRow('Firmware Ver', info.version || '-', dInfo.version, connected)}
                             ${this.renderCompareRow('Built Date', info.date || '-', dInfo.date, connected)}

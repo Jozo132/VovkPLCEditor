@@ -131,6 +131,83 @@ export default class SymbolsUI {
             }
         })
 
+        // Context Menu
+        if(this.master.context_manager) {
+            this.master.context_manager.addListener({
+                target: this.tbody,
+                onOpen: (e, el) => {
+                    const tr = e.target.closest('tr')
+                    let symbol = null
+                    let index = -1
+                    
+                    if (tr) {
+                        index = parseInt(tr.dataset.index)
+                        if (!isNaN(index)) {
+                            symbol = this.master.project.symbols[index]
+                            
+                            // Select if not already selected
+                            if (symbol && !this.selectedSymbols.has(symbol)) {
+                                 this.selectedSymbols.clear()
+                                 this.selectedSymbols.add(symbol)
+                                 this.renderTable()
+                            }
+                        }
+                    }
+
+                    const selectedCount = this.selectedSymbols.size
+                    const hasSelection = selectedCount > 0
+                    
+                    const items = []
+                    
+                    if (symbol) {
+                        items.push({ type: 'item', name: 'add-above', label: 'Add Symbol Above', className: `plc-icon ${getIconType('add')}` })
+                        items.push({ type: 'item', name: 'add-below', label: 'Add Symbol Below', className: `plc-icon ${getIconType('add')}` })
+                        items.push({ type: 'separator' })
+                    } else {
+                        items.push({ type: 'item', label: 'Add Symbol', name: 'add' })
+                    }
+                    
+                    if (hasSelection) {
+                         items.push({ type: 'item', name: 'copy', label: `Copy (${selectedCount})` })
+                         items.push({ type: 'item', name: 'delete', label: 'Delete', className: `plc-icon ${getIconType('delete')}` })
+                    }
+                    
+                    items.push({ type: 'separator' })
+                    items.push({ type: 'item', name: 'paste', label: 'Paste' })
+                    items.push({ type: 'separator' })
+                    items.push({ type: 'item', label: 'Toggle Monitor', name: 'monitor_toggle' })
+                    
+                    this._ctx_menu_idx = index
+                    this._ctx_menu_symbol = symbol
+
+                    return items
+                },
+                onClose: (key) => {
+                    const index = this._ctx_menu_idx
+                    const symbol = this._ctx_menu_symbol
+                    
+                    if (key === 'add') this.addSymbol()
+                    if (key === 'add-above') this.addSymbol(index)
+                    if (key === 'add-below') this.addSymbol(index + 1)
+                    
+                    if (key === 'copy') {
+                        if (symbol && this.selectedSymbols.size <= 1) {
+                            this.selectedSymbols.clear()
+                            this.selectedSymbols.add(symbol)
+                        }
+                        this.copySelected()
+                    }
+                    if (key === 'paste') this.pasteSymbols(index >= 0 ? index + 1 : undefined)
+                    
+                    if (key === 'delete') {
+                         if (this.selectedSymbols.size > 0) this.deleteSelected()
+                    }
+                    
+                    if (key === 'monitor_toggle') this.master.window_manager.toggleMonitoringActive()
+                }
+            })
+        }
+
         this.reload()
     }
 
@@ -342,6 +419,7 @@ export default class SymbolsUI {
             if (symbol?.location === 'memory') symbol.location = 'marker'
             const tr = document.createElement('tr')
             tr.dataset.symbolName = symbol.name || ''
+            tr.dataset.index = index
             if (this.selectedSymbols.has(symbol)) {
                 tr.classList.add('selected')
             }
@@ -351,40 +429,7 @@ export default class SymbolsUI {
             tdIcon.classList.add('symbol-icon-cell')
             tdIcon.addEventListener('click', (e) => this.toggleSelection(symbol, e, tr))
             
-            // Context Menu
-            this.master.context_manager.addListener({
-                target: tdIcon,
-                onOpen: () => [
-                    { type: 'item', name: 'add-above', label: 'Add Symbol Above', className: `plc-icon ${getIconType('add')}` },
-                    { type: 'item', name: 'add-below', label: 'Add Symbol Below', className: `plc-icon ${getIconType('add')}` },
-                    { type: 'separator' },
-                    { type: 'item', name: 'copy', label: 'Copy' }, // No icon for copy yet
-                    { type: 'item', name: 'paste', label: 'Paste' }, // No icon for paste yet
-                    { type: 'separator' },
-                    { type: 'item', name: 'delete', label: 'Delete', className: `plc-icon ${getIconType('delete')}` }
-                ],
-                onClose: (key) => {
-                    if (this.locked && key !== 'copy') return
-                    if (key === 'add-above') this.addSymbol(index)
-                    if (key === 'add-below') this.addSymbol(index + 1)
-                    if (key === 'copy') {
-                        this.selectedSymbols.clear()
-                        this.selectedSymbols.add(symbol)
-                        this.copySelected()
-                    }
-                    if (key === 'paste') {
-                        this.pasteSymbols(index + 1)
-                    }
-                    if (key === 'delete') {
-                        if (this.selectedSymbols.has(symbol)) {
-                            this.deleteSelected()
-                        } else if (!symbol.readonly && !this.locked) {
-                            this.master.project.symbols.splice(index, 1)
-                            this.renderTable()
-                        }
-                    }
-                }
-            })
+            // Context Menu - Handled globally via tbody
             
             const icon = document.createElement('div')
             icon.classList.add('symbol-icon')

@@ -424,16 +424,16 @@ export class VovkPLCEditor {
             this.runtime_ready = true
         })
 
+        this.context_manager = new ContextManager(this)
         this.window_manager = new WindowManager(this)
         this.device_manager = new DeviceManager(this)
         this.project_manager = new ProjectManager(this)
         this.language_manager = new LanguageManager(this)
-        this.context_manager = new ContextManager(this)
 
+        this.context_manager.initialize()
         this.window_manager.initialize()
         this.device_manager.initialize()
         this.project_manager.initialize()
-        this.context_manager.initialize()
         this.language_manager.initialize()
 
         if (this.initial_program) {
@@ -443,6 +443,9 @@ export class VovkPLCEditor {
 
     /** @param {PLC_Project} project */
     openProject(project) {
+        if (this.project_manager && typeof this.project_manager.ensureSystemSymbols === 'function') {
+            this.project_manager.ensureSystemSymbols(project)
+        }
         this.project = project
         this._prepareProject(project)
         this.window_manager.openProject(project)
@@ -680,6 +683,49 @@ export class VovkPLCEditor {
         const normalizedOffsets = offsets || normalizeOffsets(this.project?.offsets || {})
         const refs = []
         if (!code) return refs
+
+        // Create a masked version of code where comments and strings are replaced with spaces
+        // This ensures the regex doesn't match inside them, but indices remain correct
+        let masked = ''
+        let state = 'out' // out, string, char, comment
+        const limit = code.length
+        
+        for (let i = 0; i < limit; i++) {
+            const char = code[i]
+            
+            if (state === 'out') {
+                if (char === '/' && code[i+1] === '/') {
+                    state = 'comment'
+                    masked += ' '
+                } else if (char === '"') {
+                    state = 'string'
+                    masked += ' '
+                } else if (char === "'") {
+                    state = 'char'
+                    masked += ' '
+                } else {
+                    masked += char
+                }
+            } else if (state === 'comment') {
+                if (char === '\n') {
+                    state = 'out'
+                    masked += '\n'
+                } else {
+                    masked += ' '
+                }
+            } else if (state === 'string') {
+                masked += ' '
+                if (char === '"' && code[i-1] !== '\\') {
+                    state = 'out'
+                }
+            } else if (state === 'char') {
+                 masked += ' '
+                 if (char === "'" && code[i-1] !== '\\') {
+                     state = 'out'
+                 }
+            }
+        }
+
         const locationMap = {
             C: 'control',
             X: 'input',
@@ -687,21 +733,44 @@ export class VovkPLCEditor {
             M: 'marker',
             S: 'system'
         }
-        const regex = /\b([CXYMS])(\d+)(?:\.(\d+))?\b/gi
+        // Match: 1=Prefix, 2=Byte, 3=Bit (Optional) OR 4=Byte, 5=Bit
+        const regex = /\b(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))\b/gi
         let match = null
-        while ((match = regex.exec(code))) {
-            const prefix = (match[1] || '').toUpperCase()
-            const byteValue = Number.parseInt(match[2], 10)
+        while ((match = regex.exec(masked))) {
+            let prefix = '', byteValStr = '', bitRawStr
+            
+            if (match[1]) {
+                 prefix = match[1].toUpperCase()
+                 byteValStr = match[2]
+                 bitRawStr = match[3]
+            } else {
+                 // Numeric bit address
+                 byteValStr = match[4]
+                 bitRawStr = match[5]
+            }
+
+            const byteValue = Number.parseInt(byteValStr, 10)
             if (!Number.isFinite(byteValue)) continue
             const byte = Math.max(0, byteValue)
-            const bitRaw = match[3]
-            const bitValue = typeof bitRaw === 'undefined' ? null : Number.parseInt(bitRaw, 10)
+            
+            const bitValue = typeof bitRawStr === 'undefined' ? null : Number.parseInt(bitRawStr, 10)
             const bit = Number.isFinite(bitValue) ? Math.max(0, Math.min(bitValue, 7)) : null
-            const location = locationMap[prefix] || 'marker'
+            
+            let location = 'marker'
+            let baseOffset = 0
+            
+            if (prefix) {
+                location = locationMap[prefix] || 'marker'
+                baseOffset = normalizedOffsets[location]?.offset || 0
+            } else {
+                location = 'memory' // Treated as absolute
+                baseOffset = 0
+            }
+
             const addressLabel = bit !== null ? `${byte}.${bit}` : `${byte}`
             const canonicalName = `${prefix}${byte}${bit !== null ? '.' + bit : ''}`
-            const baseOffset = normalizedOffsets[location]?.offset || 0
             const absoluteAddress = baseOffset + byte
+            
             refs.push({
                 name: canonicalName,
                 token: match[0],

@@ -2,7 +2,7 @@ import { MiniCodeEditor } from "../MiniCodeEditor.js"
 import { RendererModule } from "../types.js"
 // import { resolveBlockState } from "./evaluator.js"
 
-const ADDRESS_REGEX = /^([CXYMS])(\d+)(?:\.(\d+))?$/i
+const ADDRESS_REGEX = /^(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i
 const ADDRESS_LOCATION_MAP = {
     C: 'control',
     X: 'input',
@@ -109,14 +109,23 @@ export const ladderRenderer = {
             if (word) {
                 const addrMatch = ADDRESS_REGEX.exec(word)
                 if (addrMatch) {
-                    const prefix = (addrMatch[1] || '').toUpperCase()
-                    const byteValue = Number.parseInt(addrMatch[2], 10)
+                    let prefix = '', byteStr = '', bitStr = ''
+                    if (addrMatch[1]) {
+                        prefix = addrMatch[1].toUpperCase()
+                        byteStr = addrMatch[2]
+                        bitStr = addrMatch[3]
+                    } else {
+                        byteStr = addrMatch[4]
+                        bitStr = addrMatch[5]
+                    }
+
+                    const byteValue = Number.parseInt(byteStr, 10)
                     if (Number.isFinite(byteValue)) {
                         const byte = Math.max(0, byteValue)
-                        const bitRaw = addrMatch[3]
+                        const bitRaw = bitStr
                         const bitValue = typeof bitRaw === 'undefined' ? null : Number.parseInt(bitRaw, 10)
                         const bit = Number.isFinite(bitValue) ? Math.max(0, Math.min(bitValue, 7)) : null
-                        const location = ADDRESS_LOCATION_MAP[prefix] || 'marker'
+                        const location = prefix ? (ADDRESS_LOCATION_MAP[prefix] || 'marker') : 'memory'
                         const addressLabel = bit !== null ? `${byte}.${bit}` : `${byte}`
                         const canonicalName = `${prefix}${byte}${bit !== null ? '.' + bit : ''}`
                         const type = bit !== null ? 'bit' : 'byte'
@@ -130,6 +139,12 @@ export const ladderRenderer = {
                             : '-'
                         const locColor = LOCATION_COLORS[location] || '#cccccc'
                         const typeColor = TYPE_COLORS[type] || '#808080'
+                        
+                        let valueColor = '#b5cea8'
+                        if (type === 'bit' && (valueText === 'ON' || valueText === 'OFF')) {
+                            valueColor = valueText === 'ON' ? '#1fba5f' : 'rgba(200, 200, 200, 0.5)'
+                        }
+
                         return `
                             <div class="mce-hover-def" style="display: flex; align-items: center; gap: 6px;">
                                 <span class="icon" style="width: 14px; height: 14px; background-size: contain; background-repeat: no-repeat; background-image: url('data:image/svg+xml,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 16 16&quot;><path fill=&quot;%23cccccc&quot; d=&quot;M14 4h-2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2h2v-2h-2V6h2V4zM4 12V4h6v8H4z&quot;/></svg>')"></span>
@@ -139,7 +154,7 @@ export const ladderRenderer = {
                             <div class="mce-hover-desc">
                                 <div><span style="color:#bbb">Location:</span> <span style="color:${locColor}">${location}</span></div>
                                 <div><span style="color:#bbb">Address:</span> <span style="color:#b5cea8">${prefix}${addressLabel}</span></div>
-                                <div><span style="color:#bbb">Value:</span> <span style="color:#b5cea8">${valueText}</span></div>
+                                <div><span style="color:#bbb">Value:</span> <span style="color:${valueColor}">${valueText}</span></div>
                             </div>
                         `
                     }
