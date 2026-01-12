@@ -214,14 +214,22 @@ export default class MemoryUI {
 
     setMonitoringState(isMonitoring) {
         // Called by WindowManager
+        const wasActive = this.monitoringActive
         this.monitoringActive = !!isMonitoring
+        
+        // Remove canvas opacity if it was set previously, we handle it in render now
         if (this.canvas) {
-             this.canvas.style.opacity = this.monitoringActive ? '1' : '0.5'
+             this.canvas.style.opacity = ''
         }
+
         this.monitor_buttons.forEach(btn => {
             btn.classList.toggle('active', this.monitoringActive)
             btn.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
         })
+        
+        if (wasActive !== this.monitoringActive) {
+            this._scheduleDraw()
+        }
     }
 
     updateSidebar() {
@@ -539,14 +547,24 @@ export default class MemoryUI {
         const snapshotStart = snapshot?.start ?? range.start
         const snapshotBytes = snapshot?.bytes || null
         const placeholder = snapshot?.placeholder ?? true
+        
+        // Monitoring Paused state: Dim the values
+        const isPaused = !this.monitoringActive
+        const valueAlpha = isPaused ? 0.5 : 1.0
 
         for (let row = startRow; row < endRow; row++) {
             const rowAddr = base.start + row * bytesPerRow
             if (rowAddr >= base.start + base.size) break
             const y = layout.lineHeight + (row - startRow) * layout.lineHeight
             const addrLabel = String(rowAddr).padStart(layout.addrWidth, '0')
+            
+             // Address is always opaque
+            this.ctx.globalAlpha = 1.0
             this.ctx.fillStyle = '#888'
             this.ctx.fillText(addrLabel, offsetX, y)
+
+            // Apply transparency to values if paused
+            this.ctx.globalAlpha = valueAlpha
 
             if (this.displayMode === 'bin') {
                 const byteIndex = rowAddr - snapshotStart
@@ -585,6 +603,7 @@ export default class MemoryUI {
                 this.ctx.fillStyle = color
                 this.ctx.fillText(text, x, y)
             }
+            this.ctx.globalAlpha = 1.0 // Reset alpha for next iteration
         }
     }
 

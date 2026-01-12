@@ -526,6 +526,10 @@ export default class SymbolsUI {
 
     applyLiveCellState(cell, live) {
         if (!cell) return
+        
+        // Transparency when monitoring is off
+        cell.style.opacity = this.monitoringActive ? '' : '0.5'
+        
         if (!live || typeof live.text !== 'string') {
             cell.textContent = '-'
             cell.style.color = ''
@@ -554,6 +558,13 @@ export default class SymbolsUI {
             btn.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
             btn.classList.toggle('active', this.monitoringActive)
         })
+        // Refresh cells to update opacity
+        if (this._live_cells) {
+            for (const [name, cell] of this._live_cells.entries()) {
+                const live = this.live_values.get(name)
+                this.applyLiveCellState(cell, live)
+            }
+        }
     }
 
     updateMonitoringAvailability(available = false) {
