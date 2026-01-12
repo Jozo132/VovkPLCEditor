@@ -1710,6 +1710,13 @@ MiniCodeEditor.registerLanguage('js', {
 })
 
 /* Assembly */
+const doc = (args, desc, ex) => {
+    const a = args || []
+    a.description = desc
+    a.example = ex
+    return a
+}
+
 const asmTypes = ['u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'u64', 'i64', 'f32', 'f64']
 
 const commonMath = {
@@ -1725,12 +1732,19 @@ const commonLogic = {
     rshift: [{name:'bits', type:'number'}]
 }
 const commonStack = {
-    const: [{name:'value', type:'number'}],
-    move: [], load: [], copy: [], swap: [], drop: [], clear: [],
+    const: doc([{name:'value', type:'number'}], 'Push constant value to stack.', 'u8.const 10'),
+    move: doc([], 'Move value from stack to memory using pointer from the stack. Pops value and pointer.', 'u8.move'), 
+    load: doc([], 'Load value from memory to stack using pointer from the stack. Pops pointer, pushes value.', 'u8.load'),
+    move_copy: doc([], 'Move value from stack to memory using pointer from the stack. Keeps value on stack, pops pointer.', 'u8.move_copy'),
+    load_from: doc([{name: 'addr', type: 'symbol'}], 'Load value from memory to stack using immediate address.', 'u8.load_from var1'),
+    move_to: doc([{name: 'addr', type: 'symbol'}], 'Move value from stack to memory using immediate address.', 'u8.move_to var1'),
+    copy: doc([], 'Duplicate the top value on the stack.', 'u8.copy'), 
+    swap: doc([], 'Swap the top two values on the stack.', 'u8.swap'), 
+    drop: doc([], 'Discard the top value on the stack.', 'u8.drop'), 
     // Bit Ops available on integer types usually, but definitely on u8
-    set: [{name:'bit', type:'number'}],
-    get: [{name:'bit', type:'number'}],
-    rset: [{name:'bit', type:'number'}],
+    set: doc([{name:'bit', type:'number'}], 'Set a specific bit of the value on stack to 1.', 'u8.set 0'),
+    get: doc([{name:'bit', type:'number'}], 'Get a specific bit of the value on stack (0 or 1).', 'u8.get 0'),
+    rset: doc([{name:'bit', type:'number'}], 'Reset a specific bit of the value on stack to 0.', 'u8.rset 0'),
 }
 
 // Generate type specific instructions
@@ -1746,13 +1760,6 @@ asmTypes.forEach(t => {
         Object.assign(typeOps[t], commonLogic)
     }
 })
-
-const doc = (args, desc, ex) => {
-    const a = args || []
-    a.description = desc
-    a.example = ex
-    return a
-}
 
 const asmInstructions = {
     // Pointer operations
@@ -1803,6 +1810,7 @@ const asmInstructions = {
     ret: doc([], 'Return from subroutine', 'ret'),
     exit: doc([], 'End program execution', 'exit'),
     nop: doc([], 'No Operation', 'nop'),
+    clear: doc([], 'Clear the stack. Removes all values from the stack.', 'clear'),
     
     // Conversion
     cvt: doc([
@@ -1832,7 +1840,7 @@ MiniCodeEditor.registerLanguage('asm', {
         {regex: /\b[CXYMS]\d+(?:\.\d+)?\b/gi, className: 'addr'},
         {regex: /\b(ptr|u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\b/g, className: 'dt'},
         // Top level Keywords and method calls
-        {regex: /\b(add|sub|mul|div|mod|pow|sqrt|neg|abs|sin|cos|cmp_eq|cmp_neq|cmp_gt|cmp_lt|cmp_gte|cmp_lte|and|or|xor|not|lshift|rshift|move|load|copy|swap|drop|clear|set|get|rset|readBit|writeBit|writeBitInv|readBitDU|readBitDD|readBitInvDU|readBitInvDD|writeBitDU|writeBitDD|writeBitInvDU|writeBitInvDD|writeBitOnDU|writeBitOnDD|writeBitOffDU|writeBitOffDD|du|jmp(?:_if(?:_not)?)?|jump(?:_if(?:_not)?)?|call(?:_if(?:_not)?)?|ret(?:_if(?:_not)?)?|exit|loop|cvt|nop)\b/gim, className: 'kw'},
+        {regex: /\b(add|sub|mul|div|mod|pow|sqrt|neg|abs|sin|cos|cmp_eq|cmp_neq|cmp_gt|cmp_lt|cmp_gte|cmp_lte|and|or|xor|not|lshift|rshift|move|move_to|move_copy|load|load_from|copy|swap|drop|clear|set|get|rset|readBit|writeBit|writeBitInv|readBitDU|readBitDD|readBitInvDU|readBitInvDD|writeBitDU|writeBitDD|writeBitInvDU|writeBitInvDD|writeBitOnDU|writeBitOnDD|writeBitOffDU|writeBitOffDD|du|jmp(?:_if(?:_not)?)?|jump(?:_if(?:_not)?)?|call(?:_if(?:_not)?)?|ret(?:_if(?:_not)?)?|exit|loop|cvt|nop)\b/gim, className: 'kw'},
         {regex: /\./g, className: 'dot'},
         
         {regex: /\b(u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\b/g, className: 'type-keyword'},
