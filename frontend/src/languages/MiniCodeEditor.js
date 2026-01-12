@@ -1769,8 +1769,26 @@ const asmInstructions = {
     u8: {
         ...typeOps.u8,
         readBit: doc([{name: 'addr.bit', type: 'bit_symbol'}], 'Read a single bit from a byte variable or input/output.', 'u8.readBit input1'),
+        readBitDU: doc([{name: 'input', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Rising Edge Contact (R_TRIG).\nPushes 1 if input transitions from 0 to 1, otherwise 0.\nUpdates the state bit.', 'u8.readBitDU input1 state_var'),
+        readBitDD: doc([{name: 'input', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Falling Edge Contact (F_TRIG).\nPushes 1 if input transitions from 1 to 0, otherwise 0.\nUpdates the state bit.', 'u8.readBitDD input1 state_var'),
+        readBitInvDU: doc([{name: 'input', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Rising Edge Contact on Inverted Input.\nPushes 1 if inverted input transitions from 0 to 1 (Input 1->0).', 'u8.readBitInvDU input1 state_var'),
+        readBitInvDD: doc([{name: 'input', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Falling Edge Contact on Inverted Input.\nPushes 1 if inverted input transitions from 1 to 0 (Input 0->1).', 'u8.readBitInvDD input1 state_var'),
+        
         writeBit: doc([{name: 'addr.bit', type: 'bit_symbol'}], 'Write the accumulator LSB to a target bit.', 'u8.writeBit output1'),
+        writeBitDU: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Pulse Coil (Rising).\nWrites 1 to target only on the rising edge of the accumulator value.', 'u8.writeBitDU output1 state_var'),
+        writeBitDD: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Pulse Coil (Falling).\nWrites 1 to target only on the falling edge of the accumulator value.', 'u8.writeBitDD output1 state_var'),
+        
+        writeBitOnDU: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Set Coil on Rising Edge.\nSets target to 1 on rising edge of accumulator.', 'u8.writeBitOnDU output1 state_var'),
+        writeBitOnDD: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Set Coil on Falling Edge.\nSets target to 1 on falling edge of accumulator.', 'u8.writeBitOnDD output1 state_var'),
+        
+        writeBitOffDU: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Reset Coil on Rising Edge.\nSets target to 0 on rising edge of accumulator.', 'u8.writeBitOffDU output1 state_var'),
+        writeBitOffDD: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Reset Coil on Falling Edge.\nSets target to 0 on falling edge of accumulator.', 'u8.writeBitOffDD output1 state_var'),
+
         writeBitInv: doc([{name: 'addr.bit', type: 'bit_symbol'}], 'Write the inverted accumulator LSB to a target bit.', 'u8.writeBitInv output1'),
+        writeBitInvDU: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Pulse Coil (Inverted Rising).\nWrites 1 to target on rising edge of !ACC (Falling edge of ACC).', 'u8.writeBitInvDU output1 state_var'),
+        writeBitInvDD: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Pulse Coil (Inverted Falling).\nWrites 1 to target on falling edge of !ACC (Rising edge of ACC).', 'u8.writeBitInvDD output1 state_var'),
+
+        du: doc([{name: 'state', type: 'bit_symbol'}], 'Detect Rising Edge of Stack.\nChecks if value on stack has risen (0->1) based on state bit.', 'u8.du state_var'),
         add: doc([], 'Add value to accumulator.', 'u8.add'),
     },
 
@@ -1814,7 +1832,7 @@ MiniCodeEditor.registerLanguage('asm', {
         {regex: /\b[CXYMS]\d+(?:\.\d+)?\b/gi, className: 'addr'},
         {regex: /\b(ptr|u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\b/g, className: 'dt'},
         // Top level Keywords and method calls
-        {regex: /\b(add|sub|mul|div|mod|pow|sqrt|neg|abs|sin|cos|cmp_eq|cmp_neq|cmp_gt|cmp_lt|cmp_gte|cmp_lte|and|or|xor|not|lshift|rshift|move|load|copy|swap|drop|clear|set|get|rset|readBit|writeBit|writeBitInv|jmp(?:_if(?:_not)?)?|jump(?:_if(?:_not)?)?|call(?:_if(?:_not)?)?|ret(?:_if(?:_not)?)?|exit|loop|cvt|nop)\b/gim, className: 'kw'},
+        {regex: /\b(add|sub|mul|div|mod|pow|sqrt|neg|abs|sin|cos|cmp_eq|cmp_neq|cmp_gt|cmp_lt|cmp_gte|cmp_lte|and|or|xor|not|lshift|rshift|move|load|copy|swap|drop|clear|set|get|rset|readBit|writeBit|writeBitInv|readBitDU|readBitDD|readBitInvDU|readBitInvDD|writeBitDU|writeBitDD|writeBitInvDU|writeBitInvDD|writeBitOnDU|writeBitOnDD|writeBitOffDU|writeBitOffDD|du|jmp(?:_if(?:_not)?)?|jump(?:_if(?:_not)?)?|call(?:_if(?:_not)?)?|ret(?:_if(?:_not)?)?|exit|loop|cvt|nop)\b/gim, className: 'kw'},
         {regex: /\./g, className: 'dot'},
         
         {regex: /\b(u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\b/g, className: 'type-keyword'},
