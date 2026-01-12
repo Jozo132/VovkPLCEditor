@@ -4,7 +4,7 @@ import { PLCEditor } from "../../utils/types.js";
 export default class SimulationConnection extends ConnectionBase {
     deviceInfo = null
     _runTimer = null
-    _runIntervalMs = 50
+    _runIntervalMs = 200
     editor
 
     /**

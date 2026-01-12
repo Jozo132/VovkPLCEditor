@@ -61,7 +61,7 @@ export class MiniCodeEditor {
 .ac li span.match{font-weight:bold;color:#4daafc}
 .start-hint { position:absolute; color: #888; font-size: 0.9em; pointer-events:none; z-index:99999; background:#1e1e1e; padding:4px 8px; border:1px solid #333; display:none; border-radius: 3px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
 .kw{color:#c586c0}.num{color:#b5cea8}.str{color:#ce9178}.cmt{color:#6a9955}.live{color:#0f0;opacity:.8}
-.type-keyword{color:#569cd6}.variable{color:#9cdcfe}.function{color:#dcdcaa}.dt{color:#4ec9b0}
+.type-keyword{color:#569cd6}.variable{color:#9cdcfe}.function{color:#dcdcaa}.dt{color:#4ec9b0}.addr{color:#d7ba7d}
 .dot{color:#fff}
 .mce>div.overlay{position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;pointer-events:none;z-index:4}
 .mce-marker { position: absolute; pointer-events: none; z-index: 5; color: transparent !important; }
@@ -1811,7 +1811,8 @@ MiniCodeEditor.registerLanguage('asm', {
         }, // Label references in jumps/calls
         {regex: /^\b(const)\b/gm, className: 'kw'}, // Const declaration
         // Specific types (Datatypes)
-         {regex: /\b(ptr|u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\b/g, className: 'dt'},
+        {regex: /\b[CXYMS]\d+(?:\.\d+)?\b/gi, className: 'addr'},
+        {regex: /\b(ptr|u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\b/g, className: 'dt'},
         // Top level Keywords and method calls
         {regex: /\b(add|sub|mul|div|mod|pow|sqrt|neg|abs|sin|cos|cmp_eq|cmp_neq|cmp_gt|cmp_lt|cmp_gte|cmp_lte|and|or|xor|not|lshift|rshift|move|load|copy|swap|drop|clear|set|get|rset|readBit|writeBit|writeBitInv|jmp(?:_if(?:_not)?)?|jump(?:_if(?:_not)?)?|call(?:_if(?:_not)?)?|ret(?:_if(?:_not)?)?|exit|loop|cvt|nop)\b/gim, className: 'kw'},
         {regex: /\./g, className: 'dot'},

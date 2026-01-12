@@ -289,14 +289,22 @@ ul {
 }
 
 .plc-device-health-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(40px, 1fr) minmax(70px, 1fr) minmax(70px, 1fr);
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    column-gap: 8px;
 }
 
 .plc-device-health-label {
     color: #bbb;
+    justify-self: start;
+}
+
+.plc-device-health-col {
+    color: #cfcfcf;
+    justify-self: end;
+    text-align: right;
+    font-size: 10px;
 }
 
 .plc-device-health-value {
@@ -304,6 +312,7 @@ ul {
     font-weight: 600;
     font-family: Consolas, "Courier New", monospace;
     text-align: right;
+    justify-self: end;
 }
 
 

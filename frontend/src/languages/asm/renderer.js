@@ -2,6 +2,30 @@ import { MiniCodeEditor } from "../MiniCodeEditor.js"
 import { RendererModule } from "../types.js"
 // import { resolveBlockState } from "./evaluator.js"
 
+const ADDRESS_REGEX = /^([CXYMS])(\d+)(?:\.(\d+))?$/i
+const ADDRESS_LOCATION_MAP = {
+    C: 'control',
+    X: 'input',
+    Y: 'output',
+    M: 'marker',
+    S: 'system',
+}
+const LOCATION_COLORS = {
+    input: '#89d185',
+    output: '#d68d5e',
+    marker: '#c586c0',
+    memory: '#c586c0',
+    control: '#4fc1ff',
+    system: '#a0a0a0',
+}
+const TYPE_COLORS = {
+    bit: '#569cd6',
+    byte: '#4ec9b0',
+    int: '#b5cea8',
+    dint: '#dcdcaa',
+    real: '#ce9178',
+}
+
 
 /** @type { RendererModule } */
 export const ladderRenderer = {
@@ -39,7 +63,12 @@ export const ladderRenderer = {
                 const cache = editor._buildSymbolCache()
                 editor._ensureAsmCache(block, cache.signature, cache.map, cache.details)
             }
-            return block.cached_symbol_refs || []
+            if (typeof editor._ensureBlockAddressRefs === 'function') {
+                editor._ensureBlockAddressRefs(block)
+            }
+            const symbolRefs = block.cached_symbol_refs || []
+            const addressRefs = block.cached_address_refs || []
+            return [...symbolRefs, ...addressRefs]
         },
         previewValueProvider: entry => {
             if (!editor.window_manager?.isMonitoringActive?.()) return null
@@ -77,6 +106,45 @@ export const ladderRenderer = {
             return symbols.map(s => ({name: s.name, type: s.type}))
         },
         hoverProvider: (word) => {
+            if (word) {
+                const addrMatch = ADDRESS_REGEX.exec(word)
+                if (addrMatch) {
+                    const prefix = (addrMatch[1] || '').toUpperCase()
+                    const byteValue = Number.parseInt(addrMatch[2], 10)
+                    if (Number.isFinite(byteValue)) {
+                        const byte = Math.max(0, byteValue)
+                        const bitRaw = addrMatch[3]
+                        const bitValue = typeof bitRaw === 'undefined' ? null : Number.parseInt(bitRaw, 10)
+                        const bit = Number.isFinite(bitValue) ? Math.max(0, Math.min(bitValue, 7)) : null
+                        const location = ADDRESS_LOCATION_MAP[prefix] || 'marker'
+                        const addressLabel = bit !== null ? `${byte}.${bit}` : `${byte}`
+                        const canonicalName = `${prefix}${byte}${bit !== null ? '.' + bit : ''}`
+                        const type = bit !== null ? 'bit' : 'byte'
+                        const liveEntry = editor.live_symbol_values?.get(canonicalName)
+                        const valueText = liveEntry
+                            ? (typeof liveEntry.text === 'string'
+                                ? liveEntry.text
+                                : typeof liveEntry.value !== 'undefined'
+                                    ? String(liveEntry.value)
+                                    : '-')
+                            : '-'
+                        const locColor = LOCATION_COLORS[location] || '#cccccc'
+                        const typeColor = TYPE_COLORS[type] || '#808080'
+                        return `
+                            <div class="mce-hover-def" style="display: flex; align-items: center; gap: 6px;">
+                                <span class="icon" style="width: 14px; height: 14px; background-size: contain; background-repeat: no-repeat; background-image: url('data:image/svg+xml,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 16 16&quot;><path fill=&quot;%23cccccc&quot; d=&quot;M14 4h-2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2h2v-2h-2V6h2V4zM4 12V4h6v8H4z&quot;/></svg>')"></span>
+                                <span style="color:#4daafc">${prefix}${addressLabel}</span>
+                                <span style="color:${typeColor}; margin-left: auto; font-weight: bold;">${type === 'bit' ? 'Bit' : 'Byte'}</span>
+                            </div>
+                            <div class="mce-hover-desc">
+                                <div><span style="color:#bbb">Location:</span> <span style="color:${locColor}">${location}</span></div>
+                                <div><span style="color:#bbb">Address:</span> <span style="color:#b5cea8">${prefix}${addressLabel}</span></div>
+                                <div><span style="color:#bbb">Value:</span> <span style="color:#b5cea8">${valueText}</span></div>
+                            </div>
+                        `
+                    }
+                }
+            }
             if (!editor.project || !editor.project.symbols) return null
             if (word) {
                 const labelMatches = block.code.matchAll(/^\s*([A-Za-z_]\w+):/gm)
@@ -102,29 +170,11 @@ export const ladderRenderer = {
             }
             const sym = editor.project.symbols.find(s => s.name === word)
             if (sym) {
-                // Return HTML string
                 let addr = sym.address
                 if (sym.type === 'bit') addr = (parseFloat(addr) || 0).toFixed(1)
                 
-                const locationColors = {
-                    input: '#89d185',
-                    output: '#d68d5e',
-                    marker: '#c586c0',
-                    memory: '#c586c0',
-                    control: '#4fc1ff',
-                    system: '#a0a0a0'
-                }
-
-                const typeColors = {
-                    bit: '#569cd6',
-                    byte: '#4ec9b0',
-                    int: '#b5cea8',
-                    dint: '#dcdcaa',
-                    real: '#ce9178'
-                }
-                
-                const locColor = locationColors[sym.location] || '#cccccc'
-                const typeColor = typeColors[sym.type] || '#808080'
+                const locColor = LOCATION_COLORS[sym.location] || '#cccccc'
+                const typeColor = TYPE_COLORS[sym.type] || '#808080'
 
                 return `
                     <div class="mce-hover-def" style="display: flex; align-items: center; gap: 6px;">

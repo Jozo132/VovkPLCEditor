@@ -77,13 +77,20 @@ export default class WindowManager {
                                 <button class="plc-device-health-reset" title="Reset max values">Reset</button>
                             </div>
                             <div class="plc-device-health-body">
+                        <div class="plc-device-health-row plc-device-health-row-head">
+                            <span class="plc-device-health-label"></span>
+                            <span class="plc-device-health-col">Cycle</span>
+                            <span class="plc-device-health-col">RAM Free</span>
+                        </div>
                                 <div class="plc-device-health-row">
-                                    <span class="plc-device-health-label">Cycle</span>
-                                    <span class="plc-device-health-value" data-field="cycle">-</span>
+                                    <span class="plc-device-health-label">Last</span>
+                                    <span class="plc-device-health-value" data-field="cycle-last">-</span>
+                                    <span class="plc-device-health-value" data-field="ram-free">-</span>
                                 </div>
                                 <div class="plc-device-health-row">
-                                    <span class="plc-device-health-label">RAM</span>
-                                    <span class="plc-device-health-value" data-field="ram">-</span>
+                                    <span class="plc-device-health-label">Max/Min</span>
+                                    <span class="plc-device-health-value" data-field="cycle-max">-</span>
+                                    <span class="plc-device-health-value" data-field="ram-min">-</span>
                                 </div>
                             </div>
                         </div>
@@ -822,10 +829,17 @@ export default class WindowManager {
         if (!device_health) throw new Error('Device health element not found')
         this.device_health = device_health
         this.device_health_values = {
-            cycle: device_health.querySelector('[data-field="cycle"]'),
-            ram: device_health.querySelector('[data-field="ram"]'),
+            cycleLast: device_health.querySelector('[data-field="cycle-last"]'),
+            cycleMax: device_health.querySelector('[data-field="cycle-max"]'),
+            ramFree: device_health.querySelector('[data-field="ram-free"]'),
+            ramMin: device_health.querySelector('[data-field="ram-min"]'),
         }
-        if (!this.device_health_values.cycle || !this.device_health_values.ram) {
+        if (
+            !this.device_health_values.cycleLast ||
+            !this.device_health_values.cycleMax ||
+            !this.device_health_values.ramFree ||
+            !this.device_health_values.ramMin
+        ) {
             throw new Error('Device health value elements not found')
         }
         const device_health_reset = device_health.querySelector('.plc-device-health-reset')
@@ -962,26 +976,36 @@ export default class WindowManager {
     }
 
     _formatHealthNumber(value) {
-        if (!Number.isFinite(value)) return '-'
-        return Number(value).toLocaleString('en-US')
+        if (!Number.isFinite(value)) return null
+        return String(Math.trunc(Number(value)))
     }
 
     _renderDeviceHealth(health) {
         if (!this.device_health_values) return
-        const cycle = this.device_health_values.cycle
-        const ram = this.device_health_values.ram
-        if (!cycle || !ram) return
+        const cycleLast = this.device_health_values.cycleLast
+        const cycleMax = this.device_health_values.cycleMax
+        const ramFree = this.device_health_values.ramFree
+        const ramMin = this.device_health_values.ramMin
+        if (!cycleLast || !cycleMax || !ramFree || !ramMin) return
+        const withUnit = (value, unit) => {
+            const text = this._formatHealthNumber(value)
+            return text === null ? '-' : `${text} ${unit}`
+        }
         if (!health) {
-            cycle.textContent = '-'
-            ram.textContent = '-'
+            cycleLast.textContent = '-'
+            cycleMax.textContent = '-'
+            ramFree.textContent = '-'
+            ramMin.textContent = '-'
             return
         }
-        const lastCycle = this._formatHealthNumber(health.last_cycle_time_us)
-        const maxCycle = this._formatHealthNumber(health.max_cycle_time_us)
-        const usedRam = this._formatHealthNumber(health.ram_used)
-        const maxRam = this._formatHealthNumber(health.max_ram_used)
-        cycle.textContent = `${lastCycle} us / ${maxCycle} us`
-        ram.textContent = `${usedRam} B / ${maxRam} B`
+        const format = value => {
+            const text = this._formatHealthNumber(value)
+            return text === null ? '-' : `${text} B`
+        }
+        cycleLast.textContent = withUnit(health.last_cycle_time_us, 'us')
+        cycleMax.textContent = withUnit(health.max_cycle_time_us, 'us')
+        ramFree.textContent = format(health.ram_free)
+        ramMin.textContent = format(health.min_ram_free)
     }
 
     _startHealthPolling() {
@@ -1746,14 +1770,37 @@ export default class WindowManager {
         if (!editor?.device_manager?.connected) return
         if (!this._monitoringActive) return
         if (this._liveMemoryInFlight) return
-        const symbols = editor.project?.symbols || []
-        if (!symbols.length) return
+        const projectSymbols = editor.project?.symbols || []
+        const offsets = normalizeOffsets(editor.project?.offsets || {})
+        const addressRefs = typeof editor._getAsmAddressRefsForLive === 'function'
+            ? editor._getAsmAddressRefsForLive(offsets)
+            : []
+        const symbolEntries = []
+        const seenNames = new Set()
+        projectSymbols.forEach(symbol => {
+            if (!symbol || !symbol.name) return
+            seenNames.add(symbol.name)
+            symbolEntries.push(symbol)
+        })
+        addressRefs.forEach(ref => {
+            if (!ref || !ref.name) return
+            if (seenNames.has(ref.name)) return
+            seenNames.add(ref.name)
+            symbolEntries.push({
+                name: ref.name,
+                location: ref.location,
+                type: ref.type || 'bit',
+                address: ref.address,
+                absoluteAddress: ref.absoluteAddress,
+                bit: typeof ref.bit === 'number' ? ref.bit : null,
+            })
+        })
+        if (!symbolEntries.length) return
         const memoryLimitValue = Number(editor.device_manager?.deviceInfo?.memory)
         const memoryLimit = Number.isFinite(memoryLimitValue) && memoryLimitValue > 0
             ? memoryLimitValue
             : null
 
-        const offsets = normalizeOffsets(editor.project?.offsets || {})
         const groups = new Map()
         const typeSizes = {
             bit: 1,
@@ -1777,7 +1824,7 @@ export default class WindowManager {
             return { absolute: baseOffset + Math.floor(addrVal), bit: null, size }
         }
 
-        symbols.forEach(symbol => {
+        symbolEntries.forEach(symbol => {
             if (!symbol || !symbol.name) return
             const layout = normalizeAddress(symbol)
             const end = layout.absolute + layout.size

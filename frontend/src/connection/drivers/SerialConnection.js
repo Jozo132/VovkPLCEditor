@@ -9,6 +9,10 @@ export default class SerialConnection extends ConnectionBase {
         this.baudrate = baudrate;
         this.serial = new Serial(4096, debug); // buffer size
         this.plc = new VovkPLC(); // only used for buildCommand and crc8
+        this._commandQueue = [];
+        this._commandRunning = false;
+        this._commandQueueLimit = 50;
+        this._commandTimeoutMs = 8000;
     }
 
     async connect() {
@@ -17,34 +21,45 @@ export default class SerialConnection extends ConnectionBase {
     }
 
     async disconnect() {
+        this._clearCommandQueue();
         await this.serial.end();
     }
 
     async reboot() {
-        const command = this.plc.buildCommand.plcReset();
-        this.serial.write(command + "\n");
+        return this._enqueueCommand(async () => {
+            const command = this.plc.buildCommand.plcReset();
+            await this.serial.write(command + "\n");
+        }, { label: 'reboot' });
     }
 
     async run() {
-        const command = this.plc.buildCommand.programRun();
-        this.serial.write(command + "\n");
+        return this._enqueueCommand(async () => {
+            const command = this.plc.buildCommand.programRun();
+            await this.serial.write(command + "\n");
+        }, { label: 'run' });
     }
 
     async stop() {
-        const command = this.plc.buildCommand.programStop();
-        this.serial.write(command + "\n");
+        return this._enqueueCommand(async () => {
+            const command = this.plc.buildCommand.programStop();
+            await this.serial.write(command + "\n");
+        }, { label: 'stop' });
     }
 
     async monitor() {
-        const command = "PM"; // TODO: implement checksum if required
-        const cmdHex = this.plc.stringToHex(command);
-        const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0');
-        this.serial.write(command + checksum.toUpperCase() + "\n");
+        return this._enqueueCommand(async () => {
+            const command = "PM"; // TODO: implement checksum if required
+            const cmdHex = this.plc.stringToHex(command);
+            const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0');
+            await this.serial.write(command + checksum.toUpperCase() + "\n");
+        }, { label: 'monitor' });
     }
 
     async downloadProgram(bytecode) {
-        const command = this.plc.buildCommand.programDownload(bytecode);
-        await this.writeChunked(command + "\n");
+        return this._enqueueCommand(async () => {
+            const command = this.plc.buildCommand.programDownload(bytecode);
+            await this.writeChunked(command + "\n");
+        }, { label: 'downloadProgram', timeoutMs: 12000 });
     }
 
     async writeChunked(data, chunkSize = 64, delay = 5) {
@@ -56,160 +71,174 @@ export default class SerialConnection extends ConnectionBase {
     }
 
     async uploadProgram() {
-        const command = this.plc.buildCommand.programUpload();
-        this.serial.write(command + "\n");
-        const available = await this._waitForReply();
-        if (!available) throw new Error("No response from device");
-        const line = this.serial.readLine() || "";
-        const hex = this.plc.parseHex(line);
-        const buffer = new Uint8Array(hex);
-        return buffer;
+        return this._enqueueCommand(async () => {
+            const command = this.plc.buildCommand.programUpload();
+            await this.serial.write(command + "\n");
+            const available = await this._waitForReply();
+            if (!available) throw new Error("No response from device");
+            const line = this.serial.readLine() || "";
+            const hex = this.plc.parseHex(line);
+            const buffer = new Uint8Array(hex);
+            return buffer;
+        }, { label: 'uploadProgram', timeoutMs: 12000 });
     }
 
     async readMemory(address, size) {
-        const command = this.plc.buildCommand.memoryRead(address, size);
-        this.serial.write(command + "\n");
-        const available = await this._waitForReply();
-        if (!available) throw new Error("No response from device");
-        const line = this.serial.readLine() || "";
-        let raw = line.trim();
-        if (raw.startsWith('OK')) {
-            raw = raw.substring(2).trim();
-        }
-        const hex = this.plc.parseHex(raw);
-        const buffer = new Uint8Array(hex);
-        return buffer;
+        return this._enqueueCommand(async () => {
+            const command = this.plc.buildCommand.memoryRead(address, size);
+            await this.serial.write(command + "\n");
+            const available = await this._waitForReply();
+            if (!available) throw new Error("No response from device");
+            const line = this.serial.readLine() || "";
+            let raw = line.trim();
+            if (raw.startsWith('OK')) {
+                raw = raw.substring(2).trim();
+            }
+            const hex = this.plc.parseHex(raw);
+            const buffer = new Uint8Array(hex);
+            return buffer;
+        }, { label: 'readMemory' });
     }
 
     async writeMemory(address, data) {
-        const command = this.plc.buildCommand.memoryWrite(address, data);
-        this.serial.write(command + "\n");
-        const available = await this._waitForReply();
-        if (!available) throw new Error("No response from device");
+        return this._enqueueCommand(async () => {
+            const command = this.plc.buildCommand.memoryWrite(address, data);
+            await this.serial.write(command + "\n");
+            const available = await this._waitForReply();
+            if (!available) throw new Error("No response from device");
+        }, { label: 'writeMemory' });
     }
 
     async formatMemory(address, size, value) {
-        const command = this.plc.buildCommand.memoryFormat(address, size, value);
-        this.serial.write(command + "\n");
-        const available = await this._waitForReply();
-        if (!available) throw new Error("No response from device");
+        return this._enqueueCommand(async () => {
+            const command = this.plc.buildCommand.memoryFormat(address, size, value);
+            await this.serial.write(command + "\n");
+            const available = await this._waitForReply();
+            if (!available) throw new Error("No response from device");
+        }, { label: 'formatMemory' });
     }
 
     async getInfo(initial = false) {
-        if (initial) {
-            await this.serial.write('?');
-            await this._waitForReply(5000);
-            while (this.serial.available()) {
-                this.serial.readAll();
-                await this._waitForReply(100);
-            }
-        }
-        const command = "PI";
-        const cmdHex = this.plc.stringToHex(command);
-        const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0');
-        await this.serial.write(command + checksum.toUpperCase() + "\n");
-
-        const available = await this._waitForReply(5000);
-        if (!available) throw new Error("No response from device");
-
-        // Skip intro message
-        let raw = null
-        while (true) {
-            const available = await this._waitForReply(50);
-            if (!available) break;
-            raw = this.serial.readLine();
-            if (this.debug) console.log("Raw device info:", raw);
-            if (raw === null || typeof raw === 'undefined') break
-            raw = raw.trim();
-            if (!raw) continue // Skip empty lines
-            if (raw.startsWith('::')) continue // Skip intro message starting with '::...'
-        }
-
-        while (true) {
-            if (!raw) break
-            if (raw.startsWith('PLC INFO - ')) {
-                if (this.debug) console.log("Device info:", raw);
-                const parts = raw.split('PLC INFO - ')
-                parts.shift()
-                raw = parts.join('PLC INFO - ') // This should not happen, but just in case we will remove the first instance of 'PLC INFO - '
-            }
-            raw = raw.trim()
-            if (raw.startsWith("[") && raw.endsWith("]")) { // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,0,16,16,16,32,16,48,16,64,16,Simulator]'
-                const content = raw.substring(1, raw.length - 1)
-                const parts = content.split(",")
-                const base = {
-                    header: parts[0],
-                    arch: parts[1],
-                    version: `${parts[2]}.${parts[3]}.${parts[4]} Build ${parts[5]}`,
-                    date: parts[6],
-                    stack: +parts[7],
-                    memory: +parts[8],
-                    program: +parts[9],
+        return this._enqueueCommand(async () => {
+            if (initial) {
+                await this.serial.write('?');
+                await this._waitForReply(5000);
+                while (this.serial.available()) {
+                    this.serial.readAll();
+                    await this._waitForReply(100);
                 }
-                if (parts.length >= 21) {
+            }
+            const command = "PI";
+            const cmdHex = this.plc.stringToHex(command);
+            const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0');
+            await this.serial.write(command + checksum.toUpperCase() + "\n");
+
+            const available = await this._waitForReply(5000);
+            if (!available) throw new Error("No response from device");
+
+            // Skip intro message
+            let raw = null
+            while (true) {
+                const available = await this._waitForReply(50);
+                if (!available) break;
+                raw = this.serial.readLine();
+                if (this.debug) console.log("Raw device info:", raw);
+                if (raw === null || typeof raw === 'undefined') break
+                raw = raw.trim();
+                if (!raw) continue // Skip empty lines
+                if (raw.startsWith('::')) continue // Skip intro message starting with '::...'
+            }
+
+            while (true) {
+                if (!raw) break
+                if (raw.startsWith('PLC INFO - ')) {
+                    if (this.debug) console.log("Device info:", raw);
+                    const parts = raw.split('PLC INFO - ')
+                    parts.shift()
+                    raw = parts.join('PLC INFO - ') // This should not happen, but just in case we will remove the first instance of 'PLC INFO - '
+                }
+                raw = raw.trim()
+                if (raw.startsWith("[") && raw.endsWith("]")) { // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,0,16,16,16,32,16,48,16,64,16,Simulator]'
+                    const content = raw.substring(1, raw.length - 1)
+                    const parts = content.split(",")
+                    const base = {
+                        header: parts[0],
+                        arch: parts[1],
+                        version: `${parts[2]}.${parts[3]}.${parts[4]} Build ${parts[5]}`,
+                        date: parts[6],
+                        stack: +parts[7],
+                        memory: +parts[8],
+                        program: +parts[9],
+                    }
+                    if (parts.length >= 21) {
+                        return {
+                            ...base,
+                            control_offset: +parts[10],
+                            control_size: +parts[11],
+                            input_offset: +parts[12],
+                            input_size: +parts[13],
+                            output_offset: +parts[14],
+                            output_size: +parts[15],
+                            system_offset: +parts[16],
+                            system_size: +parts[17],
+                            marker_offset: +parts[18],
+                            marker_size: +parts[19],
+                            device: parts[20]
+                        }
+                    }
                     return {
                         ...base,
-                        control_offset: +parts[10],
-                        control_size: +parts[11],
-                        input_offset: +parts[12],
-                        input_size: +parts[13],
-                        output_offset: +parts[14],
-                        output_size: +parts[15],
-                        system_offset: +parts[16],
-                        system_size: +parts[17],
-                        marker_offset: +parts[18],
-                        marker_size: +parts[19],
-                        device: parts[20]
+                        input_offset: +parts[10],
+                        input_size: +parts[11],
+                        output_offset: +parts[12],
+                        output_size: +parts[13],
+                        device: parts[14]
                     }
                 }
-                return {
-                    ...base,
-                    input_offset: +parts[10],
-                    input_size: +parts[11],
-                    output_offset: +parts[12],
-                    output_size: +parts[13],
-                    device: parts[14]
-                }
             }
-        }
 
-        console.error(`Invalid info response:`, raw)
+            console.error(`Invalid info response:`, raw)
+        }, { label: 'getInfo', timeoutMs: 12000 });
     }
 
     async getHealth() {
-        const command = "PH"
-        const cmdHex = this.plc.stringToHex(command)
-        const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
-        this.serial.write(command + checksum.toUpperCase() + "\n")
-        const available = await this._waitForReply()
-        if (!available) throw new Error("No response from device")
-        const line = this.serial.readLine() || ""
-        let raw = line.trim()
-        if (!raw) throw new Error("Invalid health response")
-        if (!raw.startsWith('PH')) {
-            const idx = raw.indexOf('PH')
-            if (idx >= 0) raw = raw.slice(idx)
-        }
-        if (raw.startsWith('PH')) raw = raw.slice(2)
-        const hex = raw.replace(/[^0-9a-fA-F]/g, '')
-        if (hex.length < 32) throw new Error("Invalid health response")
-        const parseU32 = value => parseInt(value, 16) >>> 0
-        return {
-            last_cycle_time_us: parseU32(hex.slice(0, 8)),
-            max_cycle_time_us: parseU32(hex.slice(8, 16)),
-            ram_used: parseU32(hex.slice(16, 24)),
-            max_ram_used: parseU32(hex.slice(24, 32)),
-        }
+        return this._enqueueCommand(async () => {
+            const command = "PH"
+            const cmdHex = this.plc.stringToHex(command)
+            const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
+            await this.serial.write(command + checksum.toUpperCase() + "\n")
+            const available = await this._waitForReply()
+            if (!available) throw new Error("No response from device")
+            const line = this.serial.readLine() || ""
+            let raw = line.trim()
+            if (!raw) throw new Error("Invalid health response")
+            if (!raw.startsWith('PH')) {
+                const idx = raw.indexOf('PH')
+                if (idx >= 0) raw = raw.slice(idx)
+            }
+            if (raw.startsWith('PH')) raw = raw.slice(2)
+            const hex = raw.replace(/[^0-9a-fA-F]/g, '')
+            if (hex.length < 32) throw new Error("Invalid health response")
+            const parseU32 = value => parseInt(value, 16) >>> 0
+            return {
+                last_cycle_time_us: parseU32(hex.slice(0, 8)),
+                max_cycle_time_us: parseU32(hex.slice(8, 16)),
+                ram_free: parseU32(hex.slice(16, 24)),
+                min_ram_free: parseU32(hex.slice(24, 32)),
+            }
+        }, { label: 'getHealth' });
     }
 
     async resetHealth() {
-        const command = "RH"
-        const cmdHex = this.plc.stringToHex(command)
-        const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
-        this.serial.write(command + checksum.toUpperCase() + "\n")
-        const available = await this._waitForReply()
-        if (!available) throw new Error("No response from device")
-        this.serial.readLine()
+        return this._enqueueCommand(async () => {
+            const command = "RH"
+            const cmdHex = this.plc.stringToHex(command)
+            const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
+            await this.serial.write(command + checksum.toUpperCase() + "\n")
+            const available = await this._waitForReply()
+            if (!available) throw new Error("No response from device")
+            this.serial.readLine()
+        }, { label: 'resetHealth' });
     }
 
     async _waitForReply(timeout = 1000) {
@@ -219,5 +248,62 @@ export default class SerialConnection extends ConnectionBase {
             await new Promise(r => setTimeout(r, 10));
         }
         return true;
+    }
+
+    _enqueueCommand(handler, options = {}) {
+        const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : this._commandTimeoutMs;
+        const label = options.label || 'command';
+        return new Promise((resolve, reject) => {
+            if (this._commandQueue.length >= this._commandQueueLimit) {
+                reject(new Error('Serial command queue full'));
+                return;
+            }
+            this._commandQueue.push({ handler, resolve, reject, timeoutMs, label });
+            this._drainCommandQueue();
+        });
+    }
+
+    async _drainCommandQueue() {
+        if (this._commandRunning) return;
+        this._commandRunning = true;
+        while (this._commandQueue.length) {
+            const item = this._commandQueue.shift();
+            if (!item) continue;
+            try {
+                const result = await this._withTimeout(
+                    Promise.resolve().then(item.handler),
+                    item.timeoutMs,
+                    item.label
+                );
+                item.resolve(result);
+            } catch (err) {
+                item.reject(err);
+            }
+        }
+        this._commandRunning = false;
+    }
+
+    _withTimeout(promise, timeoutMs, label) {
+        if (!timeoutMs || timeoutMs <= 0) return promise;
+        let timer = null;
+        const timeout = new Promise((_, reject) => {
+            timer = setTimeout(() => {
+                reject(new Error(`Serial command timed out (${label})`));
+            }, timeoutMs);
+        });
+        return Promise.race([promise, timeout]).finally(() => {
+            if (timer) clearTimeout(timer);
+        });
+    }
+
+    _clearCommandQueue() {
+        if (!this._commandQueue.length) return;
+        const err = new Error('Serial command queue cleared');
+        while (this._commandQueue.length) {
+            const item = this._commandQueue.shift();
+            if (item && typeof item.reject === 'function') {
+                item.reject(err);
+            }
+        }
     }
 }

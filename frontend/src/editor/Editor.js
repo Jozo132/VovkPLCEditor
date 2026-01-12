@@ -676,6 +676,76 @@ export class VovkPLCEditor {
         return { map, signature, details }
     }
 
+    _extractAsmAddressRefsFromCode(code, offsets) {
+        const normalizedOffsets = offsets || normalizeOffsets(this.project?.offsets || {})
+        const refs = []
+        if (!code) return refs
+        const locationMap = {
+            C: 'control',
+            X: 'input',
+            Y: 'output',
+            M: 'marker',
+            S: 'system'
+        }
+        const regex = /\b([CXYMS])(\d+)(?:\.(\d+))?\b/gi
+        let match = null
+        while ((match = regex.exec(code))) {
+            const prefix = (match[1] || '').toUpperCase()
+            const byteValue = Number.parseInt(match[2], 10)
+            if (!Number.isFinite(byteValue)) continue
+            const byte = Math.max(0, byteValue)
+            const bitRaw = match[3]
+            const bitValue = typeof bitRaw === 'undefined' ? null : Number.parseInt(bitRaw, 10)
+            const bit = Number.isFinite(bitValue) ? Math.max(0, Math.min(bitValue, 7)) : null
+            const location = locationMap[prefix] || 'marker'
+            const addressLabel = bit !== null ? `${byte}.${bit}` : `${byte}`
+            const canonicalName = `${prefix}${byte}${bit !== null ? '.' + bit : ''}`
+            const baseOffset = normalizedOffsets[location]?.offset || 0
+            const absoluteAddress = baseOffset + byte
+            refs.push({
+                name: canonicalName,
+                token: match[0],
+                location,
+                type: bit !== null ? 'bit' : 'byte',
+                address: addressLabel,
+                absoluteAddress,
+                byte,
+                bit,
+                start: match.index,
+                end: match.index + match[0].length,
+            })
+        }
+        return refs
+    }
+
+    _ensureBlockAddressRefs(block, offsets) {
+        if (!block) return
+        const normalizedOffsets = offsets || normalizeOffsets(this.project?.offsets || {})
+        block.cached_address_refs = this._extractAsmAddressRefsFromCode(block.code || '', normalizedOffsets)
+    }
+
+    _getAsmAddressRefsForLive(offsets) {
+        const normalizedOffsets = offsets || normalizeOffsets(this.project?.offsets || {})
+        const refs = []
+        const seen = new Set()
+        const programs = (this.project?.files || []).filter(file => file?.type === 'program')
+        programs.forEach(program => {
+            const blocks = program.blocks || []
+            blocks.forEach(block => {
+                if (!block || block.type !== 'asm') return
+                this._ensureBlockAddressRefs(block, normalizedOffsets)
+                const blockRefs = block.cached_address_refs || []
+                blockRefs.forEach(ref => {
+                    if (!ref || !ref.name) return
+                    if (seen.has(ref.name)) return
+                    seen.add(ref.name)
+                    refs.push(ref)
+                })
+            })
+        })
+        return refs
+    }
+
     _buildSymbolRefs(code, symbolDetails) {
         const refs = []
         if (!code || !symbolDetails || symbolDetails.size === 0) return refs
@@ -776,6 +846,7 @@ export class VovkPLCEditor {
             if (!block.cached_symbol_refs) {
                 block.cached_symbol_refs = this._buildSymbolRefs(code, symbolDetails)
             }
+            this._ensureBlockAddressRefs(block)
             return block.cached_asm
         }
         const replaced = this._replaceSymbolsOnce(code, symbolMap)
@@ -784,6 +855,7 @@ export class VovkPLCEditor {
         block.cached_symbols_checksum = symbolsSignature
         block.cached_asm_map = replaced.map
         block.cached_symbol_refs = this._buildSymbolRefs(code, symbolDetails)
+        this._ensureBlockAddressRefs(block)
         return block.cached_asm
     }
 
