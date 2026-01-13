@@ -1,4 +1,5 @@
 import {PLC_Project, PLCEditor} from '../../utils/types.js'
+import VOVKPLCEDITOR_VERSION_BUILD, { VOVKPLCEDITOR_VERSION } from '../BuildNumber.js'
 import {ElementSynthesisMany, getEventPath, isVisible} from '../../utils/tools.js'
 import {normalizeOffsets} from '../../utils/offsets.js'
 import {Popup} from './Elements/components/popup.js'
@@ -190,7 +191,7 @@ export default class WindowManager {
             
             <div class="plc-workspace-footer" style="height: 22px; background: #007acc; color: #fff; display: flex; align-items: center; padding: 0px; margin: 0px; font-size: 12px; justify-content: space-between;">
                 <div style="display: flex; gap: 10px; align-items: center; margin-left: 15px;">
-                    <div class="footer-item"><span class="codicon codicon-remote"></span> VovkPLC Editor</div>
+                    <div class="footer-item footer-version" id="footer-version"><div class="footer-about no-select" style="cursor: default;">VovkPLC Editor</div></div>
                     <button id="footer-compile" class="footer-btn" style="background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; gap: 6px; opacity: 1; pointer-events: all; font-size: 11px;">
                         <span style="display: flex; transform: translateY(-1.5px);"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-6a.5.5 0 0 0-1 0v6z"/><path d="M3 11.5h2v2h-2zM7 11.5h2v2h-2zM11 11.5h2v2h-2zM5 8.5h2v2h-2zM9 8.5h2v2h-2z"/></svg></span> Compile
                     </button>
@@ -212,6 +213,35 @@ export default class WindowManager {
         // Footer Events
         const compileBtn = workspace.querySelector('#footer-compile')
         const downloadBtn = workspace.querySelector('#footer-download')
+        const footerVersion = workspace.querySelector('#footer-version')
+
+        if (footerVersion) {
+            this.footerTooltip = document.createElement('div')
+            Object.assign(this.footerTooltip.style, {
+                display: 'none',
+                position: 'fixed',
+                background: '#252526',
+                color: '#cccccc',
+                border: '1px solid #454545',
+                padding: '8px 12px',
+                fontSize: '11px',
+                zIndex: '10000',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                borderRadius: '3px',
+                minWidth: '200px',
+                pointerEvents: 'none'
+            })
+            workspace.appendChild(this.footerTooltip)
+
+            // Remove native tooltip
+            footerVersion.removeAttribute('title')
+            
+            footerVersion.addEventListener('mouseenter', () => this._updateFooterVersionTooltip(footerVersion, true))
+            footerVersion.addEventListener('mouseleave', () => {
+                if (this.footerTooltip) this.footerTooltip.style.display = 'none'
+            })
+            footerVersion.addEventListener('click', () => this._updateFooterVersionTooltip(footerVersion, true))
+        }
 
         compileBtn.onclick = () => this.handleCompile()
         downloadBtn.onclick = () => this.handleDownload()
@@ -2084,6 +2114,46 @@ export default class WindowManager {
 
     isMonitoringActive() {
         return !!this._monitoringActive
+    }
+
+    async _updateFooterVersionTooltip(el, show = false) {
+        if (!el) return
+        
+        let runtimeInfo = '<span style="color: #888;">Loading runtime info...</span>'
+        const showTooltip = () => {
+             if (this.footerTooltip && show) {
+                const rect = el.getBoundingClientRect()
+                const editorInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Editor</div><div style="color:#aaa;">Version: ${VOVKPLCEDITOR_VERSION} Build ${VOVKPLCEDITOR_VERSION_BUILD}</div>`
+                this.footerTooltip.innerHTML = `${editorInfo}<hr style="border:0; border-top:1px solid #333; margin:6px 0;">${runtimeInfo}`
+                this.footerTooltip.style.left = rect.left + 'px'
+                this.footerTooltip.style.bottom = (window.innerHeight - rect.top) + 'px'
+                this.footerTooltip.style.display = 'block'
+             }
+        }
+
+        if (show) showTooltip()
+
+        // Try getting runtime version
+        if (this.#editor && this.#editor.runtime) {
+             try {
+                 const info = await this.#editor.runtime.printInfo()
+                 if (info && info.version) {
+                     runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime</div><div style="color:#aaa;">Version: ${info.version}${info.arch ? `<br>Arch: ${info.arch}` : ''}</div>`
+                 } else if (typeof info === 'string') {
+                     runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#aaa;">${info}</div>`
+                 } else {
+                     runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#aaa;">Unknown</div>`
+                 }
+             } catch (e) {
+                 runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#d44;">Offline</div>`
+             }
+        } else {
+             runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#888;">Not initialized</div>`
+        }
+
+        if (show && this.footerTooltip && this.footerTooltip.style.display !== 'none') {
+            showTooltip()
+        }
     }
 
     isMonitoringAvailable() {
