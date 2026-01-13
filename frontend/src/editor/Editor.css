@@ -398,6 +398,9 @@ ul {
     padding: 0px;
     width: 20px;
     height: 100%;
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
 }
 
 .online.simulation .plc-navigation-bar, 
@@ -530,24 +533,34 @@ ul {
     margin: 0px 1px 0px 1px;
     padding: 0 8px;
     height: 32px;
-    border-bottom: 0px;
     cursor: pointer;
     user-select: none;
-    background: #2d2d2d;
     display: flex;
     flex-direction: row;
     align-items: center;
     text-align: center;
     flex-shrink: 0;
     border-radius: 3px 3px 0 0;
+    
+    /* Console Tab Style Link */
+    background: none;
+    border: 1px solid transparent;
+    color: #999;
+    transition: all 0.2s;
 }
 .plc-tab:hover {
-    background: #3d3d3d;
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.3);
+    background-color: rgba(255, 255, 255, 0.05);
 }
 
 .plc-tab.active {
     color: #fff;
     background: #1e1e1e;
+    border-top: 1px solid #4daafc; /* VS Code style active tab indicator */
+    border-left: 1px solid #333;
+    border-right: 1px solid #333;
+    border-bottom: 1px solid #1e1e1e;
 }
 .plc-tab.active:hover {
     background: #1e1e1e;
@@ -739,36 +752,71 @@ ul {
 }
 
 .plc-console.minimized .plc-console-body {
-    display: none;
+    display: none !important;
 }
 
 .plc-console.tab-problems .plc-console-actions {
     display: none;
 }
 
+.plc-console-header {
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+}
+
 .plc-console-tabs {
     display: flex;
     gap: 8px;
     align-items: center;
+    height: 100%;
 }
 
 .plc-console-tab {
     background: none;
-    border: none;
+    border: 1px solid transparent;
+    border-radius: 0;
     color: #999;
     font-size: 11px;
     text-transform: uppercase;
     font-weight: bold;
     cursor: pointer;
-    padding: 2px 4px;
+    padding: 0 8px;
+    height: 100%;
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    transition: all 0.2s;
+}
+
+.plc-console-tab:hover {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.3);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.clear-console {
+    background: none;
+    border: 1px solid #444;
+    border-radius: 3px;
+    padding: 1px 12px;
+    min-height: 20px;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 11px !important;
+    transition: all 0.2s;
+}
+
+.clear-console:hover {
+    color: #fff;
+    border-color: #888;
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 .plc-console-tab.active {
     color: #ddd;
     border-bottom: 1px solid #4daafc;
+    border-radius: 0;
 }
 
 .plc-console-tab-count {

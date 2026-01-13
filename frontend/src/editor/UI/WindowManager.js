@@ -160,7 +160,7 @@ export default class WindowManager {
                             </div>
                             <div style="flex: 1;"></div>
                             <div class="plc-console-actions">
-                                <button class="icon-btn clear-console" title="Clear Console" style="background:none; border: 1px solid #444; border-radius: 2px; padding: 0 5px; color:#ccc; cursor:pointer; font-size: 11px;">
+                                <button class="icon-btn clear-console" title="Clear Console">
                                     Clear
                                 </button>
                             </div>
@@ -821,7 +821,7 @@ export default class WindowManager {
             e.preventDefault()
             consoleHeader.setPointerCapture(e.pointerId)
             const startY = e.clientY
-            const startHeight = parseFloat(getComputedStyle(consoleBody).height) || consoleHeaderHeight
+            const startHeight = consoleBody.getBoundingClientRect().height
             
             let isDragging = false
 
@@ -833,20 +833,40 @@ export default class WindowManager {
                  if (!isDragging && Math.abs(diff) > 5) {
                      isDragging = true
                      document.body.style.cursor = 'ns-resize'
+                     consoleHeader.style.cursor = 'ns-resize'
                  }
 
                  if (isDragging) {
                      let newHeight = startHeight + diff
                      
-                     if (newHeight < consoleHeaderHeight) newHeight = consoleHeaderHeight
-                     const maxHeight = rect.height - 100
-                     if (newHeight > maxHeight) newHeight = maxHeight
+                     const minExpandedHeight = 150
+                     const triggerThreshold = minExpandedHeight / 2 // 75px
 
-                     consoleBody.style.height = newHeight + 'px'
-
-                     if (newHeight > consoleHeaderHeight + 10) {
+                     // Snap Logic
+                     if (newHeight < triggerThreshold) {
+                         // Dragging below half min-height -> Visual Minimize
+                         consoleBody.classList.add('minimized')
+                         consoleState.minimized = true
+                         // Force visual height to header height so it looks minimized
+                         // But we might want to keep tracking 'newHeight' virtually?
+                         // Actually, standard behavior is usually to clamp visual feedback till drop?
+                         // User wants: "force it to minimize if we drag ... below 1/2"
+                         // And "allow to unminimize it when dragging it back up"
+                         
+                         // We will act immediately based on threshold
+                         consoleBody.style.height = `${consoleHeaderHeight}px`
+                     } else {
+                         // Above threshold
                          consoleBody.classList.remove('minimized')
                          consoleState.minimized = false
+
+                         // Clamp to min expanded height or max
+                         if (newHeight < minExpandedHeight) newHeight = minExpandedHeight
+                         
+                         const maxHeight = rect.height - 100
+                         if (newHeight > maxHeight) newHeight = maxHeight
+                         
+                         consoleBody.style.height = newHeight + 'px'
                          consoleState.lastHeight = newHeight
                      }
                  }
@@ -857,17 +877,22 @@ export default class WindowManager {
                  consoleHeader.removeEventListener('pointermove', onPointerMove)
                  consoleHeader.removeEventListener('pointerup', onPointerUp)
                  document.body.style.cursor = ''
+                 consoleHeader.style.cursor = ''
 
                  if (!isDragging) {
+                     // Click Toggle
                      if (consoleBody.classList.contains('minimized')) {
                         openConsole()
                      } else {
-                        consoleState.lastHeight = parseFloat(getComputedStyle(consoleBody).height)
+                        consoleState.lastHeight = parseFloat(getComputedStyle(consoleBody).height) || 150
+                        if (consoleState.lastHeight < 150) consoleState.lastHeight = 150
+                        
                         consoleState.minimized = true
                         consoleBody.classList.add('minimized')
                         consoleBody.style.height = `${consoleHeaderHeight}px`
                      }
                  } else {
+                     // Drag End
                      const h = parseFloat(consoleBody.style.height)
                      if (h <= consoleHeaderHeight + 5) {
                           consoleState.minimized = true;
@@ -2774,7 +2799,6 @@ export default class WindowManager {
 
                 e.preventDefault();
                 bar.setPointerCapture(e.pointerId);
-                document.body.style.cursor = 'ew-resize';
 
                 const startX = e.clientX;
                 
@@ -2789,6 +2813,8 @@ export default class WindowManager {
                     const diff = evt.clientX - startX;
                     if (!isDragging && Math.abs(diff) > 5) {
                         isDragging = true;
+                        document.body.style.cursor = 'ew-resize';
+                        bar.style.cursor = 'ew-resize';
                     }
 
                     if (isDragging) {
@@ -2819,6 +2845,7 @@ export default class WindowManager {
 
                 const onPointerUp = (evt) => {
                     document.body.style.cursor = '';
+                    bar.style.cursor = '';
                     bar.releasePointerCapture(evt.pointerId);
                     bar.removeEventListener('pointermove', onPointerMove);
                     bar.removeEventListener('pointerup', onPointerUp);
