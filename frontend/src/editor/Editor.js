@@ -516,12 +516,7 @@ export class VovkPLCEditor {
         const frame_width = frame.clientWidth
         if (frame_width <= 500) {
             // minimize navigation
-            const navigation = this.workspace.querySelector('.plc-navigation')
-            if (!navigation) throw new Error('Navigation not found')
-            navigation.classList.add('minimized')
-            const minimize = navigation.querySelector('.plc-navigation-bar .menu-button')
-            if (!minimize) throw new Error('Minimize button not found')
-            minimize.innerHTML = '+'
+            this.window_manager?._outerLayoutControl?.setNavMinimized(true)
         }
         // this.draw()
     }

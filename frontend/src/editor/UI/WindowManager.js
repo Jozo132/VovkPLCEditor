@@ -140,8 +140,6 @@ export default class WindowManager {
                     </div>
                 </div>
 
-                <div class="plc-app-resizer" id="resizer-nav" style="width: 4px; background: #252526; cursor: ew-resize; z-index: 10;"></div>
-                
                 <div class="plc-center-column" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; position: relative;">
                     <div class="plc-window" style="flex: 1; min-height: 0;"> <!-- min-height: 0 is important for flex scrolling -->
                         <div class="plc-window-tabs"></div>
@@ -175,8 +173,6 @@ export default class WindowManager {
                         </div>
                     </div>
                 </div>
-
-                <div class="plc-app-resizer" id="resizer-tools" style="width: 4px; background: #252526; cursor: ew-resize; z-index: 10;"></div>
 
                 <div class="plc-tools no-select resizable minimized" style="width: 200px">
                     <div class="plc-tools-bar" title="Toggle Sidebar">
@@ -2653,12 +2649,7 @@ export default class WindowManager {
         const frame_width = frame.clientWidth
         if (frame_width <= 500) {
             // minimize navigation
-            const navigation = this.workspace.querySelector('.plc-navigation')
-            if (!navigation) throw new Error('Navigation not found')
-            navigation.classList.add('minimized')
-            const minimize = navigation.querySelector('.plc-navigation-bar .menu-button')
-            if (!minimize) throw new Error('Minimize button not found')
-            minimize.innerHTML = '+'
+            this._outerLayoutControl?.setNavMinimized(true)
         }
         // this.draw()
     }
@@ -2666,8 +2657,7 @@ export default class WindowManager {
     #initOuterLayout(workspace) {
         const nav = workspace.querySelector('.plc-navigation');
         const tools = workspace.querySelector('.plc-tools');
-        const resizerNav = workspace.querySelector('#resizer-nav');
-        const resizerTools = workspace.querySelector('#resizer-tools');
+        // resizers removed from HTML
         const navBar = workspace.querySelector('.plc-navigation-bar');
         const toolsBar = workspace.querySelector('.plc-tools-bar');
 
@@ -2696,14 +2686,14 @@ export default class WindowManager {
                 nav.style.overflow = 'hidden';
                 if (navContent) navContent.style.display = 'none';
                 if (navBtn) navBtn.innerText = '+';
-                if (resizerNav) resizerNav.style.pointerEvents = 'none';
+                if (navBar) navBar.style.width = '100%';
             } else {
                 nav.classList.remove('minimized');
                 nav.style.flex = `0 0 ${state.nav.width}px`;
                 nav.style.width = `${state.nav.width}px`;
                 if (navContent) navContent.style.display = '';
                 if (navBtn) navBtn.innerText = '-';
-                if (resizerNav) resizerNav.style.pointerEvents = 'all';
+                if (navBar) navBar.style.width = '';
             }
 
             const toolsBtn = tools?.querySelector('.menu-button');
@@ -2716,68 +2706,106 @@ export default class WindowManager {
                 tools.style.overflow = 'hidden';
                 if (toolsContent) toolsContent.style.display = 'none';
                 if (toolsBtn) toolsBtn.innerText = '+';
-                if (resizerTools) resizerTools.style.pointerEvents = 'none';
+                if (toolsBar) toolsBar.style.width = '100%';
             } else {
                 tools.classList.remove('minimized');
                 tools.style.flex = `0 0 ${state.tools.width}px`;
                 tools.style.width = `${state.tools.width}px`;
                 if (toolsContent) toolsContent.style.display = '';
                 if (toolsBtn) toolsBtn.innerText = '-';
-                if (resizerTools) resizerTools.style.pointerEvents = 'all';
+                if (toolsBar) toolsBar.style.width = '';
             }
 
             localStorage.setItem('vovk_plc_outer_layout', JSON.stringify(state));
         }
 
-        if (navBar) {
-            navBar.onclick = (e) => {
-                state.nav.minimized = !state.nav.minimized;
-                apply();
-            };
-            navBar.style.cursor = 'pointer';
-        }
-        if (toolsBar) {
-            toolsBar.onclick = (e) => {
-                state.tools.minimized = !state.tools.minimized;
-                apply();
-            };
-            toolsBar.style.cursor = 'pointer';
+        this._outerLayoutControl = {
+            setNavMinimized: (minimized) => {
+                state.nav.minimized = minimized
+                apply()
+            }
         }
 
-        const setupDrag = (resizer, side) => {
-            if (!resizer) return;
-            resizer.addEventListener('mousedown', (e) => {
+        const setupDrag = (bar, side) => {
+            if (!bar) return; 
+            bar.style.touchAction = 'none';
+
+            bar.addEventListener('pointerdown', (e) => {
+                // Ignore clicks on buttons inside the bar if necessary, but we capture everything for drag
+                // If user clicks the button explicitly, it might bubble. 
+                // e.target check?
+                // The 'menu-button' is inside. If I capture pointer, button click might fail visual feedback?
+                // Actually pointer capture allows events.
+                
+                // If it's a right click, ignore
+                if (e.button !== 0) return;
+
                 e.preventDefault();
+                bar.setPointerCapture(e.pointerId);
                 document.body.style.cursor = 'ew-resize';
+
                 const startX = e.clientX;
-                const startWidth = side === 'left' ? state.nav.width : state.tools.width;
+                
+                // Use current visual width as start point
+                const panel = side === 'left' ? nav : tools;
+                const rect = panel.getBoundingClientRect();
+                const startWidth = rect.width;
 
-                const onMove = (evt) => {
+                let isDragging = false;
+
+                const onPointerMove = (evt) => {
                     const diff = evt.clientX - startX;
-                    let newWidth = side === 'left' ? startWidth + diff : startWidth - diff;
-                    
-                    if (newWidth < 150) newWidth = 150;
-                    if (newWidth > 800) newWidth = 800;
+                    if (!isDragging && Math.abs(diff) > 5) {
+                        isDragging = true;
+                    }
 
-                    if (side === 'left') state.nav.width = newWidth;
-                    else state.tools.width = newWidth;
+                    if (isDragging) {
+                        let newWidth = side === 'left' ? startWidth + diff : startWidth - diff;
+                        
+                        const min = 250;
+                        const trigger = min / 2;
 
-                    apply();
+                        if (newWidth < trigger) {
+                            if (side === 'left') state.nav.minimized = true;
+                            else state.tools.minimized = true;
+                        } else {
+                            if (newWidth < min) newWidth = min;
+                            if (newWidth > 800) newWidth = 800;
+
+                            if (side === 'left') {
+                                state.nav.width = newWidth;
+                                state.nav.minimized = false;
+                            } else {
+                                state.tools.width = newWidth;
+                                state.tools.minimized = false;
+                            }
+                        }
+
+                        apply();
+                    }
                 };
 
-                const onUp = () => {
+                const onPointerUp = (evt) => {
                     document.body.style.cursor = '';
-                    document.removeEventListener('mousemove', onMove);
-                    document.removeEventListener('mouseup', onUp);
+                    bar.releasePointerCapture(evt.pointerId);
+                    bar.removeEventListener('pointermove', onPointerMove);
+                    bar.removeEventListener('pointerup', onPointerUp);
+                    
+                    if (!isDragging) {
+                        // Treat as click/toggle
+                        if (side === 'left') state.nav.minimized = !state.nav.minimized;
+                        else state.tools.minimized = !state.tools.minimized;
+                        apply();
+                    }
                 };
 
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onUp);
+                bar.addEventListener('pointermove', onPointerMove);
+                bar.addEventListener('pointerup', onPointerUp);
             });
         }
 
-        setupDrag(resizerNav, 'left');
-        setupDrag(resizerTools, 'right');
+        setupDrag(navBar, 'left');
+        setupDrag(toolsBar, 'right');
 
         apply();
     }
