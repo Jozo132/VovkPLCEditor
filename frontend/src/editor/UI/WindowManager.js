@@ -813,18 +813,77 @@ export default class WindowManager {
             })
         }
 
-        consoleHeader.onclick = e => {
-            if (e.target.closest('.plc-console-actions')) return
-            if (e.target.closest('.plc-console-tab')) return
-            if (consoleBody.classList.contains('minimized')) {
-                openConsole()
-            } else {
-                consoleState.lastHeight = parseInt(getComputedStyle(consoleBody).height, 10)
-                consoleState.minimized = true
-                consoleBody.classList.add('minimized')
-                consoleBody.style.height = `${consoleHeaderHeight}px`
+        consoleHeader.style.touchAction = 'none';
+        consoleHeader.addEventListener('pointerdown', e => {
+            if (e.button !== 0) return
+            if (e.target.closest('button') || e.target.closest('.plc-console-tab') || e.target.closest('.plc-console-actions')) return
+
+            e.preventDefault()
+            consoleHeader.setPointerCapture(e.pointerId)
+            const startY = e.clientY
+            const startHeight = parseFloat(getComputedStyle(consoleBody).height) || consoleHeaderHeight
+            
+            let isDragging = false
+
+            const centerCol = workspace.querySelector('.plc-center-column')
+            const rect = centerCol.getBoundingClientRect()
+
+            const onPointerMove = (evt) => {
+                 const diff = startY - evt.clientY
+                 if (!isDragging && Math.abs(diff) > 5) {
+                     isDragging = true
+                     document.body.style.cursor = 'ns-resize'
+                 }
+
+                 if (isDragging) {
+                     let newHeight = startHeight + diff
+                     
+                     if (newHeight < consoleHeaderHeight) newHeight = consoleHeaderHeight
+                     const maxHeight = rect.height - 100
+                     if (newHeight > maxHeight) newHeight = maxHeight
+
+                     consoleBody.style.height = newHeight + 'px'
+
+                     if (newHeight > consoleHeaderHeight + 10) {
+                         consoleBody.classList.remove('minimized')
+                         consoleState.minimized = false
+                         consoleState.lastHeight = newHeight
+                     }
+                 }
             }
-        }
+
+            const onPointerUp = (evt) => {
+                 consoleHeader.releasePointerCapture(evt.pointerId)
+                 consoleHeader.removeEventListener('pointermove', onPointerMove)
+                 consoleHeader.removeEventListener('pointerup', onPointerUp)
+                 document.body.style.cursor = ''
+
+                 if (!isDragging) {
+                     if (consoleBody.classList.contains('minimized')) {
+                        openConsole()
+                     } else {
+                        consoleState.lastHeight = parseFloat(getComputedStyle(consoleBody).height)
+                        consoleState.minimized = true
+                        consoleBody.classList.add('minimized')
+                        consoleBody.style.height = `${consoleHeaderHeight}px`
+                     }
+                 } else {
+                     const h = parseFloat(consoleBody.style.height)
+                     if (h <= consoleHeaderHeight + 5) {
+                          consoleState.minimized = true;
+                          consoleBody.classList.add('minimized')
+                          consoleBody.style.height = `${consoleHeaderHeight}px`
+                     } else {
+                          consoleState.minimized = false
+                          consoleBody.classList.remove('minimized')
+                          consoleState.lastHeight = h
+                     }
+                 }
+            }
+            
+            consoleHeader.addEventListener('pointermove', onPointerMove)
+            consoleHeader.addEventListener('pointerup', onPointerUp)
+        })
 
         consoleTabs.forEach(tab => {
             tab.addEventListener('click', e => {
@@ -839,46 +898,8 @@ export default class WindowManager {
             if (outputBody) outputBody.innerHTML = ''
         }
 
-        // Console Resizer Logic (Draggable Line)
-        let isResizingConsole = false
-        consoleResizer.addEventListener('mousedown', e => {
-            isResizingConsole = true
-            e.preventDefault()
-            document.body.style.cursor = 'ns-resize'
-        })
-
-        document.addEventListener('mousemove', e => {
-            if (!isResizingConsole) return
-
-            const centerCol = workspace.querySelector('.plc-center-column')
-            if (!centerCol) return
-            const rect = centerCol.getBoundingClientRect()
-
-            // Calculate height from bottom of center column
-            let newHeight = rect.bottom - e.clientY
-
-            // Constraints
-            if (newHeight < consoleHeaderHeight + 2) newHeight = consoleHeaderHeight // Keep header visible
-            if (newHeight > rect.height - 100) newHeight = rect.height - 100 // Max height
-
-            consoleBody.style.height = newHeight + 'px'
-
-            if (newHeight > consoleHeaderHeight) {
-                consoleBody.classList.remove('minimized')
-                consoleState.lastHeight = newHeight
-                consoleState.minimized = false
-            } else {
-                consoleBody.classList.add('minimized')
-                consoleState.minimized = true
-            }
-        })
-
-        document.addEventListener('mouseup', () => {
-            if (isResizingConsole) {
-                isResizingConsole = false
-                document.body.style.cursor = ''
-            }
-        })
+        // Removed old console resizer logic in favor of header drag
+        if (consoleResizer) consoleResizer.style.display = 'none'
 
         const device_info = workspace.querySelector('.plc-device-info')
         if (!device_info) throw new Error('Device info element not found')

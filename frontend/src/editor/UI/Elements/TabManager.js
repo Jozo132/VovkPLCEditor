@@ -98,6 +98,10 @@ export default class TabManager {
             }
         }
 
+        if (entry.tabEl) {
+             entry.tabEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        }
+
         this.active = id;
     }
 
