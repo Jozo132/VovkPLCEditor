@@ -142,7 +142,7 @@ export default class WindowManager {
 
                 <div class="plc-center-column" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; position: relative;">
                     <div class="plc-window" style="flex: 1; min-height: 0;"> <!-- min-height: 0 is important for flex scrolling -->
-                        <div class="plc-window-tabs"></div>
+                        <div class="plc-window-tabs mini-scrollbar"></div>
                         <div class="plc-window-frame"></div>
                     </div>
                     
@@ -1025,6 +1025,17 @@ export default class WindowManager {
         
         this.data_fetcher = new DataFetcher(editor)
         editor.data_fetcher = this.data_fetcher
+
+        // Horizontal scrolling for tabs
+        const tabs_element = workspace.querySelector('.plc-window-tabs')
+        if (tabs_element) {
+            tabs_element.addEventListener('wheel', (evt) => {
+                if (evt.deltaY !== 0) {
+                    evt.preventDefault()
+                    tabs_element.scrollLeft += evt.deltaY
+                }
+            }, { passive: false })
+        }
         
         this.#initPanelResizables(workspace)
         this.#initContextMenus(workspace)

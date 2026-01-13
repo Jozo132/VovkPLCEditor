@@ -493,40 +493,64 @@ ul {
 .plc-window-tabs {
     display: flex;
     flex-direction: row;
-    align-items: bottom;
+    align-items: flex-start;
     font-size: 14px;
     padding: 0px;
+    padding-top: 3px;
     width: 100%;
-    min-height: 28px;
+    height: 35px;
+    overflow-x: overlay;
+    overflow-y: hidden;
 }
+
+/* Reusable mini scrollbar */
+.plc-workspace .mini-scrollbar::-webkit-scrollbar {
+    height: 4px;
+    width: 4px;
+}
+.plc-workspace .mini-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.plc-workspace .mini-scrollbar::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 4px;
+}
+.plc-workspace .mini-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: rgba(128, 128, 128, 0.5);
+}
+.plc-workspace .mini-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(128, 128, 128, 0.8);
+}
+
 .plc-window-tabs .plc-tab:first-child {
     margin-left: 8px;
 }
 /* <div class="plc-tab"><div class="plc-tab-title">${name}</div><div class="plc-tab-close">×</div></div> */
 .plc-tab {
-    margin: 3px 3px 0px 3px;
-    padding: 2px;
-    padding-left: 5px;
-    padding-right: 5px;
+    margin: 0px 1px 0px 1px;
+    padding: 0 8px;
+    height: 32px;
     border-bottom: 0px;
     cursor: pointer;
     user-select: none;
-    background: #6783;
+    background: #2d2d2d;
     display: flex;
     flex-direction: row;
     align-items: center;
     text-align: center;
+    flex-shrink: 0;
+    border-radius: 3px 3px 0 0;
 }
 .plc-tab:hover {
-    background: #555;
+    background: #3d3d3d;
 }
 
 .plc-tab.active {
-    color: rgb(159, 205, 255);
-    background: #678A;
+    color: #fff;
+    background: #1e1e1e;
 }
 .plc-tab.active:hover {
-    background: #555;
+    background: #1e1e1e;
 }
 
 .plc-tab-close {
