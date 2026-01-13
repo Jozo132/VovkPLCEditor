@@ -119,6 +119,10 @@ export default class EditorUI {
         this.monitor_button.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
         this.monitor_button.classList.toggle('active', this.monitoringActive)
         
+        if (this.live_edit_button) {
+            this.live_edit_button.style.display = this.monitoringActive ? '' : 'none'
+        }
+
         // Notify blocks to update pills
         if (this.program && this.program.blocks) {
              this.program.blocks.forEach(block => {
@@ -130,10 +134,22 @@ export default class EditorUI {
         }
     }
 
+    updateLiveEditState(enabled) {
+        if (!this.live_edit_button) return
+        const iconLockClosed = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>`
+        const iconLockOpen = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11 1a2 2 0 0 0-2 2v4a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h5V3a3 3 0 0 1 6 0v4a.5.5 0 0 1-1 0V3a2 2 0 0 0-2-2z"/></svg>`
+        
+        this.live_edit_button.innerHTML = enabled ? iconLockOpen : iconLockClosed
+        this.live_edit_button.classList.toggle('active', enabled)
+        this.live_edit_button.style.color = enabled ? '#4ec9b0' : ''
+    }
+
     updateMonitoringAvailability(available = false) {
         this.monitoringAvailable = !!available
         if (!this.monitor_button) return
         this.monitor_button.style.display = this.monitoringAvailable ? '' : 'none'
+        // The lock button visibility is controlled by updateMonitoringState, not availability
+        // But if monitoring is not available, we should hide it
         if (!this.monitoringAvailable) {
             this.updateMonitoringState(false)
         }
@@ -144,16 +160,70 @@ export default class EditorUI {
             <h2 style="margin-top: 0px; margin-bottom: 3px;">Program: ${this.name || ''}</h2>
             <p>${this.comment || ''}</p>
         `
+
+        // Container for right-aligned controls
+        const controlsContainer = document.createElement('div')
+        controlsContainer.style.display = 'flex'
+        controlsContainer.style.marginLeft = 'auto' // Push to right
+        controlsContainer.style.alignItems = 'center'
+        controlsContainer.style.gap = '5px' 
+        controlsContainer.style.height = '100%'
+
+        const LOCK_SIZE = '22px' // Approximate button height
+
+        // Live Edit Lock Button
+        const lockBtn = document.createElement('button')
+        lockBtn.className = 'plc-btn monitor-lock-btn'
+        lockBtn.style.padding = '0'
+        lockBtn.style.display = 'none' 
+        lockBtn.style.justifyContent = 'center'
+        lockBtn.style.alignItems = 'center'
+        lockBtn.style.width = LOCK_SIZE
+        lockBtn.style.height = LOCK_SIZE
+        lockBtn.style.minHeight = LOCK_SIZE // Force square
+        lockBtn.style.minWidth = LOCK_SIZE  // Force square
+        // Make it look like a toggle
+        lockBtn.style.backgroundColor = 'transparent'
+        lockBtn.style.border = '1px solid transparent'
+        lockBtn.style.color = '#ccc'
+        
+        lockBtn.title = 'Live Edit (Unlock editing while monitoring)'
+        const iconLockClosed = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>`
+        lockBtn.innerHTML = iconLockClosed
+        lockBtn.onclick = () => {
+             this.master?.window_manager?.toggleLiveEdit?.()
+        }
+        this.live_edit_button = lockBtn
+
+        // Monitor Button
         const monitorBtn = document.createElement('button')
         monitorBtn.classList.add('plc-btn', 'monitor-btn')
         monitorBtn.setAttribute('data-monitor-toggle', 'true')
+        monitorBtn.style.height = LOCK_SIZE // Match height
+        monitorBtn.style.display = 'flex' // Ensure flex box for text alignment if needed
+        monitorBtn.style.alignItems = 'center'
+        monitorBtn.style.justifyContent = 'center'
+        monitorBtn.style.marginLeft = '0' // Reset margin since it's in container
+        
         monitorBtn.addEventListener('click', () => {
             this.master?.window_manager?.toggleMonitoringActive?.()
         })
-        this.header.appendChild(monitorBtn)
+        
+        controlsContainer.appendChild(lockBtn)
+        controlsContainer.appendChild(monitorBtn)
+        this.header.appendChild(controlsContainer)
+
+        this.monitor_button = monitorBtn
+        
+        // Wait, renderHeader replaces innerHTML. 
+        // Let's rewrite the block to be cleaner.
+
         this.monitor_button = monitorBtn
         this.updateMonitoringState(this.master?.window_manager?.isMonitoringActive?.() || false)
         this.updateMonitoringAvailability(this.master?.window_manager?.isMonitoringAvailable?.() || false)
+        if (this.master?.window_manager) {
+             this.updateLiveEditState(this.master.window_manager._liveEditEnabled)
+        }
     }
 
     draw() {

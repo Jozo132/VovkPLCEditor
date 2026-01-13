@@ -1779,6 +1779,18 @@ export class MiniCodeEditor {
             ta.readOnly = !!locked
             if (!locked && ta.disabled) ta.disabled = false
         }
+        this.setMonitoringBackground = (enabled) => {
+             // Change background to lighter grey when monitoring
+             // Default bg is usually around #1e1e1e (dark)
+             // We want it significantly lighter to indicate monitoring mode
+             if (enabled) {
+                 pr.style.backgroundColor = '#383838' // Distinct lighter grey
+                 ta.style.backgroundColor = 'transparent'
+             } else {
+                 pr.style.backgroundColor = '' // Reset to default CSS
+                 ta.style.backgroundColor = ''
+             }
+        }
     }
 
     destroy() {

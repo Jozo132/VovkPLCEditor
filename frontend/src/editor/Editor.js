@@ -526,6 +526,27 @@ export class VovkPLCEditor {
         // this.draw()
     }
 
+    setMonitoringVisuals(enabled) {
+        const applyToBlock = block => {
+            const editor = block?.props?.text_editor
+            if (editor && typeof editor.setMonitoringBackground === 'function') {
+                editor.setMonitoringBackground(!!enabled)
+            }
+        }
+
+        const programs = this._getLintPrograms ? this._getLintPrograms() : []
+        if (programs && programs.length) {
+            programs.forEach(program => {
+                program?.blocks?.forEach(applyToBlock)
+            })
+        } else if (this.project?.files) {
+            this.project.files.forEach(file => {
+                if (file.type !== 'program') return
+                file?.blocks?.forEach(applyToBlock)
+            })
+        }
+    }
+
     setEditLock(locked) {
         const next = !!locked
         if (this.edit_locked === next) return

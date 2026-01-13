@@ -21,6 +21,7 @@ export default class WindowManager {
     active_device = 'simulation'
     _monitoringActive = false
     _monitoringAvailable = false
+    _liveEditEnabled = false
     _monitoringConnectionState = null
     _healthConnectionState = null
     _healthTimer = null
@@ -2093,6 +2094,12 @@ export default class WindowManager {
         const next = !!active
         if (this._monitoringActive === next) return
         this._monitoringActive = next
+        
+        // Reset Live Edit to LOCKED (false) when monitoring starts
+        if (next) {
+            this._liveEditEnabled = false
+        }
+
         for (const win of this.windows.values()) {
             if (win && typeof win.updateMonitoringState === 'function') {
                 win.updateMonitoringState(next)
@@ -2103,6 +2110,20 @@ export default class WindowManager {
 
     toggleMonitoringActive() {
         this.setMonitoringActive(!this._monitoringActive)
+    }
+
+    toggleLiveEdit(enabled) {
+        if (enabled !== undefined) {
+             this._liveEditEnabled = !!enabled
+        } else {
+             this._liveEditEnabled = !this._liveEditEnabled
+        }
+        
+        for (const win of this.windows.values()) {
+             // Let updateLiveMonitorState handle the UI updates via setEditLock and other mechanisms
+        }
+        
+        this.updateLiveMonitorState()
     }
 
     updateMonitoringAvailability(available = false) {
@@ -2122,7 +2143,8 @@ export default class WindowManager {
         
         // Locking Logic:
         // Unlock editing when Connected (Online), but Lock when Monitoring.
-        const isLocked = shouldMonitor
+        // If Live Edit is enabled, we force unlock.
+        const isLocked = shouldMonitor && !this._liveEditEnabled
         if (this._edit_lock_state !== isLocked) {
              this._edit_lock_state = isLocked
              if (typeof editor.setEditLock === 'function') {
@@ -2130,6 +2152,16 @@ export default class WindowManager {
              }
         }
         
+        // Notify all windows about monitoring state (which updates the lock button visibility)
+        for (const win of this.windows.values()) {
+            if (win && typeof win.updateMonitoringState === 'function') {
+                win.updateMonitoringState(monitoring)
+            }
+             if (win && typeof win.updateLiveEditState === 'function') {
+                win.updateLiveEditState(this._liveEditEnabled)
+            }
+        }
+
         // Notify WatchPanel and MemoryUI
         const watchPanelInstance = this._getWatchPanelInstance()
         if (watchPanelInstance && typeof watchPanelInstance.setMonitoringState === 'function') {
@@ -2146,6 +2178,10 @@ export default class WindowManager {
             this._startLiveMemoryMonitor()
             if (editor && typeof editor.setMonitoringDimmed === 'function') {
                  editor.setMonitoringDimmed(false)
+            }
+            // Enable visual feedback for monitoring
+            if (editor && typeof editor.setMonitoringVisuals === 'function') {
+                 editor.setMonitoringVisuals(true)
             }
             this.setHealthDimmed(false)
             this._pollDeviceHealth()
@@ -2166,6 +2202,9 @@ export default class WindowManager {
              if (this.data_fetcher && this.data_fetcher.fetching) this.data_fetcher.stop()
              if (editor && typeof editor.setMonitoringDimmed === 'function') {
                  editor.setMonitoringDimmed(true)
+             }
+             if (editor && typeof editor.setMonitoringVisuals === 'function') {
+                 editor.setMonitoringVisuals(false)
              }
              this.setHealthDimmed(true)
         }
