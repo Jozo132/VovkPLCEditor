@@ -1418,9 +1418,12 @@ export default class WindowManager {
 
     async handleCompile(options = {}) {
         const silent = !!options.silent
+        const silentOnSuccess = !!options.silentOnSuccess
+        const suppressInfo = silent || silentOnSuccess
 
         if (!this.#editor.runtime_ready) {
             if (!silent) {
+                if (silentOnSuccess && typeof this.setConsoleTab === 'function') this.setConsoleTab('output')
                 this.logToConsole('WASM Runtime is not ready yet.', 'error')
                 this.logToConsole('----------------------------------------', 'info')
             }
@@ -1428,7 +1431,7 @@ export default class WindowManager {
         }
 
         try {
-            if (!silent) {
+            if (!suppressInfo) {
                 if (typeof this.setConsoleTab === 'function') {
                     this.setConsoleTab('output')
                 }
@@ -1447,7 +1450,7 @@ export default class WindowManager {
             this.#editor.project.compiledBytecode = result.output
             this.#editor.project.compiledSize = result.size
 
-            if (!silent) {
+            if (!suppressInfo) {
                 const MAX_PROGRAM_SIZE = 1024 // 1KB limit for now
                 const percent = +((result.size / MAX_PROGRAM_SIZE) * 100).toFixed(1)
                 const total_bars = 16
@@ -1487,6 +1490,7 @@ export default class WindowManager {
             return true
         } catch (e) {
             if (!silent) {
+                if (silentOnSuccess && typeof this.setConsoleTab === 'function') this.setConsoleTab('output')
                 this.logToConsole(`Compilation failed: ${e.message}`, 'error')
                 this.logToConsole('----------------------------------------', 'info')
             }
@@ -1501,20 +1505,20 @@ export default class WindowManager {
             this.logToConsole('----------------------------------------', 'info')
             return
         }
+
+        // Always compile before download, showing console only on error
+        const compiled = await this.handleCompile({ silentOnSuccess: true })
+        if (!compiled) return
+
         const compiledBytecode = this.#editor.project.compiledBytecode
         const compiledSize = this.#editor.project.compiledSize
-
-        if (!compiledBytecode) {
-            this.logToConsole('No compiled program found. Please Compile first.', 'error')
-            this.logToConsole('----------------------------------------', 'info')
-            return
-        }
 
         const MAX_PROGRAM_SIZE = 1024
         if (compiledSize > MAX_PROGRAM_SIZE) {
             this.logToConsole(`Program too large! ${compiledSize} > ${MAX_PROGRAM_SIZE} bytes.`, 'error')
             this.logToConsole('Upload aborted.', 'error')
             this.logToConsole('----------------------------------------', 'info')
+            this.setConsoleTab('output')
             return
         }
 
@@ -1584,6 +1588,7 @@ export default class WindowManager {
         }
 
         try {
+            if (typeof this.setConsoleTab === 'function') this.setConsoleTab('output')
             this.logToConsole(`Uploading ${compiledSize} bytes to device...`, 'info')
             const startTime = performance.now()
             await this.#editor.device_manager.connection.downloadProgram(compiledBytecode)

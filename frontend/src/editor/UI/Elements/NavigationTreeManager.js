@@ -31,6 +31,7 @@ const custom_item_html = ({ draggable, selected, type }) => {
     return /*HTML*/`
         <div class="plc-navigation-item ${selected ? 'selected' : ''}">
             <div class="plc-navigation-${typename}" tabindex="0" draggable="${draggable}">
+                <span style="width: 16px; min-width: 16px; height: 16px; margin-right: 2px; display: inline-block;"></span>
                 <span class="plc-title plc-icon ${getIconType(type)}">empty</span>
             </div>
         </div>
