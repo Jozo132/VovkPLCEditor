@@ -61,6 +61,14 @@ export default class SimulationConnection extends ConnectionBase {
         return this.plc.writeMemoryArea(address, data);
     }
 
+    async writeMemoryArea(address, data) {
+        return this.writeMemory(address, data);
+    }
+
+    async writeMemoryAreaMasked(address, data, mask) {
+        return this.plc.writeMemoryAreaMasked(address, data, mask);
+    }
+
     async formatMemory(address, size, value) {
         const data = Array(size).fill(value);
         return this.writeMemory(address, data);
