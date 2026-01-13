@@ -39,11 +39,11 @@ export class MiniCodeEditor {
             s.id = 'mce-css'
             s.textContent = `.mce{width:100%;height:100%;font:var(--f,14px/1.4 monospace);background:#282828;overflow:hidden}
 .mce>textarea,.mce>pre{position:absolute;top:0;bottom:0;width:100%;margin:0;border:0;resize:none;outline:0;font:inherit;white-space:pre;overflow:auto;box-sizing:border-box;tab-size:4;-moz-tab-size:4}
-.mce>textarea{background:none;color:transparent;caret-color:#fff;padding:8px 8px 8px calc(${LN_W}px + 8px)}
+.mce>textarea{z-index:1;background:none;color:transparent;caret-color:#fff;padding:8px 8px 8px calc(${LN_W}px + 8px)}
 .mce>textarea::selection,.mce>textarea::-moz-selection{color:transparent;background:rgba(0,0,0,.25)}
 .mce>pre.code{pointer-events:none;color:#ddd;left:${LN_W}px;right:0;padding:8px;overflow:hidden; width:calc(100% - ${LN_W}px)}
 .mce>pre.code code{display:inline-block;min-width:100%}
-.mce>pre.ln{pointer-events:none;color:#555;left:0;width:${LN_W}px;text-align:right;padding:8px 4px 8px 0;margin:0;user-select:none;overflow:hidden}
+.mce>pre.ln{pointer-events:none;color:#555;left:0;width:${LN_W}px;text-align:right;padding:8px 4px 8px 0;margin:0;user-select:none;overflow:hidden;z-index: 10;background: #282828;}
 .ac{list-style:none;position:absolute;max-width:400px;max-height:200px;overflow-y:auto;background:#252526;border:1px solid #454545;box-shadow:0 4px 6px rgba(0,0,0,0.3);margin:0;padding:5px 0;z-index:99999;color:#ccc;font-size:12px;font-family: var(--f, monospace);}
 .ac::-webkit-scrollbar{width:8px;height:8px}
 .ac::-webkit-scrollbar-track{background:#FFF2}
@@ -886,6 +886,14 @@ export class MiniCodeEditor {
 
         /* scrolling sync */
         const sync = () => {
+            // Fix: If horizontal scrollbar is present, the textarea client height decreases, 
+            // increasing the max scrollTop. The background layers (pr, ln) don't have a scrollbar
+            // so their client height is larger, resulting in a smaller max scrollTop.
+            // We compensate by adding bottom padding to match the scrollbar height.
+            const sbH = ta.offsetHeight - ta.clientHeight
+            pr.style.paddingBottom = (8 + sbH) + 'px'
+            ln.style.paddingBottom = (8 + sbH) + 'px'
+
             pr.scrollLeft = ta.scrollLeft
             pr.scrollTop = ta.scrollTop
             ln.scrollTop = ta.scrollTop
