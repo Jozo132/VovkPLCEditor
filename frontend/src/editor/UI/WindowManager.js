@@ -1465,12 +1465,21 @@ export default class WindowManager {
             this.#editor.project.compiledSize = result.size
 
             if (!suppressInfo) {
-                const MAX_PROGRAM_SIZE = 1024 // 1KB limit for now
+                // Determine capacity: Device Info -> Project Info -> 32KB default
+                let capacity = 128
+                if (this.#editor.device_manager?.deviceInfo?.program) {
+                    capacity = Number(this.#editor.device_manager.deviceInfo.program) || capacity
+                } else if (this.#editor.project?.info?.capacity) {
+                    capacity = Number(this.#editor.project.info.capacity) || capacity
+                }
+
+                const MAX_PROGRAM_SIZE = capacity
                 const percent = +((result.size / MAX_PROGRAM_SIZE) * 100).toFixed(1)
                 const total_bars = 16
                 const filled_bars = Math.round((Math.min(100, percent) / 100) * total_bars)
                 const empty_bars = total_bars - filled_bars
                 const bar = '[' + '='.repeat(filled_bars) + ' '.repeat(empty_bars) + ']'
+
 
                 // Calculate Checksum
                 let checksumMsg = ''
@@ -1495,7 +1504,8 @@ export default class WindowManager {
                 }
 
                 this.logToConsole(`Compilation finished in ${(endTime - startTime).toFixed(2)}ms${checksumMsg}`, 'success')
-                this.logToConsole(`Used ${result.size} bytes (${percent}%).`, 'info')
+                this.logToConsole(`Used ${result.size} / ${MAX_PROGRAM_SIZE} bytes.`, 'info')
+                this.logToConsole(`${bar} ${percent}%`, 'info')
                 if (hexPreview) {
                     this.logToConsole(hexPreview, 'info')
                 }
@@ -1527,7 +1537,15 @@ export default class WindowManager {
         const compiledBytecode = this.#editor.project.compiledBytecode
         const compiledSize = this.#editor.project.compiledSize
 
-        const MAX_PROGRAM_SIZE = 1024
+        // Determine capacity: Device Info -> Project Info -> 32KB default
+        let capacity = 128
+        if (this.#editor.device_manager.deviceInfo?.program) {
+            capacity = Number(this.#editor.device_manager.deviceInfo.program) || capacity
+        } else if (this.#editor.project?.info?.capacity) {
+            capacity = Number(this.#editor.project.info.capacity) || capacity
+        }
+
+        const MAX_PROGRAM_SIZE = capacity
         if (compiledSize > MAX_PROGRAM_SIZE) {
             this.logToConsole(`Program too large! ${compiledSize} > ${MAX_PROGRAM_SIZE} bytes.`, 'error')
             this.logToConsole('Upload aborted.', 'error')
