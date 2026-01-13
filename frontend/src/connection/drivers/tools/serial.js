@@ -205,8 +205,10 @@ export default class SerialCLASS {
                 for (let i = 0; i < end; i++) {
                     const slice = this._readBuffer.slice(i, i + searchLength);
                     if (slice.every((value, index) => value === searchBytes[index])) {
-                        this._readBuffer.splice(0, i + searchLength);
-                        return new TextDecoder().decode(new Uint8Array(buffer));
+                        const preMatch = this._readBuffer.splice(0, i);
+                        this._readBuffer.splice(0, searchLength);
+                        const result = new Uint8Array([...buffer, ...preMatch]);
+                        return new TextDecoder().decode(result);
                     }
                 }
             }

@@ -71,10 +71,10 @@ export class MiniCodeEditor {
 .mce-hover-highlight { position: absolute; pointer-events: none; z-index: 4; background: rgba(216, 90, 112, 0.3); border-radius: 2px; }
 .mce-link-highlight { position: absolute; pointer-events: none; z-index: 4; height: 2px; background: #4daafc; border-radius: 1px; opacity: 0.9; }
 .mce-selection-highlight { position: absolute; pointer-events: none; z-index: 3; background: rgba(76, 141, 255, 0.28); border-radius: 2px; }
-.mce-preview-pill { position:absolute; display:inline-flex; align-items:center; justify-content:center; min-height:14px; padding:0 8px; border-radius:6px; background:#464646; color:#fff; border:1px solid #464646; font-size:13px; line-height:1; font-weight:600; white-space:nowrap; pointer-events:auto; cursor:pointer; z-index:6; box-shadow:0 1px 2px rgba(0,0,0,0.45); transform: translateY(-1px); outline: none; }
-.mce-preview-pill:hover, .mce-preview-pill:focus { filter: brightness(1.2); border-color: #007acc; }
+.mce-preview-pill { position:absolute; display:inline-flex; align-items:center; justify-content:center; min-height:14px; padding:0 8px; border-radius:6px; background:#464646; color:#fff; border:1px solid #464646; font-size:13px; line-height:1; font-weight:600; white-space:nowrap; pointer-events:auto; cursor:pointer; z-index:6; box-shadow:0 1px 2px rgba(0,0,0,0.45); transform: translateY(-1px); outline: none; transition: left 0.05s linear, top 0.05s linear; }
+.mce-preview-pill:hover { filter: brightness(1.2); border-color: #007acc; }
+.mce-preview-pill:focus { border-color: #007acc; box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.5); z-index: 20; outline: none; }
 .mce-preview-pill.on { background:#3a3a3a; color:#1fba5f; border-color:#1fba5f; }
-.mce-preview-pill.on:focus { border-color: #fff; }
 .mce-preview-pill.off { background:#3a3a3a; color:rgba(200, 200, 200, 0.5); border-color:#555; }
 .mce-preview-pill.bit { min-width:34px; }
 .mce-marker:hover::after {
@@ -896,6 +896,7 @@ export class MiniCodeEditor {
         }
         const handleScroll = () => {
             sync()
+            blurPills()
             if (typeof o.onScroll === 'function') {
                 o.onScroll({ top: ta.scrollTop, left: ta.scrollLeft })
             }
@@ -1033,109 +1034,177 @@ export class MiniCodeEditor {
         let live = o.liveProvider || (() => undefined)
         let previewEntriesProvider = typeof o.previewEntriesProvider === 'function' ? o.previewEntriesProvider : null
         let previewValueProvider = typeof o.previewValueProvider === 'function' ? o.previewValueProvider : null
-        const previewPills = []
+        
+        /** @type {Map<string, {el: HTMLElement, x: number, y: number, text: string, cls: string}>} */
+        const activePills = new Map()
+
         const clearPreviewPills = () => {
-            previewPills.forEach(p => p.remove())
-            previewPills.length = 0
+             // Logic moved to renderPreviewPills diffing
+             // But if we need to force clear:
+             activePills.forEach(({el}) => el.remove())
+             activePills.clear()
         }
+        
+        const blurPills = () => {
+             const active = document.activeElement
+             if (active && active.classList.contains('mce-preview-pill')) {
+                 active.blur()
+             }
+        }
+
         const getPreviewEntries = () => {
             if (previewEntriesProvider) return previewEntriesProvider() || []
             return []
         }
-        let focusedEntryId = null
+        
         const renderPreviewPills = () => {
-            // Capture focus state before clearing
-            const activeEl = document.activeElement
-            if (activeEl && activeEl.classList.contains('mce-preview-pill')) {
-                 if (activeEl.dataset.entryId) focusedEntryId = activeEl.dataset.entryId
+            if (!previewValueProvider) {
+                if (activePills.size > 0) clearPreviewPills()
+                return
+            }
+            const entries = getPreviewEntries()
+            if (!entries || !entries.length) {
+                if (activePills.size > 0) clearPreviewPills()
+                return
             }
 
-            clearPreviewPills()
-            if (!previewValueProvider) return
-            const entries = getPreviewEntries()
-            if (!entries || !entries.length) return
             const visibleTop = ta.scrollTop
             const visibleBottom = ta.scrollTop + ta.clientHeight
+            
+            const touchedIds = new Set()
+
             entries.forEach(entry => {
                 if (!entry || typeof entry.start !== 'number') return
+                
                 const value = previewValueProvider(entry)
                 if (value === null || typeof value === 'undefined' || value === '') return
+                
                 const endIndex = typeof entry.end === 'number' ? entry.end : entry.start
                 const p = caretPx(endIndex)
+                
+                // Visibility check
                 if (p.y + p.h < visibleTop || p.y > visibleBottom) return
-                const pill = document.createElement('span')
-                pill.className = 'mce-preview-pill'
-                
-                // Keyboard support
-                pill.tabIndex = 0
-                const entryId = typeof entry.id !== 'undefined' ? String(entry.id) : String(entry.start)
-                pill.dataset.entryId = entryId
-                
-                // Restore focus
-                if (focusedEntryId === entryId) {
-                    // We must wait for DOM insertion? No, we append later.
-                    // But we can focus after append.
-                    setTimeout(() => {
-                        if (document.body.contains(pill)) pill.focus()
-                    }, 0)
-                }
 
-                pill.addEventListener('keydown', e => {
-                    const key = e.key
-                    if (options.onPreviewAction) {
-                        if (key === '1') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'set') }
-                        else if (key === '0') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'reset') }
-                        else if (key === ' ' || key === 'Enter') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'toggle') }
-                    }
-                })
-                
+                const entryId = typeof entry.id !== 'undefined' ? String(entry.id) : String(entry.start)
+                touchedIds.add(entryId)
+
+                // Resolve content
                 let text = ''
+                let clsString = ''
                 if (typeof value === 'object' && value !== null) {
                     text = value.text ?? ''
                     if (value.className) {
                         const classes = Array.isArray(value.className)
                             ? value.className
                             : String(value.className).split(/\s+/).filter(Boolean)
-                        classes.forEach(cls => pill.classList.add(cls))
+                        clsString = classes.join(' ')
                     }
                 } else {
                     text = String(value)
                 }
+
                 if (!text) return
-                pill.textContent = text
-                pill.style.left = `${p.x + 8}px`
-                pill.style.top = `${p.y}px`
-                if (options.onPreviewClick || options.onPreviewContextMenu || options.onPreviewAction) {
-                    pill.addEventListener('mousedown', e => {
-                        e.stopPropagation() // Prevent editor selection logic
+
+                let pillData = activePills.get(entryId)
+                let pill
+
+                if (!pillData) {
+                    // Create New
+                    pill = document.createElement('span')
+                    pill.className = 'mce-preview-pill'
+                    pill.tabIndex = 0
+                    pill.dataset.entryId = entryId
+                    
+                    // Event Listeners
+                    pill.addEventListener('keydown', e => {
+                        const key = e.key
+                        if (options.onPreviewAction) {
+                            if (key === '1') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'set') }
+                            else if (key === '0') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'reset') }
+                            else if (key === ' ' || key === 'Enter') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'toggle') }
+                            else if (key === 'Escape') { e.preventDefault(); e.stopPropagation(); pill.blur(); }
+                        }
                     })
-                    if (options.onPreviewClick) {
-                        pill.addEventListener('click', e => {
-                            // Don't prevent default, allow focus!
-                            e.stopPropagation()
-                            if (options.onPreviewClick) {
+
+                    if (options.onPreviewClick || options.onPreviewContextMenu || options.onPreviewAction) {
+                        pill.addEventListener('mousedown', e => e.stopPropagation()) // Prevent caret move
+                        
+                        if (options.onPreviewClick) {
+                            pill.addEventListener('click', e => {
+                                e.stopPropagation()
                                 options.onPreviewClick(entry, e)
-                            }
-                        })
+                            })
+                        }
+                        if (options.onPreviewContextMenu) {
+                            pill.addEventListener('contextmenu', e => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                pill.focus()
+                                options.onPreviewContextMenu(entry, e)
+                            })
+                        }
                     }
-                    if (options.onPreviewContextMenu) {
-                        pill.addEventListener('contextmenu', e => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            pill.focus() // Ensure focus on right click too
-                            focusedEntryId = entryId // Update tracker
-                            options.onPreviewContextMenu(entry, e)
-                        })
-                    }
+
+                    ov.appendChild(pill)
+                    pillData = { el: pill, x: -1, y: -1, text: '', cls: '' }
+                    activePills.set(entryId, pillData)
+                } else {
+                    pill = pillData.el
                 }
-                ov.appendChild(pill)
-                previewPills.push(pill)
+
+                // Update Diff
+                const x = p.x + 8
+                const y = p.y
+                
+                if (pillData.text !== text) {
+                    pill.textContent = text
+                    pillData.text = text
+                }
+                
+                if (pillData.x !== x || pillData.y !== y) {
+                    pill.style.left = `${x}px`
+                    pill.style.top = `${y}px`
+                    pillData.x = x
+                    pillData.y = y
+                }
+
+                if (pillData.cls !== clsString) {
+                    pill.className = 'mce-preview-pill ' + clsString
+                    pillData.cls = clsString
+                }
             })
+
+            // Cleanup unused
+            for (const [id, data] of activePills) {
+                if (!touchedIds.has(id)) {
+                    data.el.remove()
+                    activePills.delete(id)
+                }
+            }
         }
+        
+        // Global Deselect Listeners
+        const handleWindowClick = (e) => {
+            if (!document.contains(cd)) return // detached
+            const target = e.target
+            if (activePills.size > 0 && !target.closest('.mce-preview-pill')) {
+                 blurPills()
+            }
+        }
+        window.addEventListener('mousedown', handleWindowClick, true)
+        
+        // Cleanup hook
+        const originalCleanup = this._cleanup || (() => {})
+        this._cleanup = () => {
+            originalCleanup()
+            window.removeEventListener('mousedown', handleWindowClick, true)
+        }
+
         const overlay = () => {
             ov.querySelectorAll('.live').forEach(node => node.remove())
             renderPreviewPills()
             if (previewValueProvider) return
+            // ... legacy live provider support ...
             const re = /\b([A-Za-z_]\w*)\b/g
             let mx
             while ((mx = re.exec(ta.value))) {

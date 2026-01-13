@@ -74,10 +74,13 @@ export default class SerialConnection extends ConnectionBase {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.programUpload();
             await this.serial.write(command + "\n");
-            const available = await this._waitForReply();
-            if (!available) throw new Error("No response from device");
-            const line = this.serial.readLine() || "";
-            const hex = this.plc.parseHex(line);
+            
+            const line = await this._readResponseLine(12000);
+            let raw = line.trim();
+            if (raw.startsWith('OK')) {
+                raw = raw.substring(2).trim();
+            }
+            const hex = this.plc.parseHex(raw);
             const buffer = new Uint8Array(hex);
             return buffer;
         }, { label: 'uploadProgram', timeoutMs: 12000 });
@@ -87,9 +90,9 @@ export default class SerialConnection extends ConnectionBase {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.memoryRead(address, size);
             await this.serial.write(command + "\n");
-            const available = await this._waitForReply();
-            if (!available) throw new Error("No response from device");
-            const line = this.serial.readLine() || "";
+            
+            // Wait for the full line (including potential large data payload)
+            const line = await this._readResponseLine(8000);
             let raw = line.trim();
             if (raw.startsWith('OK')) {
                 raw = raw.substring(2).trim();
@@ -104,8 +107,7 @@ export default class SerialConnection extends ConnectionBase {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.memoryWrite(address, data);
             await this.serial.write(command + "\n");
-            const available = await this._waitForReply();
-            if (!available) throw new Error("No response from device");
+            await this._readResponseLine(); // Wait for OK
         }, { label: 'writeMemory' });
     }
 
@@ -113,8 +115,7 @@ export default class SerialConnection extends ConnectionBase {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.memoryFormat(address, size, value);
             await this.serial.write(command + "\n");
-            const available = await this._waitForReply();
-            if (!available) throw new Error("No response from device");
+            await this._readResponseLine(); // Wait for OK
         }, { label: 'formatMemory' });
     }
 
@@ -126,8 +127,7 @@ export default class SerialConnection extends ConnectionBase {
         return this._enqueueCommand(async () => {
              const command = this.plc.buildCommand.memoryWriteMask(address, data, mask);
              await this.serial.write(command + "\n");
-             const available = await this._waitForReply();
-             if (!available) throw new Error("No response from device"); // mask write doesn't return data, just OK
+             await this._readResponseLine(); // Wait for OK
         }, { label: 'writeMemoryAreaMasked' });
     }
 
@@ -220,9 +220,8 @@ export default class SerialConnection extends ConnectionBase {
             const cmdHex = this.plc.stringToHex(command)
             const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
             await this.serial.write(command + checksum.toUpperCase() + "\n")
-            const available = await this._waitForReply()
-            if (!available) throw new Error("No response from device")
-            const line = this.serial.readLine() || ""
+            
+            const line = await this._readResponseLine()
             let raw = line.trim()
             if (!raw) throw new Error("Invalid health response")
             if (!raw.startsWith('PH')) {
@@ -250,9 +249,8 @@ export default class SerialConnection extends ConnectionBase {
             const cmdHex = this.plc.stringToHex(command)
             const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
             await this.serial.write(command + checksum.toUpperCase() + "\n")
-            const available = await this._waitForReply()
-            if (!available) throw new Error("No response from device")
-            this.serial.readLine()
+            
+            await this._readResponseLine()
         }, { label: 'resetHealth' });
     }
 
@@ -263,6 +261,16 @@ export default class SerialConnection extends ConnectionBase {
             await new Promise(r => setTimeout(r, 10));
         }
         return true;
+    }
+
+    async _readResponseLine(timeout = 5000) {
+        const start = Date.now();
+        while (true) {
+            const line = this.serial.readLine();
+            if (line !== null) return line;
+            if (Date.now() - start > timeout) throw new Error("Timeout waiting for response line");
+            await new Promise(r => setTimeout(r, 10));
+        }
     }
 
     _enqueueCommand(handler, options = {}) {
