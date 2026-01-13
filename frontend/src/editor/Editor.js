@@ -410,6 +410,9 @@ export class VovkPLCEditor {
         this.workspace.addEventListener('mouseenter', markHover)
         this.workspace.addEventListener('mouseleave', clearHover)
         this.workspace.addEventListener('mousemove', markHover)
+        this.workspace.addEventListener('plc-device-update', () => {
+             this._updateOffsetsFromDevice()
+        })
 
         // this.runtime.initialize('/wasm/VovkPLC.wasm').then(() => {
         //     // Compile 'exit' to flush out any initial runtime logs
@@ -447,6 +450,7 @@ export class VovkPLCEditor {
             this.project_manager.ensureSystemSymbols(project)
         }
         this.project = project
+        this._updateOffsetsFromDevice()
         this._prepareProject(project)
         this.window_manager.openProject(project)
         // this.draw()
@@ -565,6 +569,56 @@ export class VovkPLCEditor {
             editorId: this._nav_id,
             windowId: id,
         })
+    }
+
+    _updateOffsetsFromDevice() {
+        if (!this.project || !this.device_manager?.connected || !this.device_manager.deviceInfo) return
+        const dInfo = this.device_manager.deviceInfo
+        const offsets = this.project.offsets = ensureOffsets(this.project.offsets || {})
+        
+        const map = {
+            control: ['control_offset', 'control_size'],
+            input: ['input_offset', 'input_size'],
+            output: ['output_offset', 'output_size'],
+            system: ['system_offset', 'system_size'],
+            marker: ['marker_offset', 'marker_size'],
+        }
+
+        let changed = false
+        for (const [key, [offKey, sizeKey]] of Object.entries(map)) {
+            if (typeof dInfo[offKey] === 'number' && typeof dInfo[sizeKey] === 'number') {
+                 if (offsets[key].offset !== dInfo[offKey] || offsets[key].size !== dInfo[sizeKey]) {
+                     offsets[key].offset = dInfo[offKey]
+                     offsets[key].size = dInfo[sizeKey]
+                     changed = true
+                 }
+            }
+        }
+        
+        if (changed) {
+            // Re-normalize just in case
+            this.project.offsets = normalizeOffsets(this.project.offsets)
+            
+            // Clear caches from all blocks to force re-evaluation with new offsets
+            if (this.project.files) {
+                this.project.files.forEach(file => {
+                    if (file.type === 'program' && Array.isArray(file.blocks)) {
+                        file.blocks.forEach(block => {
+                             delete block.cached_asm
+                             delete block.cached_checksum
+                             delete block.cached_symbols_checksum
+                             delete block.cached_symbol_refs
+                        })
+                    }
+                })
+            }
+
+            // Notify UI
+             if (this.window_manager?.windows?.get('setup')) {
+                 this.window_manager.windows.get('setup').render()
+             }
+        }
+        return changed
     }
 
     /** @param { PLC_Project } project */
