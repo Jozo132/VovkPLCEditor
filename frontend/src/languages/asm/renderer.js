@@ -45,6 +45,116 @@ export const ladderRenderer = {
     }
 
     if (!props.text_editor) {
+      const resolveEntryInfo = (entry) => {
+        let fullType = entry.type || 'byte'
+        let addressStr = ''
+        if (entry.name && editor.project && editor.project.symbols) {
+            const symbol = editor.project.symbols.find(s => s.name === entry.name)
+            if (symbol) {
+                fullType = symbol.type
+                const addr = symbol.address
+                const loc = symbol.location || 'marker'
+                const prefixMap = { input: 'X', output: 'Y', marker: 'M', system: 'S', control: 'C' }
+                const prefix = prefixMap[loc] || 'M'
+                if (fullType === 'bit') {
+                     const byte = Math.floor(addr)
+                     const bit = Math.round((addr - byte) * 10)
+                     addressStr = `${prefix}${byte}.${bit}`
+                } else {
+                     addressStr = `${prefix}${addr}`
+                }
+            } else {
+                addressStr = entry.name
+            }
+        } else {
+            addressStr = entry.name
+        }
+        return { addressStr, fullType }
+      }
+
+      const handlePreviewAction = async (entry, actionName) => {
+        if (!editor.window_manager?.isMonitoringActive?.()) return
+        const connection = editor.device_manager?.connection
+        if (!connection) return
+
+        const { addressStr, fullType } = resolveEntryInfo(entry)
+
+        const addrMatch = ADDRESS_REGEX.exec(addressStr)
+        if (!addrMatch) return
+
+        let prefix = '', byteStr = '', bitStr = ''
+        if (addrMatch[1]) {
+            prefix = addrMatch[1].toUpperCase()
+            byteStr = addrMatch[2]
+            bitStr = addrMatch[3]
+        } else {
+            byteStr = addrMatch[4]
+            bitStr = addrMatch[5] || null
+        }
+
+        const prefixLocationMap = { 'C': 'control', 'X': 'input', 'Y': 'output', 'M': 'marker', 'S': 'system' }
+        const location = prefixLocationMap[prefix] || 'marker'
+        const byteOffset = Number.parseInt(byteStr, 10)
+        const bitIndex = bitStr ? Number.parseInt(bitStr, 10) : null
+        const isBit = bitIndex !== null || fullType === 'bit'
+        
+        const offsets = editor.project.offsets || {}
+        const region = offsets[location] || { offset: 0 }
+        const absAddress = region.offset + byteOffset
+
+        try {
+            if (isBit && bitIndex !== null) {
+                const mask = 1 << bitIndex
+                let val = 0
+                if (actionName === 'set') val = mask
+                else if (actionName === 'reset') val = 0
+                else if (actionName === 'toggle') {
+                    const live = editor.live_symbol_values?.get(entry.name) || editor.live_symbol_values?.get(addressStr)
+                    const currentOn = live && (live.value === true || live.value === 1 || live.text === 'ON')
+                    val = currentOn ? 0 : mask
+                }
+                await connection.writeMemoryAreaMasked(absAddress, [val], [mask])
+            } else if (actionName === 'edit') {
+                 let currentVal = 0;
+                 const liveEntry = editor.live_symbol_values?.get(entry.name) || editor.live_symbol_values?.get(addressStr);
+                 if (liveEntry && typeof liveEntry.value !== 'undefined') currentVal = liveEntry.value;
+                 
+                 const input = prompt(`Enter new value for ${addressStr}:`, currentVal)
+                 if (input !== null) {
+                     let num = Number(input)
+                     if (!Number.isNaN(num)) {
+                         let size = 1
+                         if (['u16', 'i16', 'int', 'word'].includes(fullType)) size = 2
+                         if (['u32', 'i32', 'dint', 'real', 'float', 'dword'].includes(fullType)) size = 4
+                         if (['u64', 'i64', 'lword'].includes(fullType)) size = 8
+                         
+                         const data = []
+                         if (['real', 'float', 'f32'].includes(fullType)) {
+                              const floatArr = new Float32Array([num])
+                              const uintArr = new Uint8Array(floatArr.buffer)
+                              for(let i=0; i<size; i++) data.push(uintArr[i])
+                         } else if (['f64'].includes(fullType)) {
+                              const floatArr = new Float64Array([num])
+                              const uintArr = new Uint8Array(floatArr.buffer)
+                              for(let i=0; i<size; i++) data.push(uintArr[i])
+                         } else {
+                             let val = BigInt(Math.floor(num))
+                             for(let i=0; i<size; i++) {
+                                 data.push(Number(val & 0xFFn))
+                                 val >>= 8n
+                             }
+                         }
+                         await connection.writeMemoryArea(absAddress, data)
+                     }
+                 }
+            }
+            if (editor.window_manager.updateLiveMonitorState) editor.window_manager.updateLiveMonitorState()
+        } catch (e) {
+            console.error('Failed to write memory:', e)
+            alert('Failed to write: ' + e.message)
+        }
+      }
+
       const updateBlockSize = () => {
         const height = text_editor.getScrollHeight()
         const block_height = height > 800 ? 800 : height < 100 ? 100 : height // @ts-ignore
@@ -80,41 +190,14 @@ export const ladderRenderer = {
             }
             return { text: live.text, className }
         },
+        onPreviewAction: (entry, action) => handlePreviewAction(entry, action),
         onPreviewContextMenu: (entry, event) => {
             if (!editor.window_manager?.isMonitoringActive?.()) return
-            // Resolve Address and Type
-            let fullType = entry.type || 'byte'
-            let addressStr = ''
-            if (entry.name && editor.project && editor.project.symbols) {
-                // Try to find symbol
-                const symbol = editor.project.symbols.find(s => s.name === entry.name)
-                if (symbol) {
-                    fullType = symbol.type
-                    const addr = symbol.address
-                    const loc = symbol.location || 'marker'
-                    // Reconstruct address string or use location/addr directly
-                    // We need the prefix for the helper logic below, e.g. M10.0
-                    const prefixMap = { input: 'X', output: 'Y', marker: 'M', system: 'S', control: 'C' }
-                    const prefix = prefixMap[loc] || 'M'
-                    if (fullType === 'bit') {
-                         const byte = Math.floor(addr)
-                         const bit = Math.round((addr - byte) * 10)
-                         addressStr = `${prefix}${byte}.${bit}`
-                    } else {
-                         addressStr = `${prefix}${addr}`
-                    }
-                } else {
-                    // Fallback assume name is address if not symbol
-                    addressStr = entry.name
-                }
-            } else {
-                addressStr = entry.name
-            }
+            const { addressStr, fullType } = resolveEntryInfo(entry)
             
-            // Parse Address
             const addrMatch = ADDRESS_REGEX.exec(addressStr)
             if (!addrMatch) return
-
+            
             let prefix = '', byteStr = '', bitStr = ''
             if (addrMatch[1]) {
                 prefix = addrMatch[1].toUpperCase()
@@ -122,23 +205,13 @@ export const ladderRenderer = {
                 bitStr = addrMatch[3]
             } else {
                 byteStr = addrMatch[4]
-                bitStr = addrMatch[5] || null // null if not present
+                bitStr = addrMatch[5] || null
             }
-
-            const prefixLocationMap = { 'C': 'control', 'X': 'input', 'Y': 'output', 'M': 'marker', 'S': 'system' }
-            const location = prefixLocationMap[prefix] || 'marker'
             
-            const byteOffset = Number.parseInt(byteStr, 10)
             const bitIndex = bitStr ? Number.parseInt(bitStr, 10) : null
             const isBit = bitIndex !== null || fullType === 'bit'
-            
-            // Calculate absolute address
-            const offsets = editor.project.offsets || {}
-            const region = offsets[location] || { offset: 0 }
-            const absAddress = region.offset + byteOffset
 
             const items = []
-            
             const connection = editor.device_manager?.connection
             if (!connection) return
 
@@ -155,70 +228,7 @@ export const ladderRenderer = {
             const contextMenu = editor.context_manager
             if (contextMenu && typeof contextMenu.show === 'function') {
                 contextMenu.show(event, items, async (actionName) => {
-                    try {
-                        if (isBit && bitIndex !== null) {
-                            const mask = 1 << bitIndex
-                            let val = 0
-                            if (actionName === 'set') val = mask
-                            else if (actionName === 'reset') val = 0
-                            else if (actionName === 'toggle') {
-                                // We need current value to toggle. 
-                                // We can use the cached live value.
-                                const live = editor.live_symbol_values?.get(entry.name) || editor.live_symbol_values?.get(addressStr)
-                                const currentOn = live && (live.value === true || live.value === 1 || live.text === 'ON')
-                                val = currentOn ? 0 : mask
-                            }
-                            await connection.writeMemoryAreaMasked(absAddress, [val], [mask])
-                        } else if (actionName === 'edit') {
-                            // Find current value properly
-                            let currentVal = 0;
-                            const liveEntry = editor.live_symbol_values?.get(entry.name) || editor.live_symbol_values?.get(addressStr);
-                            if (liveEntry && typeof liveEntry.value !== 'undefined') {
-                                currentVal = liveEntry.value;
-                            }
-                            
-                            const input = prompt(`Enter new value for ${addressStr}:`, currentVal)
-                            if (input !== null) {
-                                let num = Number(input)
-                                if (!Number.isNaN(num)) {
-                                    // Determine size based on type (byte=1, int=2, etc)
-                                    // fallback to 1 byte if unknown
-                                    let size = 1
-                                    if (['u16', 'i16', 'int', 'word'].includes(fullType)) size = 2
-                                    if (['u32', 'i32', 'dint', 'real', 'float', 'dword'].includes(fullType)) size = 4
-                                    if (['u64', 'i64', 'lword'].includes(fullType)) size = 8
-                                    
-                                    // Prepare data bytes (Little Endian)
-                                    const data = []
-                                    if (['real', 'float', 'f32'].includes(fullType)) {
-                                         const floatArr = new Float32Array([num])
-                                         const uintArr = new Uint8Array(floatArr.buffer)
-                                         for(let i=0; i<size; i++) data.push(uintArr[i])
-                                    } else if (['f64'].includes(fullType)) {
-                                         const floatArr = new Float64Array([num])
-                                         const uintArr = new Uint8Array(floatArr.buffer)
-                                         for(let i=0; i<size; i++) data.push(uintArr[i])
-                                    } else {
-                                        // Integer
-                                        let val = BigInt(Math.floor(num))
-                                        for(let i=0; i<size; i++) {
-                                            data.push(Number(val & 0xFFn))
-                                            val >>= 8n
-                                        }
-                                    }
-                                    
-                                    await connection.writeMemoryArea(absAddress, data)
-                                }
-                            }
-                        }
-                        
-                        // Refresh immediately if possible
-                        if (editor.window_manager.updateLiveMonitorState) editor.window_manager.updateLiveMonitorState()
-                        
-                    } catch (e) {
-                        console.error('Failed to write memory:', e)
-                        alert('Failed to write: ' + e.message)
-                    }
+                     await handlePreviewAction(entry, actionName)
                 })
             }
         },

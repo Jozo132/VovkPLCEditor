@@ -71,9 +71,10 @@ export class MiniCodeEditor {
 .mce-hover-highlight { position: absolute; pointer-events: none; z-index: 4; background: rgba(216, 90, 112, 0.3); border-radius: 2px; }
 .mce-link-highlight { position: absolute; pointer-events: none; z-index: 4; height: 2px; background: #4daafc; border-radius: 1px; opacity: 0.9; }
 .mce-selection-highlight { position: absolute; pointer-events: none; z-index: 3; background: rgba(76, 141, 255, 0.28); border-radius: 2px; }
-.mce-preview-pill { position:absolute; display:inline-flex; align-items:center; justify-content:center; min-height:14px; padding:0 8px; border-radius:6px; background:#464646; color:#fff; border:1px solid #464646; font-size:13px; line-height:1; font-weight:600; white-space:nowrap; pointer-events:auto; cursor:pointer; z-index:6; box-shadow:0 1px 2px rgba(0,0,0,0.45); transform: translateY(-1px); }
-.mce-preview-pill:hover { filter: brightness(1.2); }
+.mce-preview-pill { position:absolute; display:inline-flex; align-items:center; justify-content:center; min-height:14px; padding:0 8px; border-radius:6px; background:#464646; color:#fff; border:1px solid #464646; font-size:13px; line-height:1; font-weight:600; white-space:nowrap; pointer-events:auto; cursor:pointer; z-index:6; box-shadow:0 1px 2px rgba(0,0,0,0.45); transform: translateY(-1px); outline: none; }
+.mce-preview-pill:hover, .mce-preview-pill:focus { filter: brightness(1.2); border-color: #007acc; }
 .mce-preview-pill.on { background:#3a3a3a; color:#1fba5f; border-color:#1fba5f; }
+.mce-preview-pill.on:focus { border-color: #fff; }
 .mce-preview-pill.off { background:#3a3a3a; color:rgba(200, 200, 200, 0.5); border-color:#555; }
 .mce-preview-pill.bit { min-width:34px; }
 .mce-marker:hover::after {
@@ -1041,7 +1042,14 @@ export class MiniCodeEditor {
             if (previewEntriesProvider) return previewEntriesProvider() || []
             return []
         }
+        let focusedEntryId = null
         const renderPreviewPills = () => {
+            // Capture focus state before clearing
+            const activeEl = document.activeElement
+            if (activeEl && activeEl.classList.contains('mce-preview-pill')) {
+                 if (activeEl.dataset.entryId) focusedEntryId = activeEl.dataset.entryId
+            }
+
             clearPreviewPills()
             if (!previewValueProvider) return
             const entries = getPreviewEntries()
@@ -1057,6 +1065,30 @@ export class MiniCodeEditor {
                 if (p.y + p.h < visibleTop || p.y > visibleBottom) return
                 const pill = document.createElement('span')
                 pill.className = 'mce-preview-pill'
+                
+                // Keyboard support
+                pill.tabIndex = 0
+                const entryId = typeof entry.id !== 'undefined' ? String(entry.id) : String(entry.start)
+                pill.dataset.entryId = entryId
+                
+                // Restore focus
+                if (focusedEntryId === entryId) {
+                    // We must wait for DOM insertion? No, we append later.
+                    // But we can focus after append.
+                    setTimeout(() => {
+                        if (document.body.contains(pill)) pill.focus()
+                    }, 0)
+                }
+
+                pill.addEventListener('keydown', e => {
+                    const key = e.key
+                    if (options.onPreviewAction) {
+                        if (key === '1') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'set') }
+                        else if (key === '0') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'reset') }
+                        else if (key === ' ' || key === 'Enter') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'toggle') }
+                    }
+                })
+                
                 let text = ''
                 if (typeof value === 'object' && value !== null) {
                     text = value.text ?? ''
@@ -1073,13 +1105,13 @@ export class MiniCodeEditor {
                 pill.textContent = text
                 pill.style.left = `${p.x + 8}px`
                 pill.style.top = `${p.y}px`
-                if (options.onPreviewClick || options.onPreviewContextMenu) {
+                if (options.onPreviewClick || options.onPreviewContextMenu || options.onPreviewAction) {
                     pill.addEventListener('mousedown', e => {
                         e.stopPropagation() // Prevent editor selection logic
                     })
                     if (options.onPreviewClick) {
                         pill.addEventListener('click', e => {
-                            e.preventDefault()
+                            // Don't prevent default, allow focus!
                             e.stopPropagation()
                             if (options.onPreviewClick) {
                                 options.onPreviewClick(entry, e)
@@ -1090,6 +1122,8 @@ export class MiniCodeEditor {
                         pill.addEventListener('contextmenu', e => {
                             e.preventDefault()
                             e.stopPropagation()
+                            pill.focus() // Ensure focus on right click too
+                            focusedEntryId = entryId // Update tracker
                             options.onPreviewContextMenu(entry, e)
                         })
                     }
