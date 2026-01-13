@@ -986,7 +986,7 @@ export class VovkPLCEditor {
                 if (!block.id) block.id = this._generateID(block.id)
 
                 const cached = this._ensureAsmCache(block, signature, map, details)
-                const header = includeHeaders ? `# block:${block.id}\n` : ''
+                const header = includeHeaders ? `// block:${block.id}\n` : ''
                 assembly += header
                 const codeStart = assembly.length
                 const code = cached || ''
