@@ -201,6 +201,49 @@ export default class Menu {
     this.#editor.workspace.addEventListener('click', this.#handle_click_event)
   }
 
+  /**
+   * Manually show context menu at event position
+   * @param {MouseEvent} event 
+   * @param {MenuElement[]} items 
+   * @param {(selected: string) => void} onClose 
+   */
+  show(event, items, onClose) {
+    if (!items || items.length === 0) return
+    
+    // Use the class internals
+    this.#items = items
+    this.#onClose = onClose || (() => {})
+    this.#path = []
+    
+    this.#drawList()
+    
+    const mouseX = event.clientX
+    const mouseY = event.clientY
+    
+    // Temporarily show to get dimensions
+    this.menu.style.visibility = 'hidden' 
+    this.menu.classList.remove('hidden')
+
+    const menu_width = this.menu.offsetWidth
+    const menu_height = this.menu.offsetHeight
+    const offset = 5
+    
+    const x = (mouseX + menu_width + offset > window.innerWidth) ? (mouseX - menu_width - offset) : (mouseX + offset)
+    const y = (mouseY + menu_height + offset > window.innerHeight) ? (mouseY - menu_height - offset) : (mouseY + offset)
+    
+    this.menu.style.left = x + 'px'
+    this.menu.style.top = y + 'px'
+    this.menu.style.visibility = ''
+    
+    this.position = { x, y, width: menu_width, height: menu_height }
+    this.open = true
+    
+    // We need to stop propagation so the document click listener doesn't immediately close it
+    // if the event bubbled there.
+    event.stopPropagation()
+    event.preventDefault()
+  }
+
   /** @type { (listeners: MenuListener | MenuListener[]) => void } */
   addListener(listeners) {
     if (Array.isArray(listeners)) this.#listeners.push(...listeners)

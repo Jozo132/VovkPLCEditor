@@ -118,6 +118,19 @@ export default class SerialConnection extends ConnectionBase {
         }, { label: 'formatMemory' });
     }
 
+    async writeMemoryArea(address, data) {
+        return this.writeMemory(address, data);
+    }
+
+    async writeMemoryAreaMasked(address, data, mask) {
+        return this._enqueueCommand(async () => {
+             const command = this.plc.buildCommand.memoryWriteMask(address, data, mask);
+             await this.serial.write(command + "\n");
+             const available = await this._waitForReply();
+             if (!available) throw new Error("No response from device"); // mask write doesn't return data, just OK
+        }, { label: 'writeMemoryAreaMasked' });
+    }
+
     async getInfo(initial = false) {
         return this._enqueueCommand(async () => {
             if (initial) {
@@ -218,13 +231,15 @@ export default class SerialConnection extends ConnectionBase {
             }
             if (raw.startsWith('PH')) raw = raw.slice(2)
             const hex = raw.replace(/[^0-9a-fA-F]/g, '')
-            if (hex.length < 32) throw new Error("Invalid health response")
-            const parseU32 = value => parseInt(value, 16) >>> 0
+            if (hex.length < 48) throw new Error("Invalid health response")
+            const parseU32 = (offset) => parseInt(hex.slice(offset, offset + 8), 16) >>> 0
             return {
-                last_cycle_time_us: parseU32(hex.slice(0, 8)),
-                max_cycle_time_us: parseU32(hex.slice(8, 16)),
-                ram_free: parseU32(hex.slice(16, 24)),
-                min_ram_free: parseU32(hex.slice(24, 32)),
+                last_cycle_time_us: parseU32(0),
+                min_cycle_time_us: parseU32(8),
+                max_cycle_time_us: parseU32(16),
+                ram_free: parseU32(24),
+                min_ram_free: parseU32(32),
+                max_ram_free: parseU32(40),
             }
         }, { label: 'getHealth' });
     }

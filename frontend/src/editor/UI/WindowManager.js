@@ -109,12 +109,17 @@ export default class WindowManager {
                                         <div class="plc-device-health-row">
                                             <span class="plc-device-health-label">Last</span>
                                             <span class="plc-device-health-value" data-field="cycle-last">-</span>
-                                            <span class="plc-device-health-value" data-field="ram-free">-</span>
+                                            <span class="plc-device-health-value" data-field="ram-last">-</span>
                                         </div>
                                         <div class="plc-device-health-row">
                                             <span class="plc-device-health-label">Min</span>
-                                            <span class="plc-device-health-value" data-field="cycle-max">-</span>
+                                            <span class="plc-device-health-value" data-field="cycle-min">-</span>
                                             <span class="plc-device-health-value" data-field="ram-min">-</span>
+                                        </div>
+                                        <div class="plc-device-health-row">
+                                            <span class="plc-device-health-label">Max</span>
+                                            <span class="plc-device-health-value" data-field="cycle-max">-</span>
+                                            <span class="plc-device-health-value" data-field="ram-max">-</span>
                                         </div>
                                     </div>
                                 </div>
@@ -876,11 +881,14 @@ export default class WindowManager {
 
         this.device_health_values = {
             cycleLast: device_health.querySelector('[data-field="cycle-last"]'),
+            cycleMin: device_health.querySelector('[data-field="cycle-min"]'),
             cycleMax: device_health.querySelector('[data-field="cycle-max"]'),
-            ramFree: device_health.querySelector('[data-field="ram-free"]'),
+            ramLast: device_health.querySelector('[data-field="ram-last"]'),
             ramMin: device_health.querySelector('[data-field="ram-min"]'),
+            ramMax: device_health.querySelector('[data-field="ram-max"]'),
         }
-        if (!this.device_health_values.cycleLast || !this.device_health_values.cycleMax || !this.device_health_values.ramFree || !this.device_health_values.ramMin) {
+        if (!this.device_health_values.cycleLast || !this.device_health_values.cycleMin || !this.device_health_values.cycleMax || 
+            !this.device_health_values.ramLast || !this.device_health_values.ramMin || !this.device_health_values.ramMax) {
             throw new Error('Device health value elements not found')
         }
         const device_health_reset = device_health.querySelector('.plc-device-health-reset')
@@ -1266,30 +1274,36 @@ export default class WindowManager {
 
     _renderDeviceHealth(health) {
         if (!this.device_health_values) return
-        const cycleLast = this.device_health_values.cycleLast
-        const cycleMax = this.device_health_values.cycleMax
-        const ramFree = this.device_health_values.ramFree
-        const ramMin = this.device_health_values.ramMin
-        if (!cycleLast || !cycleMax || !ramFree || !ramMin) return
+        const vals = this.device_health_values
+        if (!vals.cycleLast) return
+        
         const withUnit = (value, unit) => {
             const text = this._formatHealthNumber(value)
             return text === null ? '-' : `${text} ${unit}`
         }
+        const withMem = (value) => {
+            if (!Number.isFinite(value)) return '-'
+            if (value >= 1024 * 1024) return (value / (1024 * 1024)).toFixed(1) + ' MB'
+            if (value >= 1024) return (value / 1024).toFixed(1) + ' kB'
+            return Math.trunc(value) + ' B'
+        }
+
         if (!health) {
-            cycleLast.textContent = '-'
-            cycleMax.textContent = '-'
-            ramFree.textContent = '-'
-            ramMin.textContent = '-'
+            vals.cycleLast.textContent = '-'
+            vals.cycleMin.textContent = '-'
+            vals.cycleMax.textContent = '-'
+            vals.ramLast.textContent = '-'
+            vals.ramMin.textContent = '-'
+            vals.ramMax.textContent = '-'
             return
         }
-        const format = value => {
-            const text = this._formatHealthNumber(value)
-            return text === null ? '-' : `${text} B`
-        }
-        cycleLast.textContent = withUnit(health.last_cycle_time_us, 'us')
-        cycleMax.textContent = withUnit(health.max_cycle_time_us, 'us')
-        ramFree.textContent = format(health.ram_free)
-        ramMin.textContent = format(health.min_ram_free)
+        
+        vals.cycleLast.textContent = withUnit(health.last_cycle_time_us, 'us')
+        vals.cycleMin.textContent = withUnit(health.min_cycle_time_us, 'us')
+        vals.cycleMax.textContent = withUnit(health.max_cycle_time_us, 'us')
+        vals.ramLast.textContent = withMem(health.ram_free)
+        vals.ramMin.textContent = withMem(health.min_ram_free)
+        vals.ramMax.textContent = withMem(health.max_ram_free)
 
         if (this._last_known_health_dimmed) {
             Object.values(this.device_health_values).forEach(el => el.style.opacity = '0.5')
@@ -2117,6 +2131,19 @@ export default class WindowManager {
             }
             this.setHealthDimmed(false)
             this._pollDeviceHealth()
+            
+            // Refresh all editor values
+            if (editor.project && editor.project.files) {
+                editor.project.files.forEach(file => {
+                    if (file.blocks) {
+                        file.blocks.forEach(block => {
+                            if (block.props && block.props.text_editor && typeof block.props.text_editor.refreshLive === 'function') {
+                                block.props.text_editor.refreshLive()
+                            }
+                        })
+                    }
+                })
+            }
         } else {
              if (this.data_fetcher && this.data_fetcher.fetching) this.data_fetcher.stop()
              if (editor && typeof editor.setMonitoringDimmed === 'function') {

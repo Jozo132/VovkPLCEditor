@@ -118,6 +118,16 @@ export default class EditorUI {
         if (!this.monitor_button) return
         this.monitor_button.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
         this.monitor_button.classList.toggle('active', this.monitoringActive)
+        
+        // Notify blocks to update pills
+        if (this.program && this.program.blocks) {
+             this.program.blocks.forEach(block => {
+                 const editor = block.props?.text_editor
+                 if (editor && typeof editor.updateDecorations === 'function') {
+                     editor.updateDecorations()
+                 }
+             })
+        }
     }
 
     updateMonitoringAvailability(available = false) {
