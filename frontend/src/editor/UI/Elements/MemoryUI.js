@@ -404,7 +404,7 @@ export default class MemoryUI {
             return { ...base, virtual: false, bytesPerRow, totalRows, rowIndex: 0 }
         }
         const bytesPerRow = this._getBytesPerRow()
-        const maxSize = Math.min(128, base.size)
+        const maxSize = Math.min(1024, base.size)
         const lineHeight = this._getLineHeight()
         const scrollTop = this.outputWrap ? this.outputWrap.scrollTop : 0
         const rowIndex = Math.max(0, Math.floor(scrollTop / lineHeight))

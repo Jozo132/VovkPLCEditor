@@ -866,14 +866,112 @@ export class VovkPLCEditor {
         return refs
     }
 
-    _ensureBlockAddressRefs(block, offsets) {
+    _extractAsmTimerRefsFromCode(code, offsets, symbolDetails) {
+        const normalizedOffsets = offsets || ensureOffsets(this.project?.offsets || {})
+        const refs = []
+        if (!code) return refs
+
+        // Match timer instructions: ton/tof/tp storage preset
+        const timerRegex = /\b(?:u8\.)?(ton|tof|tp)\b\s+([A-Za-z_]\w*(?:\.\d+)?|[CXYMS]\d+(?:\.\d+)?)\s+(#\d+|[A-Za-z_]\w*(?:\.\d+)?|[CXYMS]\d+(?:\.\d+)?)\b/gi
+        
+        let match = null
+        while ((match = timerRegex.exec(code))) {
+            const instr = match[1].toLowerCase()
+            const storageToken = match[2]
+            const presetToken = match[3]
+            
+            const storageStart = match.index + match[0].indexOf(storageToken)
+            const presetStart = match.index + match[0].lastIndexOf(presetToken)
+            
+            let storageAddr = -1
+            
+            const addrMatch = /^(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(storageToken)
+            if (addrMatch) {
+                let prefix = addrMatch[1] ? addrMatch[1].toUpperCase() : ''
+                let byte = parseInt(addrMatch[2] || addrMatch[4], 10)
+                let loc = prefix ? ({C:'control', X:'input', Y:'output', M:'marker', S:'system'}[prefix] || 'marker') : 'memory'
+                let base = loc === 'memory' ? 0 : (normalizedOffsets[loc]?.offset || 0)
+                storageAddr = base + byte
+            } else if (symbolDetails && symbolDetails.has(storageToken)) {
+                const sym = symbolDetails.get(storageToken)
+                storageAddr = sym.absoluteAddress
+            }
+            
+            if (storageAddr !== -1) {
+                const storageRef = {
+                    name: `${storageToken}@t${storageStart}`,
+                    originalName: storageToken,
+                    type: 'u32', 
+                    absoluteAddress: storageAddr,
+                    start: storageStart,
+                    end: storageStart + storageToken.length,
+                    isTimerStorage: true,
+                    timerType: instr,
+                    storageAddress: storageAddr
+                }
+                if (presetToken.startsWith('#')) {
+                    storageRef.presetValue = parseInt(presetToken.substring(1), 10)
+                } else {
+                    storageRef.presetName = presetToken
+                }
+                refs.push(storageRef)
+            }
+            
+            if (presetToken.startsWith('#')) {
+                const val = parseInt(presetToken.substring(1), 10)
+                refs.push({
+                    name: `${presetToken}@t${presetStart}`,
+                    originalName: presetToken,
+                    type: 'u32',
+                    value: val,
+                    start: presetStart,
+                    end: presetStart + presetToken.length,
+                    isTimerPT: true,
+                    storageAddress: storageAddr,
+                    presetValue: val
+                })
+            } else {
+                 let presetAddr = -1
+                 const pAddrMatch = /^(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(presetToken)
+                 if (pAddrMatch) {
+                    let prefix = pAddrMatch[1] ? pAddrMatch[1].toUpperCase() : ''
+                    let byte = parseInt(pAddrMatch[2] || pAddrMatch[4], 10)
+                    let loc = prefix ? ({C:'control', X:'input', Y:'output', M:'marker', S:'system'}[prefix] || 'marker') : 'memory'
+                    let base = loc === 'memory' ? 0 : (normalizedOffsets[loc]?.offset || 0)
+                    presetAddr = base + byte
+                 } else if (symbolDetails && symbolDetails.has(presetToken)) {
+                    const sym = symbolDetails.get(presetToken)
+                    presetAddr = sym.absoluteAddress
+                 }
+                 
+                 if (presetAddr !== -1) {
+                     refs.push({
+                        name: `${presetToken}@t${presetStart}`,
+                        originalName: presetToken,
+                        type: 'u32',
+                        absoluteAddress: presetAddr,
+                        start: presetStart,
+                        end: presetStart + presetToken.length,
+                        isTimerPT: true,
+                        storageAddress: storageAddr,
+                        isPresetAddress: true
+                     })
+                 }
+            }
+        }
+        return refs
+    }
+
+    _ensureBlockAddressRefs(block, offsets, symbolDetails) {
         if (!block) return
         const normalizedOffsets = offsets || ensureOffsets(this.project?.offsets || {})
         block.cached_address_refs = this._extractAsmAddressRefsFromCode(block.code || '', normalizedOffsets)
+        block.cached_timer_refs = this._extractAsmTimerRefsFromCode(block.code || '', normalizedOffsets, symbolDetails)
     }
 
     _getAsmAddressRefsForLive(offsets) {
         const normalizedOffsets = offsets || ensureOffsets(this.project?.offsets || {})
+        const { details: symbolDetails } = this._buildSymbolCache()
         const refs = []
         const seen = new Set()
         const programs = (this.project?.files || []).filter(file => file?.type === 'program')
@@ -881,8 +979,8 @@ export class VovkPLCEditor {
             const blocks = program.blocks || []
             blocks.forEach(block => {
                 if (!block || block.type !== 'asm') return
-                this._ensureBlockAddressRefs(block, normalizedOffsets)
-                const blockRefs = block.cached_address_refs || []
+                this._ensureBlockAddressRefs(block, normalizedOffsets, symbolDetails)
+                const blockRefs = [...(block.cached_address_refs || []), ...(block.cached_timer_refs || [])]
                 blockRefs.forEach(ref => {
                     if (!ref || !ref.name) return
                     if (seen.has(ref.name)) return
@@ -994,7 +1092,7 @@ export class VovkPLCEditor {
             if (!block.cached_symbol_refs) {
                 block.cached_symbol_refs = this._buildSymbolRefs(code, symbolDetails)
             }
-            this._ensureBlockAddressRefs(block)
+            this._ensureBlockAddressRefs(block, null, symbolDetails)
             return block.cached_asm
         }
         const replaced = this._replaceSymbolsOnce(code, symbolMap)
@@ -1003,7 +1101,7 @@ export class VovkPLCEditor {
         block.cached_symbols_checksum = symbolsSignature
         block.cached_asm_map = replaced.map
         block.cached_symbol_refs = this._buildSymbolRefs(code, symbolDetails)
-        this._ensureBlockAddressRefs(block)
+        this._ensureBlockAddressRefs(block, null, symbolDetails)
         return block.cached_asm
     }
 

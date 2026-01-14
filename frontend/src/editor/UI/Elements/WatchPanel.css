@@ -132,6 +132,12 @@
     background: #1e1e1e; /* Grey body */
 }
 
+.plc-device-watch-list {
+    display: flex;
+    flex-direction: column;
+    outline: none;
+}
+
 /* Scrollbar integration */
 .plc-device-watch-body::-webkit-scrollbar { width: 10px; }
 .plc-device-watch-body::-webkit-scrollbar-track { background: #1e1e1e; }
@@ -150,6 +156,7 @@
 }
 
 .plc-device-watch-row:hover { background: #2a2d2e; }
+.plc-device-watch-row.selected { background: #37373d; }
 .plc-device-watch-row.dragging { opacity: 0.5; background: #333; }
 .plc-device-watch-row.droptarget { border-top: 2px solid #007acc; }
 
@@ -176,4 +183,27 @@
 
 .plc-device-watch-list.monitoring-paused .plc-device-watch-value {
     opacity: 0.5;
-} 
+}
+
+.plc-device-watch-type-select {
+    background: transparent;
+    color: #6a9955; /* Variable/Comment color */
+    border: none;
+    font-size: 10px;
+    padding: 0;
+    cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    text-transform: uppercase;
+    font-family: inherit;
+    outline: none;
+}
+
+.plc-device-watch-type-select:hover {
+    color: #b5cea8;
+}
+
+.plc-device-watch-type-select option {
+    background: #1e1e1e;
+    color: #ddd;
+}

@@ -977,16 +977,18 @@ export default class WindowManager {
         
         // Load Watch Items
         try {
-            const savedWatch = localStorage.getItem('vovk_plc_watch')
-            if (savedWatch) {
-                const items = JSON.parse(savedWatch)
-                if (Array.isArray(items)) this.watch_panel.setEntries(items)
-            }
+            const items = editor.project?.watch || []
+            if (Array.isArray(items)) this.watch_panel.setEntries(items)
         } catch(e) { console.warn('Failed to load watch items', e) }
         
         // Save on change
         this.watch_panel.onListChange = (items) => {
-             localStorage.setItem('vovk_plc_watch', JSON.stringify(items))
+             if (editor.project) {
+                 editor.project.watch = items
+                 if (editor.project_manager?.forceSave) {
+                     editor.project_manager.forceSave()
+                 }
+             }
         }
 
 
@@ -2405,9 +2407,23 @@ export default class WindowManager {
         const typeSizes = {
             bit: 1,
             byte: 1,
+            u8: 1,
+            i8: 1,
             int: 2,
+            u16: 2,
+            i16: 2,
+            word: 2,
             dint: 4,
+            u32: 4,
+            i32: 4,
             real: 4,
+            float: 4,
+            f32: 4,
+            dword: 4,
+            u64: 8,
+            i64: 8,
+            f64: 8,
+            lword: 8,
         }
         const normalizeAddress = symbol => {
             // If absoluteAddress is present, use it directly (refs from code)
@@ -2493,9 +2509,10 @@ export default class WindowManager {
             }
             
             // Check end bound
-            const size = (type === 'bit' || type === 'byte') ? 1 : 
-                         (type === 'int') ? 2 : 
-                         (type === 'dint' || type === 'real') ? 4 : 1
+            const size = (['bit', 'byte', 'u8', 'i8'].includes(type) || type === 'bit' || type === 'byte') ? 1 : 
+                         (['int', 'u16', 'i16', 'word'].includes(type) || type === 'int') ? 2 : 
+                         (['dint', 'u32', 'i32', 'real', 'float', 'f32', 'dword'].includes(type) || type === 'dint' || type === 'real') ? 4 : 
+                         (['u64', 'i64', 'f64', 'lword'].includes(type)) ? 8 : 1
             
             if (offset + size > bytes.length) return
 
@@ -2504,23 +2521,46 @@ export default class WindowManager {
                 const bit = layout.bit || 0
                 value = (byteVal >> bit) & 1
                 text = value ? 'ON' : 'OFF'
-            } else if (type === 'byte') {
+            } else if (type === 'byte' || type === 'u8') {
                 value = bytes[offset]
                 text = String(value)
-            } else if (type === 'int') {
+            } else if (type === 'i8') {
+                value = view.getInt8(offset)
+                text = String(value)
+            } else if (type === 'int' || type === 'i16') {
                 value = view.getInt16(offset, true)
                 text = String(value)
-            } else if (type === 'dint') {
+            } else if (type === 'u16') {
+                value = view.getUint16(offset, true)
+                text = String(value)
+            } else if (type === 'dint' || type === 'i32') {
                 value = view.getInt32(offset, true)
                 text = String(value)
-            } else if (type === 'real') {
+            } else if (type === 'u32' || type === 'dword') {
+                value = view.getUint32(offset, true)
+                text = String(value)
+            } else if (type === 'real' || type === 'float' || type === 'f32') {
                 value = view.getFloat32(offset, true)
                 text = Number.isFinite(value) ? value.toFixed(3) : String(value)
+            } else if (type === 'f64') {
+                value = view.getFloat64(offset, true)
+                text = Number.isFinite(value) ? value.toFixed(3) : String(value)
+            } else if (type === 'u64' || type === 'i64' || type === 'lword') {
+                try {
+                    value = (type === 'u64' || type === 'lword') ? view.getBigUint64(offset, true) : view.getBigInt64(offset, true)
+                    text = String(value)
+                } catch(e) { /* fallback */ value = 0n; text = '0' }
             } else {
                 value = bytes[offset]
                 text = String(value)
             }
-            liveValues.set(symbol.name, {value, text, type})
+            liveValues.set(symbol.name, {
+                value, 
+                text, 
+                type, 
+                absoluteAddress: layout.absolute, 
+                timestamp: Date.now() 
+            })
         })
 
         editor.live_symbol_values = liveValues // Ensure reference

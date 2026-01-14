@@ -1,7 +1,22 @@
 import { ElementSynthesis, CSSimporter } from "../../../utils/tools.js"
+import { Popup } from "./components/popup.js"
 
 const importCSS = CSSimporter(import.meta.url)
 await importCSS('./WatchPanel.css')
+
+const WATCH_TYPES = {
+    'bit':   { size: 1, label: 'BIT' },
+    'byte':  { size: 1, label: 'BYTE' },
+    'u8':    { size: 1, label: 'U8' },
+    'i8':    { size: 1, label: 'I8' },
+    'int':   { size: 2, label: 'INT' },
+    'u16':   { size: 2, label: 'U16' },
+    'dint':  { size: 4, label: 'DINT' },
+    'u32':   { size: 4, label: 'U32' },
+    'real':  { size: 4, label: 'REAL' },
+    'f64':   { size: 8, label: 'F64' },
+    'hex':   { size: 1, label: 'HEX' },
+}
 
 export default class WatchPanel {
     active_device = 'simulation'
@@ -15,22 +30,26 @@ export default class WatchPanel {
         this.editor = editor
         this.parent = parent
         this.minimized = false
+        this.selectedIndex = -1
         this.render()
     }
 
-    /** @type { (entries: string[]) => void } */
+    /** @type { (entries: any[]) => void } */
     onListChange = null
 
-    setEntries(names) {
+    setEntries(items) {
         // Clear existing monitoring
         this.entries.forEach(e => this.stopMonitoring(e))
-        this.entries = names.map(name => ({ name, value: '-', type: '' }))
+        this.entries = items.map(item => {
+            if (typeof item === 'string') return { name: item, value: '-', type: '' }
+            return { name: item.name, type: item.type || '', value: '-' }
+        })
         this.entries.forEach(e => this.startMonitoring(e))
         this.renderList()
     }
 
     getEntries() {
-        return this.entries.map(e => e.name)
+        return this.entries.map(e => ({ name: e.name, type: e.type }))
     }
 
     _notifyChange() {
@@ -60,10 +79,11 @@ export default class WatchPanel {
                     </div>
                     <div class="plc-device-watch-body">
                         <div class="plc-device-watch-row plc-device-watch-row-head">
-                            <span style="flex:1">Name</span>
-                            <span style="flex:1">Value</span>
+                            <span style="flex:2">Name</span>
+                            <span style="flex:1">Type</span>
+                            <span style="flex:2; text-align: right; padding-right: 4px;">Value</span>
                         </div>
-                        <div class="plc-device-watch-list"></div>
+                        <div class="plc-device-watch-list" tabindex="0"></div>
                         <div class="plc-device-watch-empty">Add symbols to monitor their values. Right-click to remove.</div>
                     </div>
                 </div>
@@ -92,6 +112,14 @@ export default class WatchPanel {
 
         this.addBtn.addEventListener('click', () => this.onWatchAdd())
         
+        this.listEl.addEventListener('keydown', (e) => this.onListKeyDown(e))
+        this.listEl.addEventListener('focus', () => {
+             if (this.selectedIndex === -1 && this.entries.length > 0) {
+                 this.selectedIndex = 0
+                 this.updateSelectionVisuals()
+             }
+        })
+
         this.inputEl.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 if (this.suggestionsEl.style.display !== 'none' && this.activeSuggestionIndex >= 0) {
@@ -370,7 +398,19 @@ export default class WatchPanel {
             row.className = 'plc-device-watch-row'
             row.dataset.index = idx
             row.draggable = true // Enable dragging
+            if (this.selectedIndex === idx) row.classList.add('selected')
+
+            row.onclick = (e) => {
+                if (e.target.closest('.plc-device-watch-type-select')) return
+                this.selectedIndex = idx
+                this.updateSelectionVisuals()
+                this.listEl.focus()
+            }
             
+            row.ondblclick = () => {
+                this.handleAction('edit')
+            }
+
             // Drag Events
             row.addEventListener('dragstart', (e) => {
                 e.dataTransfer.effectAllowed = "move"
@@ -416,21 +456,182 @@ export default class WatchPanel {
             })
 
             const nameSpan = document.createElement('span')
-            nameSpan.style.flex = '1'
+            nameSpan.style.flex = '2'
             nameSpan.textContent = entry.name
             
+            const typeSelect = document.createElement('select')
+            typeSelect.className = 'plc-device-watch-type-select'
+            typeSelect.style.flex = '1'
+            
+            Object.keys(WATCH_TYPES).forEach(t => {
+                const opt = document.createElement('option')
+                opt.value = t
+                opt.textContent = WATCH_TYPES[t].label
+                if (t === entry.type) opt.selected = true
+                typeSelect.appendChild(opt)
+            })
+            typeSelect.onchange = () => {
+                entry.type = typeSelect.value
+                this.stopMonitoring(entry)
+                this.startMonitoring(entry)
+                this._notifyChange()
+            }
+
             const valueSpan = document.createElement('span')
             valueSpan.className = 'plc-device-watch-value'
-            valueSpan.style.flex = '1'
+            valueSpan.style.flex = '2'
             valueSpan.style.fontFamily = 'Consolas, monospace'
+            valueSpan.style.textAlign = 'right'
+            valueSpan.style.paddingRight = '4px'
             valueSpan.textContent = typeof entry.value !== 'undefined' ? entry.value : '-'
             entry.valueEl = valueSpan
             
-            row.append(nameSpan, valueSpan)
+            row.append(nameSpan, typeSelect, valueSpan)
             this.listEl.appendChild(row)
         })
         
         this.emptyEl.style.display = this.entries.length ? 'none' : 'block'
+    }
+
+    updateSelectionVisuals() {
+        if (!this.listEl) return
+        const rows = this.listEl.querySelectorAll('.plc-device-watch-row')
+        rows.forEach((row, idx) => {
+            if (idx === this.selectedIndex) row.classList.add('selected')
+            else row.classList.remove('selected')
+        })
+    }
+
+    onListKeyDown(e) {
+        if (this.selectedIndex === -1 && this.entries.length > 0) {
+            this.selectedIndex = 0
+            this.updateSelectionVisuals()
+            return
+        }
+
+        const entry = this.entries[this.selectedIndex]
+        if (!entry) return
+
+        const key = e.key
+        const isBit = entry.type === 'bit'
+
+        if (key === 'ArrowDown') {
+            e.preventDefault()
+            this.selectedIndex = Math.min(this.selectedIndex + 1, this.entries.length - 1)
+            this.updateSelectionVisuals()
+        } else if (key === 'ArrowUp') {
+            e.preventDefault()
+            this.selectedIndex = Math.max(this.selectedIndex - 1, 0)
+            this.updateSelectionVisuals()
+        } else if (key === 'Delete' || (key === 'Backspace' && e.ctrlKey)) {
+            e.preventDefault()
+            this.handleAction('remove')
+        } else if (key === 'f' && e.ctrlKey) {
+            e.preventDefault()
+            this.inputEl.focus()
+        } else if (key === 'F2') {
+            e.preventDefault()
+            this.enterEditMode(this.selectedIndex)
+        } else {
+            let action = null
+            if (isBit) {
+                if (key === '1') action = 'set'
+                else if (key === '0') action = 'reset'
+                else if (key === 'Enter' || key === ' ') action = 'toggle'
+            } else {
+                if (key === 'Enter' || key === ' ') action = 'edit'
+            }
+
+            if (action) {
+                e.preventDefault()
+                this.handleAction(action)
+            }
+        }
+    }
+
+    async handleAction(action) {
+        if (this.selectedIndex === -1) return
+        const entry = this.entries[this.selectedIndex]
+        if (!entry) return
+
+        if (action === 'remove') {
+            this.stopMonitoring(entry)
+            this.entries.splice(this.selectedIndex, 1)
+            this.selectedIndex = Math.min(this.selectedIndex, this.entries.length - 1)
+            this._notifyChange()
+            this.renderList()
+            return
+        }
+
+        if (action === 'edit' || action === 'set' || action === 'reset' || action === 'toggle') {
+            if (!this.editor.window_manager?.isMonitoringActive?.()) return
+            const connection = this.editor.device_manager?.connection
+            if (!connection) return
+
+            const resolved = entry.resolved
+            if (!resolved) return
+
+            const isBit = entry.type === 'bit'
+            const absAddress = resolved.address
+
+            try {
+                if (isBit) {
+                    const bitIndex = resolved.bit
+                    const mask = bitIndex !== null ? (1 << bitIndex) : 1
+                    let val = 0
+                    if (action === 'set') val = mask
+                    else if (action === 'reset') val = 0
+                    else if (action === 'toggle' || action === 'edit') {
+                        const isOn = entry.value === 'ON'
+                        val = isOn ? 0 : mask
+                    }
+                    await connection.writeMemoryAreaMasked(absAddress, [val], [mask])
+                } else if (action === 'edit') {
+                    const currentVal = entry.value || '0'
+                    const formResult = await Popup.form({
+                        title: `Edit ${entry.name}`,
+                        description: `Enter new value for ${entry.name} (${entry.type})`,
+                        inputs: [
+                            { type: 'text', name: 'value', label: 'Value', value: String(currentVal) }
+                        ],
+                        buttons: [
+                            { text: 'Write', value: 'confirm' },
+                            { text: 'Cancel', value: 'cancel' }
+                        ]
+                    })
+
+                    if (formResult && typeof formResult.value !== 'undefined') {
+                        const input = String(formResult.value)
+                        let num = Number(input)
+                        if (!Number.isNaN(num)) {
+                            const size = WATCH_TYPES[entry.type]?.size || 1
+                            const type = entry.type
+                            const data = []
+                            
+                            if (type === 'real' || type === 'float' || type === 'f32') {
+                                const floatArr = new Float32Array([num])
+                                const uintArr = new Uint8Array(floatArr.buffer)
+                                for (let i = 0; i < size; i++) data.push(uintArr[i])
+                            } else if (type === 'f64') {
+                                const floatArr = new Float64Array([num])
+                                const uintArr = new Uint8Array(floatArr.buffer)
+                                for (let i = 0; i < size; i++) data.push(uintArr[i])
+                            } else {
+                                let val = BigInt(Math.floor(num))
+                                for (let i = 0; i < size; i++) {
+                                    data.push(Number(val & 0xFFn))
+                                    val >>= 8n
+                                }
+                            }
+                            await connection.writeMemoryArea(absAddress, data)
+                        }
+                    }
+                }
+                if (this.editor.window_manager.updateLiveMonitorState) this.editor.window_manager.updateLiveMonitorState()
+            } catch (e) {
+                console.error('Failed to write memory:', e)
+            }
+        }
     }
 
     updateValues() {
@@ -450,13 +651,14 @@ export default class WatchPanel {
         const input = document.createElement('input')
         input.type = 'text'
         input.value = entry.name
-        input.style.flex = '1'
+        input.style.flex = '2'
         input.style.border = 'none'
         input.style.outline = '1px solid #007fd4'
         input.style.background = '#252526' // editor background
         input.style.color = 'inherit'
         input.style.fontFamily = 'inherit'
         input.style.fontSize = 'inherit'
+        input.style.padding = '0 4px'
         input.onclick = (e) => e.stopPropagation() // Prevent row click issues
         
         // Replace span
@@ -502,7 +704,17 @@ export default class WatchPanel {
         const resolved = this.editor.data_fetcher.resolve(entry.name)
         if (!resolved) return
         
-        entry.resolved = resolved
+        // If entry.type is not set, initialize it from resolved type
+        if (!entry.type) {
+            entry.type = resolved.type || 'byte'
+            if (entry.type === 'bool') entry.type = 'bit'
+            if (!WATCH_TYPES[entry.type]) entry.type = 'byte'
+        }
+
+        const typeInfo = WATCH_TYPES[entry.type]
+        const size = typeInfo ? typeInfo.size : (resolved.size || 1)
+        
+        entry.resolved = { ...resolved, type: entry.type, size }
         entry.update = (data) => {
             // Format value
             let val = '-'
@@ -513,26 +725,36 @@ export default class WatchPanel {
             const LIVE_COLOR_OFF = 'rgba(200, 200, 200, 0.5)'
             let color = ''
 
-            if (resolved.type === 'bit' || resolved.type === 'bool') {
+            const type = entry.type
+
+            if (type === 'bit') {
                  if (data.length > 0) {
                      let isOn = false
                      // Check bit
                      if (resolved.bit !== null) {
                          isOn = ((data[0] >> resolved.bit) & 1)
                      } else {
-                         isOn = data[0]
+                         isOn = !!data[0]
                      }
                      val = isOn ? 'ON' : 'OFF'
                      color = isOn ? LIVE_COLOR_ON : LIVE_COLOR_OFF
                  }
-            } else if (resolved.type === 'byte') {
+            } else if (type === 'byte' || type === 'u8') {
                  val = data[0]
-            } else if (resolved.type === 'int') {
-                 val = view.getInt16(0, true)
-            } else if (resolved.type === 'dint') {
-                 val = view.getInt32(0, true)
-            } else if (resolved.type === 'real') {
-                 val = view.getFloat32(0, true).toFixed(3)
+            } else if (type === 'i8') {
+                 val = view.getInt8(0)
+            } else if (type === 'int' || type === 'i16') {
+                 if (data.length >= 2) val = view.getInt16(0, true)
+            } else if (type === 'u16') {
+                 if (data.length >= 2) val = view.getUint16(0, true)
+            } else if (type === 'dint' || type === 'i32') {
+                 if (data.length >= 4) val = view.getInt32(0, true)
+            } else if (type === 'u32') {
+                 if (data.length >= 4) val = view.getUint32(0, true)
+            } else if (type === 'real') {
+                 if (data.length >= 4) val = view.getFloat32(0, true).toFixed(3)
+            } else if (type === 'f64') {
+                 if (data.length >= 8) val = view.getFloat64(0, true).toFixed(3)
             } else {
                  // Hex fallback or similar?
                  val = Array.from(data).map(b => b.toString(16).padStart(2,'0')).join(' ')
@@ -540,13 +762,13 @@ export default class WatchPanel {
             
             if (entry.valueEl) {
                 entry.valueEl.textContent = val
-                entry.valueEl.style.color = color
-                // entry.valueEl.style.color = '#dfd' // Flash update?
+                if (color) entry.valueEl.style.color = color
+                else entry.valueEl.style.color = ''
             }
             entry.value = val
         }
         
-        this.editor.data_fetcher.register('watch', resolved.address, resolved.size, entry.update)
+        this.editor.data_fetcher.register('watch', entry.resolved.address, entry.resolved.size, entry.update)
     }
     
     stopMonitoring(entry) {

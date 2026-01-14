@@ -187,21 +187,85 @@ export const ladderRenderer = {
                 editor._ensureAsmCache(block, cache.signature, cache.map, cache.details)
             }
             if (typeof editor._ensureBlockAddressRefs === 'function') {
-                editor._ensureBlockAddressRefs(block)
+                const { details } = editor._buildSymbolCache?.() || {}
+                editor._ensureBlockAddressRefs(block, null, details)
             }
             const symbolRefs = block.cached_symbol_refs || []
             const addressRefs = block.cached_address_refs || []
-            return [...symbolRefs, ...addressRefs]
+            const timerRefs = block.cached_timer_refs || []
+            
+            // Avoid duplicate pills at same position
+            const timerRanges = new Set(timerRefs.map(r => `${r.start}-${r.end}`))
+            const filteredSymbols = symbolRefs.filter(r => !timerRanges.has(`${r.start}-${r.end}`))
+            const filteredAddresses = addressRefs.filter(r => !timerRanges.has(`${r.start}-${r.end}`))
+            
+            return [...timerRefs, ...filteredSymbols, ...filteredAddresses]
         },
         previewValueProvider: entry => {
             if (!editor.window_manager?.isMonitoringActive?.()) return null
             const live = editor.live_symbol_values?.get(entry?.name)
-            if (!live || typeof live.text !== 'string') return null
-            let className = ''
-            if (entry?.type === 'bit' || live.type === 'bit') {
-                className = `${live.value ? 'on' : 'off'} bit`
+            
+            // For timers, we might not have the ref yet but we need to show SOMETHING 
+            // if we are monitoring. However, if live doesn't exist, we fallback.
+            if (!live || typeof live.text !== 'string') {
+                 // Optimization: if it's a timer PT with constant value, we can at least show that
+                 if (entry?.isTimerPT && typeof entry.presetValue === 'number') {
+                     return { text: String(entry.presetValue), className: '' }
+                 }
+                 return null
             }
-            return { text: live.text, className }
+            
+            let className = ''
+            let text = live.text
+
+            // Timer monitoring: show remaining time
+            if (entry?.isTimerStorage || entry?.isTimerPT) {
+                let et = 0
+                let pt = 0
+                let hasPT = false
+                let hasET = false
+
+                if (entry.isTimerStorage) {
+                    et = live.value || 0
+                    hasET = true
+                    if (typeof entry.presetValue === 'number') {
+                        pt = entry.presetValue
+                        hasPT = true
+                    } else if (entry.presetName) {
+                        const ptLive = editor.live_symbol_values?.get(entry.presetName) || [...editor.live_symbol_values.values()].find(l => l.absoluteAddress === entry.storageAddress + 0 && l.type === 'u32'); // Dummy fallback
+                        if (ptLive) {
+                            pt = ptLive.value
+                            hasPT = true
+                        }
+                    }
+                } else if (entry.isTimerPT) {
+                    pt = (typeof entry.presetValue === 'number') ? entry.presetValue : (live.value || 0)
+                    hasPT = true
+                    // Need ET from storage
+                    if (entry.storageAddress !== -1) {
+                         const storageLive = [...editor.live_symbol_values.values()].find(l => l.absoluteAddress === entry.storageAddress && (l.type === 'u32' || l.type === 'dint'))
+                         if (storageLive) {
+                             et = storageLive.value || 0
+                             hasET = true
+                         }
+                    }
+                }
+
+                if (hasPT && hasET) {
+                    text = String(Math.max(0, Number(pt) - Number(et)))
+                } else if (hasPT && !hasET && entry.isTimerPT) {
+                    text = String(pt)
+                }
+
+                if (entry.isTimerStorage && et > 0) {
+                     className += ' active-timer'
+                }
+            }
+
+            if (entry?.type === 'bit' || live.type === 'bit') {
+                className += ` ${live.value ? 'on' : 'off'} bit`
+            }
+            return { text, className }
         },
         onPreviewAction: (entry, action) => handlePreviewAction(entry, action),
         onPreviewContextMenu: (entry, event) => {
