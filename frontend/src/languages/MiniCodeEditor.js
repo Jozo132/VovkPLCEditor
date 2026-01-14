@@ -18,6 +18,7 @@ export class MiniCodeEditor {
      *          onLintHover?:(payload:{state:'enter'|'leave',diagnostic:any,blockId?:string})=>void,
      *          onGoToDefinition?:(payload:{type:'symbol',name:string,blockId?:string})=>void,
      *          onPreviewClick?:(entry:any, event:MouseEvent)=>void,
+     *          onPreviewAction?:(entry:any, action:'set'|'reset'|'toggle'|'edit')=>void,
      *          onScroll?:(pos:{top:number,left:number})=>void,
      *          onChange?:(value:string)=>void}} options
      */
@@ -39,11 +40,12 @@ export class MiniCodeEditor {
             s.id = 'mce-css'
             s.textContent = `.mce{width:100%;height:100%;font:var(--f,14px/1.4 monospace);background:#282828;overflow:hidden}
 .mce>textarea,.mce>pre{position:absolute;top:0;bottom:0;width:100%;margin:0;border:0;resize:none;outline:0;font:inherit;white-space:pre;overflow:auto;box-sizing:border-box;tab-size:4;-moz-tab-size:4}
-.mce>textarea{z-index:1;background:none;color:transparent;caret-color:#fff;padding:8px 8px 8px calc(${LN_W}px + 8px)}
-.mce>textarea::selection,.mce>textarea::-moz-selection{color:transparent;background:rgba(0,0,0,.25)}
-.mce>pre.code{pointer-events:none;color:#ddd;left:${LN_W}px;right:0;padding:8px;overflow:hidden; width:calc(100% - ${LN_W}px)}
+.mce>textarea{z-index:1;background:none;color:transparent;caret-color:transparent;padding:8px 8px 8px calc(${LN_W}px + 8px)}
+.mce>textarea::selection,.mce>textarea::-moz-selection{color:transparent;background:transparent}
+.mce>pre.code{pointer-events:none;color:#ddd;left:${LN_W}px;right:0;padding:8px;overflow:hidden; width:calc(100% - ${LN_W}px); z-index: 2;}
 .mce>pre.code code{display:inline-block;min-width:100%}
 .mce>pre.ln{pointer-events:none;color:#555;left:0;width:${LN_W}px;text-align:right;padding:8px 4px 8px 0;margin:0;user-select:none;overflow:hidden;z-index: 10;background: #282828;}
+.mce-user-selection { position: absolute; pointer-events: none; z-index: 3; background: rgba(87, 166, 255, 0.25); border-radius: 2px; }
 .ac{list-style:none;position:absolute;max-width:400px;max-height:200px;overflow-y:auto;background:#252526;border:1px solid #454545;box-shadow:0 4px 6px rgba(0,0,0,0.3);margin:0;padding:5px 0;z-index:99999;color:#ccc;font-size:12px;font-family: var(--f, monospace);}
 .ac::-webkit-scrollbar{width:8px;height:8px}
 .ac::-webkit-scrollbar-track{background:#FFF2}
@@ -71,12 +73,12 @@ export class MiniCodeEditor {
 .mce-hover-highlight { position: absolute; pointer-events: none; z-index: 4; background: rgba(216, 90, 112, 0.3); border-radius: 2px; }
 .mce-link-highlight { position: absolute; pointer-events: none; z-index: 4; height: 2px; background: #4daafc; border-radius: 1px; opacity: 0.9; }
 .mce-selection-highlight { position: absolute; pointer-events: none; z-index: 3; background: rgba(76, 141, 255, 0.28); border-radius: 2px; }
-.mce-preview-pill { position:absolute; display:inline-flex; align-items:center; justify-content:center; min-height:14px; padding:0 8px; border-radius:6px; background:#464646; color:#fff; border:1px solid #464646; font-size:13px; line-height:1; font-weight:600; white-space:nowrap; pointer-events:auto; cursor:pointer; z-index:6; box-shadow:0 1px 2px rgba(0,0,0,0.45); transform: translateY(-1px); outline: none; transition: left 0.05s linear, top 0.05s linear; }
+.mce-preview-pill { display:inline-flex; vertical-align:middle; position:relative; align-items:center; justify-content:center; height:1.1em; padding:0 0.4em; border-radius:0.2em; background:#464646; color:#fff; border:1px solid #464646; font-size:0.85em; line-height:1; font-weight:600; white-space:nowrap; pointer-events:auto; cursor:pointer; z-index:6; box-shadow:0 1px 1px rgba(0,0,0,0.2); outline: none; margin: 0 0.2em; box-sizing: border-box; user-select: none; }
 .mce-preview-pill:hover { filter: brightness(1.2); border-color: #007acc; }
 .mce-preview-pill:focus { border-color: #007acc; box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.5); z-index: 20; outline: none; }
 .mce-preview-pill.on { background:#3a3a3a; color:#1fba5f; border-color:#1fba5f; }
 .mce-preview-pill.off { background:#3a3a3a; color:rgba(200, 200, 200, 0.5); border-color:#555; }
-.mce-preview-pill.bit { min-width:34px; }
+.mce-preview-pill.bit { min-width:2.5em; }
 .mce-marker:hover::after {
     content: attr(data-msg);
     position: absolute; bottom: 100%; left: 0;
@@ -848,10 +850,277 @@ export class MiniCodeEditor {
                         .join(''),
                 esc(t)
             )
-        const paint = () => {
-            cd.innerHTML = colour(ta.value) + '\u200B'
-            updateLN()
+        let visualText = ''
+        const visualMarkers = new Map()
+        let sortedPills = []
+
+        const cursorEl = m.appendChild(document.createElement('div'))
+        cursorEl.className = 'mce-cursor'
+        cursorEl.style.cssText = `position:absolute;width:2px;background:#ccc;z-index:20;pointer-events:none;display:none;will-change:transform;`
+        
+        let blinkInterval = null
+        const resetBlink = () => {
+             cursorEl.style.visibility = 'visible'
+             if (blinkInterval) clearInterval(blinkInterval)
+             blinkInterval = setInterval(() => {
+                 cursorEl.style.visibility = cursorEl.style.visibility === 'hidden' ? 'visible' : 'hidden'
+             }, 530)
         }
+
+        const updateCursor = () => {
+             if (document.activeElement !== ta) {
+                 cursorEl.style.display = 'none'
+                 if (blinkInterval) clearInterval(blinkInterval)
+                 return
+             }
+             const p = caretPx(ta.selectionStart)
+             
+             cursorEl.style.display = 'block'
+             cursorEl.style.left = p.x + 'px'
+             cursorEl.style.top = p.y + 'px'
+             cursorEl.style.height = p.h + 'px'
+             resetBlink()
+        }
+        
+        const userSelectionDivs = []
+        const updateUserSelection = () => {
+            userSelectionDivs.forEach(d => d.remove())
+            userSelectionDivs.length = 0
+            
+            if (document.activeElement !== ta) return
+            const start = ta.selectionStart
+            const end = ta.selectionEnd
+            if (start === end) return
+
+            const text = ta.value || ''
+            if (!text.length) return
+
+            const maxLen = text.length
+            let safeStart = Math.max(0, Math.min(start, maxLen))
+            let safeEnd = Math.max(safeStart + 1, Math.min(end, maxLen))
+             
+            // We iterate lines similar to renderSelectedHighlight but we use caretPx on the visual text
+            let offset = 0
+            const lines = text.split('\n')
+            
+            for (let i = 0; i < lines.length; i++) {
+                const lineStart = offset
+                const lineEnd = offset + lines[i].length // excluding \n
+                
+                // Check intersection
+                // Range is [safeStart, end)
+                // Line is [lineStart, lineEnd] - actually lines include \n in length calculation for offset but not for display
+                
+                // If the selection spans into this line
+                if (end > lineStart && safeStart < lineEnd + 1) { // +1 to cover EOL selection?
+                     // Calculate Clamped Segment
+                     let s = Math.max(safeStart, lineStart)
+                     let e = Math.min(end, lineEnd) // Do we highlight the newline character width?
+                     
+                     // If selection covers the newline, usually editors highlight a standard width at EOL
+                     let highlightEOL = false
+                     if (end > lineEnd) {
+                         // selected the newline
+                         highlightEOL = true
+                     }
+                     
+                     if (e > s || (highlightEOL && s === e)) {
+                         const p = caretPx(s)
+                         const p2 = caretPx(e)
+                         
+                         const d = document.createElement('div')
+                         d.className = 'mce-user-selection'
+                         d.style.left = p.x + 'px'
+                         d.style.top = p.y + 'px'
+                         d.style.height = p.h + 'px'
+                         
+                         let w = p2.x - p.x
+                         if (w < 0) w = 0
+                         if (highlightEOL) w += 8 // Arbitrary width for newline highlight
+                         if (w < 2) w = 2
+                         
+                         d.style.width = w + 'px'
+                         ov.insertBefore(d, ov.firstChild)
+                         userSelectionDivs.push(d)
+                     }
+                }
+                
+                offset += lines[i].length + 1
+            }
+        }
+
+        document.addEventListener('selectionchange', () => {
+             if (document.activeElement === ta) {
+                 updateCursor()
+                 updateUserSelection()
+             }
+        })
+        
+        const updatePillValues = () => {
+             const entries = getPreviewEntries()
+             if (!entries || !previewValueProvider) return paint()
+
+             // 1. Resolve Current Active Pills
+             const newActive = []
+             entries.forEach(e => {
+                const val = previewValueProvider(e)
+                if (val !== null && val !== undefined && val !== '') {
+                    newActive.push({ pos: e.end ?? e.start ?? 0, val, entry: e })
+                }
+             })
+             newActive.sort((a,b) => a.pos - b.pos)
+             
+             // 2. Struct Check
+             if (newActive.length !== sortedPills.length) return paint()
+             
+             for (let i = 0; i < newActive.length; i++) {
+                 if (newActive[i].pos !== sortedPills[i].pos) return paint()
+             }
+             
+             // 3. Fast DOM Update
+             const domPills = cd.querySelectorAll('.mce-preview-pill')
+             if (domPills.length !== newActive.length) return paint()
+             
+             let changed = false
+             let markerCode = 0xE000
+             
+             newActive.forEach((p, idx) => {
+                 const oldP = sortedPills[idx]
+                 // Simple value check (handling objects)
+                 const newValJson = typeof p.val === 'object' ? JSON.stringify(p.val) : String(p.val)
+                 const oldValJson = typeof oldP.val === 'object' ? JSON.stringify(oldP.val) : String(oldP.val)
+                 
+                 // Always update reference and visualMarkers cache for caretPx to be correct
+                 sortedPills[idx] = p 
+                 
+                 let text = '', cls = ''
+                 if (typeof p.val === 'object') {
+                     text = p.val.text || ''
+                     cls = p.val.className || ''
+                 } else {
+                     text = String(p.val)
+                 }
+
+                 const validMarker = String.fromCharCode(markerCode++)
+                 const html = `<span class="mce-preview-pill ${cls}" data-pill-index="${idx}" tabindex="0">${esc(text)}</span>`
+                 visualMarkers.set(validMarker, html)
+
+                 if (newValJson !== oldValJson) {
+                     changed = true
+                     const el = domPills[idx]
+                     if (el.textContent !== text) el.textContent = text
+                     const newCls = `mce-preview-pill ${cls}`
+                     if (el.className !== newCls) el.className = newCls
+                     if (el.dataset.pillIndex !== String(idx)) el.dataset.pillIndex = String(idx)
+                 }
+             })
+
+             if (changed) {
+                 updateUserSelection()
+                 updateCursor()
+             }
+        }
+
+        const paint = () => {
+            const entries = getPreviewEntries()
+            const code = ta.value
+            
+            visualText = ''
+            visualMarkers.clear()
+            sortedPills = []
+            
+            if (previewValueProvider) {
+                entries.forEach(e => {
+                    const val = previewValueProvider(e)
+                    if (val !== null && val !== undefined && val !== '') {
+                        sortedPills.push({ pos: e.end ?? e.start ?? 0, val, entry: e })
+                    }
+                })
+            }
+            sortedPills.sort((a,b) => a.pos - b.pos)
+            
+            let lastPos = 0
+            let markerCode = 0xE000
+            
+            sortedPills.forEach((p, idx) => {
+                const seg = code.slice(lastPos, p.pos)
+                visualText += seg
+                
+                const validMarker = String.fromCharCode(markerCode++)
+                visualText += validMarker
+                
+                let text = '', cls = ''
+                if (typeof p.val === 'object') {
+                     text = p.val.text || ''
+                     cls = p.val.className || ''
+                } else {
+                     text = String(p.val)
+                }
+                const html = `<span class="mce-preview-pill ${cls}" data-pill-index="${idx}" tabindex="0">${esc(text)}</span>`
+                visualMarkers.set(validMarker, html)
+                
+                lastPos = p.pos
+            })
+            visualText += code.slice(lastPos)
+            
+            let html = colour(visualText)
+            html = html.replace(/[\uE000-\uF8FF]/g, m => visualMarkers.get(m) || '')
+            
+            cd.innerHTML = html + '\u200B'
+            updateLN()
+            updateCursor()
+        }
+
+        /* Pill Interactions */
+        const handlePillAction = (e, type) => {
+             const pill = e.target.closest('.mce-preview-pill')
+             if (!pill) return
+             
+             if (type !== 'keydown') {
+                 e.stopPropagation()
+                 if (document.activeElement !== pill) pill.focus()
+             }
+
+             const idx = parseInt(pill.dataset.pillIndex, 10)
+             const p = sortedPills[idx]
+             if (p && p.entry) {
+                 if (type === 'click' && o.onPreviewClick) o.onPreviewClick(p.entry, e)
+                 else if ((type === 'contextmenu' || type === 'dblclick') && o.onPreviewContextMenu) {
+                     e.preventDefault()
+                     o.onPreviewContextMenu(p.entry, e)
+                 } else if (type === 'keydown') {
+                     const isBit = pill.classList.contains('bit')
+                     const key = e.key
+                     let action = null
+                     
+                     if (key === 'Escape') {
+                         pill.blur()
+                         e.preventDefault()
+                         e.stopPropagation()
+                         return
+                     }
+                     
+                     if (isBit) {
+                         if (key === '1') action = 'set'
+                         else if (key === '0') action = 'reset'
+                         else if (key === 'Enter' || key === ' ') action = 'toggle'
+                     } else {
+                         if (key === 'Enter' || key === ' ') action = 'edit'
+                     }
+                     
+                     if (action) {
+                         e.preventDefault()
+                         e.stopPropagation()
+                         if (o.onPreviewAction) o.onPreviewAction(p.entry, action)
+                     }
+                 }
+             }
+        }
+        cd.addEventListener('mousedown', e => handlePillAction(e, 'click'))
+        cd.addEventListener('contextmenu', e => handlePillAction(e, 'contextmenu'))
+        cd.addEventListener('dblclick', e => handlePillAction(e, 'dblclick'))
+        cd.addEventListener('keydown', e => handlePillAction(e, 'keydown'))
+
 
         /* line numbers */
         const updateLN = () => {
@@ -863,6 +1132,15 @@ export class MiniCodeEditor {
 
         /* caret px helper */
         const caretPx = i => {
+            let count = 0
+            for(const p of sortedPills) {
+                if(p.pos <= i) count++
+                else break
+            }
+            const vi = i + count
+            
+            const subVisual = visualText.slice(0, vi) || ta.value.slice(0, i) // Fallback if paint not called yet
+
             const d = document.createElement('div'),
                 s = getComputedStyle(ta)
             
@@ -875,7 +1153,10 @@ export class MiniCodeEditor {
             tab-size:${s.tabSize};-moz-tab-size:${s.tabSize};
             width:${s.width};top:0;left:0;margin:0;`
             
-            d.textContent = ta.value.slice(0, i)
+            let h = colour(subVisual)
+            h = h.replace(/[\uE000-\uF8FF]/g, m => visualMarkers.get(m) || '')
+            
+            d.innerHTML = h
             const sp = d.appendChild(document.createElement('span'))
             sp.textContent = '|'
             ta.parentNode.appendChild(d)
@@ -1026,7 +1307,9 @@ export class MiniCodeEditor {
         const runLint = async () => {
              const provider = o.lintProvider || defaultLinter
              try {
-                const problems = await provider(ta.value)
+                // Ensure we lint clean code free of artifacts
+                const code = rawCode !== null ? rawCode : unspace(ta.value)
+                const problems = await provider(code)
                 renderMarkers(problems)
                 if (o.onDiagnosticsChange) o.onDiagnosticsChange(problems)
              } catch (e) { console.error(e) }
@@ -1060,158 +1343,26 @@ export class MiniCodeEditor {
              }
         }
 
+        const GAP_STR = ''
+        let rawCode = null 
+        const unspace = (text) => text
+        const restoreRaw = () => {}
+
         const getPreviewEntries = () => {
             if (previewEntriesProvider) return previewEntriesProvider() || []
             return []
         }
-        
-        const renderPreviewPills = () => {
-            if (!previewValueProvider) {
-                if (activePills.size > 0) clearPreviewPills()
-                return
-            }
-            const entries = getPreviewEntries()
-            if (!entries || !entries.length) {
-                if (activePills.size > 0) clearPreviewPills()
-                return
-            }
 
-            const visibleTop = ta.scrollTop
-            const visibleBottom = ta.scrollTop + ta.clientHeight
-            
-            const touchedIds = new Set()
+        const updateVisualGaps = () => {}
+        const renderPreviewPills = () => {}
 
-            entries.forEach(entry => {
-                if (!entry || typeof entry.start !== 'number') return
-                
-                const value = previewValueProvider(entry)
-                if (value === null || typeof value === 'undefined' || value === '') return
-                
-                const endIndex = typeof entry.end === 'number' ? entry.end : entry.start
-                const p = caretPx(endIndex)
-                
-                // Visibility check
-                if (p.y + p.h < visibleTop || p.y > visibleBottom) return
-
-                const entryId = typeof entry.id !== 'undefined' ? String(entry.id) : String(entry.start)
-                touchedIds.add(entryId)
-
-                // Resolve content
-                let text = ''
-                let clsString = ''
-                if (typeof value === 'object' && value !== null) {
-                    text = value.text ?? ''
-                    if (value.className) {
-                        const classes = Array.isArray(value.className)
-                            ? value.className
-                            : String(value.className).split(/\s+/).filter(Boolean)
-                        clsString = classes.join(' ')
-                    }
-                } else {
-                    text = String(value)
-                }
-
-                if (!text) return
-
-                let pillData = activePills.get(entryId)
-                let pill
-
-                if (!pillData) {
-                    // Create New
-                    pill = document.createElement('span')
-                    pill.className = 'mce-preview-pill'
-                    pill.tabIndex = 0
-                    pill.dataset.entryId = entryId
-                    
-                    // Event Listeners
-                    pill.addEventListener('keydown', e => {
-                        const key = e.key
-                        if (options.onPreviewAction) {
-                            if (key === '1') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'set') }
-                            else if (key === '0') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'reset') }
-                            else if (key === ' ' || key === 'Enter') { e.preventDefault(); e.stopPropagation(); options.onPreviewAction(entry, 'toggle') }
-                            else if (key === 'Escape') { e.preventDefault(); e.stopPropagation(); pill.blur(); }
-                        }
-                    })
-
-                    if (options.onPreviewClick || options.onPreviewContextMenu || options.onPreviewAction) {
-                        pill.addEventListener('mousedown', e => e.stopPropagation()) // Prevent caret move
-                        
-                        if (options.onPreviewClick) {
-                            pill.addEventListener('click', e => {
-                                e.stopPropagation()
-                                options.onPreviewClick(entry, e)
-                            })
-                        }
-                        if (options.onPreviewContextMenu) {
-                            pill.addEventListener('contextmenu', e => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                pill.focus()
-                                options.onPreviewContextMenu(entry, e)
-                            })
-                        }
-                    }
-
-                    ov.appendChild(pill)
-                    pillData = { el: pill, x: -1, y: -1, text: '', cls: '' }
-                    activePills.set(entryId, pillData)
-                } else {
-                    pill = pillData.el
-                }
-
-                // Update Diff
-                const x = p.x + 8
-                const y = p.y
-                
-                if (pillData.text !== text) {
-                    pill.textContent = text
-                    pillData.text = text
-                }
-                
-                if (pillData.x !== x || pillData.y !== y) {
-                    pill.style.left = `${x}px`
-                    pill.style.top = `${y}px`
-                    pillData.x = x
-                    pillData.y = y
-                }
-
-                if (pillData.cls !== clsString) {
-                    pill.className = 'mce-preview-pill ' + clsString
-                    pillData.cls = clsString
-                }
-            })
-
-            // Cleanup unused
-            for (const [id, data] of activePills) {
-                if (!touchedIds.has(id)) {
-                    data.el.remove()
-                    activePills.delete(id)
-                }
-            }
-        }
-        
-        // Global Deselect Listeners
-        const handleWindowClick = (e) => {
-            if (!document.contains(cd)) return // detached
-            const target = e.target
-            if (activePills.size > 0 && !target.closest('.mce-preview-pill')) {
-                 blurPills()
-            }
-        }
-        window.addEventListener('mousedown', handleWindowClick, true)
-        
-        // Cleanup hook
         const originalCleanup = this._cleanup || (() => {})
         this._cleanup = () => {
             originalCleanup()
-            window.removeEventListener('mousedown', handleWindowClick, true)
         }
 
         const overlay = () => {
-            ov.querySelectorAll('.live').forEach(node => node.remove())
-            renderPreviewPills()
-            if (previewValueProvider) return
+             ov.querySelectorAll('.live').forEach(n => n.remove())
             // ... legacy live provider support ...
             const re = /\b([A-Za-z_]\w*)\b/g
             let mx
@@ -1229,9 +1380,14 @@ export class MiniCodeEditor {
 
         /* expose live methods */
         this.refreshLive = () => {
+            paint() 
             overlay()
             sync()
         }
+        
+        ta.addEventListener('focus', () => { })
+        ta.addEventListener('blur', () => { this.refreshLive() })
+        
         this.setLiveProvider = fn => {
             if (typeof fn === 'function') {
                 live = fn
@@ -1241,7 +1397,7 @@ export class MiniCodeEditor {
         this.setPreviewProviders = (entriesProvider, valueProvider) => {
             previewEntriesProvider = typeof entriesProvider === 'function' ? entriesProvider : null
             previewValueProvider = typeof valueProvider === 'function' ? valueProvider : null
-            this.refreshLive()
+            paint()
         }
 
         /* autocomplete */
@@ -1623,12 +1779,15 @@ export class MiniCodeEditor {
             sync()
             overlay()
             triggerLint()
-            o.onChange && o.onChange(ta.value)
+            o.onChange && o.onChange(rawCode !== null ? rawCode : unspace(ta.value))
         }
         setTimeout(() => {
             ta.addEventListener('input', tick)
             tick()
-            this._timer = setInterval(overlay, 200)
+            this._timer = setInterval(() => {
+                 if (previewValueProvider) updatePillValues()
+                 overlay()
+            }, 200)
         }, 100)
 
         document.addEventListener('keydown', handleCtrlKey)
@@ -1766,7 +1925,7 @@ export class MiniCodeEditor {
                 scheduleHistory()
             }
         }
-        this.getValue = () => ta.value
+        this.getValue = () => unspace(ta.value)
         this.getScroll = () => ({ top: ta.scrollTop, left: ta.scrollLeft })
         this.setScroll = pos => {
             if (!pos) return
@@ -1775,6 +1934,7 @@ export class MiniCodeEditor {
             sync()
         }
         this.setValue = v => {
+            if (typeof restoreRaw === 'function') restoreRaw()
             const sl = ta.scrollLeft,
                 st = ta.scrollTop
             ta.value = v

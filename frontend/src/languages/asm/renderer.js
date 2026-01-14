@@ -1,5 +1,6 @@
 import { MiniCodeEditor } from "../MiniCodeEditor.js"
 import { RendererModule } from "../types.js"
+import { Popup } from "../../editor/UI/Elements/components/popup.js"
 // import { resolveBlockState } from "./evaluator.js"
 
 const ADDRESS_REGEX = /^(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i
@@ -119,8 +120,20 @@ export const ladderRenderer = {
                  const liveEntry = editor.live_symbol_values?.get(entry.name) || editor.live_symbol_values?.get(addressStr);
                  if (liveEntry && typeof liveEntry.value !== 'undefined') currentVal = liveEntry.value;
                  
-                 const input = prompt(`Enter new value for ${addressStr}:`, currentVal)
-                 if (input !== null) {
+                 const formResult = await Popup.form({
+                    title: `Edit ${addressStr}`,
+                    description: `Enter new value for ${addressStr} (${fullType})`,
+                    inputs: [
+                        { type: 'text', name: 'value', label: 'Value', value: String(currentVal) }
+                    ],
+                    buttons: [
+                        { text: 'Write', value: 'confirm' },
+                        { text: 'Cancel', value: 'cancel' }
+                    ]
+                 })
+                 
+                 if (formResult && typeof formResult.value !== 'undefined') {
+                     const input = formResult.value
                      let num = Number(input)
                      if (!Number.isNaN(num)) {
                          let size = 1
@@ -216,12 +229,10 @@ export const ladderRenderer = {
             if (!connection) return
 
             if (isBit && bitIndex !== null) {
-                items.push({ label: `Bit ${addressStr}`, type: 'header' })
                 items.push({ label: 'Set (1)', name: 'set', icon: 'check', type: 'item' })
                 items.push({ label: 'Reset (0)', name: 'reset', icon: 'close', type: 'item' })
                 items.push({ label: 'Toggle', name: 'toggle', icon: 'symbol-event', type: 'item' })
             } else {
-                 items.push({ label: `Value ${addressStr}`, type: 'header' })
                  items.push({ label: 'Edit Value...', name: 'edit', icon: 'edit', type: 'item' })
             }
             

@@ -1,7 +1,7 @@
 import {PLC_Project, PLCEditor} from '../../utils/types.js'
 import VOVKPLCEDITOR_VERSION_BUILD, { VOVKPLCEDITOR_VERSION } from '../BuildNumber.js'
 import {ElementSynthesisMany, getEventPath, isVisible} from '../../utils/tools.js'
-import {normalizeOffsets} from '../../utils/offsets.js'
+import {ensureOffsets} from '../../utils/offsets.js'
 import {Popup} from './Elements/components/popup.js'
 import NavigationTreeManager from './Elements/NavigationTreeManager.js'
 import WatchPanel from './Elements/WatchPanel.js'
@@ -1783,7 +1783,14 @@ export default class WindowManager {
                          await new Promise(r => setTimeout(r, 200))
                          
                          if (this.#editor.device_manager?.connection && typeof this.#editor.device_manager.connection.plc?.setRuntimeOffsets === 'function') {
-                              await this.#editor.device_manager.connection.plc.setRuntimeOffsets(this.#editor.project.offsets || {})
+                              const normalized = ensureOffsets(this.#editor.project.offsets || {})
+                              await this.#editor.device_manager.connection.plc.setRuntimeOffsets(
+                                  normalized.control.offset,
+                                  normalized.input.offset,
+                                  normalized.output.offset,
+                                  normalized.system.offset,
+                                  normalized.marker.offset
+                              )
                          }
     
                          // Delay 2: After Offsets, Before Download
@@ -2366,7 +2373,7 @@ export default class WindowManager {
         if (!editor?.device_manager?.connected) return
         
         const projectSymbols = editor.project?.symbols || []
-        const offsets = normalizeOffsets(editor.project?.offsets || {})
+        const offsets = ensureOffsets(editor.project?.offsets || {})
         const addressRefs = typeof editor._getAsmAddressRefsForLive === 'function' ? editor._getAsmAddressRefsForLive(offsets) : []
         const symbolEntries = []
         const seenNames = new Set()

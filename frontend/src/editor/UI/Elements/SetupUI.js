@@ -1,5 +1,5 @@
 import { CSSimporter } from "../../../utils/tools.js"
-import { ensureOffsets, normalizeOffsets } from "../../../utils/offsets.js"
+import { ensureOffsets } from "../../../utils/offsets.js"
 import { Popup } from "./components/popup.js"
 
 const importCSS = CSSimporter(import.meta.url)
@@ -64,19 +64,10 @@ export default class SetupUI {
         // Ensure default values exist in project
         const project = this.master.project
         if (!project.info) project.info = { type: 'VovkPLC', version: '1.0.0', capacity: 1024 }
-        if (!project.offsets) {
-            project.offsets = {
-                control: { offset: 0, size: 1024 },
-                input: { offset: 1024, size: 1024 },
-                output: { offset: 2048, size: 1024 },
-                system: { offset: 3072, size: 1024 },
-                marker: { offset: 4096, size: 4096 }
-            }
-        }
+        project.offsets = ensureOffsets(project.offsets || {})
 
         const info = project.info
-        project.offsets = ensureOffsets(project.offsets)
-        const offsets = normalizeOffsets(project.offsets)
+        const offsets = project.offsets
         
         let deviceInfo = null
         let connected = false

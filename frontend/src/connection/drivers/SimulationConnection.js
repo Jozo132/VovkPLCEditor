@@ -1,5 +1,6 @@
 import ConnectionBase from "../ConnectionBase.js";
 import { PLCEditor } from "../../utils/types.js";
+import { ensureOffsets } from "../../utils/offsets.js";
 
 export default class SimulationConnection extends ConnectionBase {
     deviceInfo = null
@@ -20,7 +21,14 @@ export default class SimulationConnection extends ConnectionBase {
         await this.plc.initialize();
         const offsets = this.editor?.project?.offsets
         if (offsets && typeof this.plc.setRuntimeOffsets === 'function') {
-            await this.plc.setRuntimeOffsets(offsets)
+            const normalized = ensureOffsets(offsets)
+            await this.plc.setRuntimeOffsets(
+                normalized.control.offset,
+                normalized.input.offset,
+                normalized.output.offset,
+                normalized.system.offset,
+                normalized.marker.offset
+            )
         }
         this._startRunLoop()
     }

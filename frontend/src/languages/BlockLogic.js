@@ -1,5 +1,5 @@
 import { PLCEditor, PLC_Symbol } from "../utils/types.js"
-import { normalizeOffsets } from "../utils/offsets.js"
+import { ensureOffsets } from "../utils/offsets.js"
 
 /**
  * Get bit value from memory given a symbol
@@ -14,7 +14,7 @@ export function getSymbolValue(editor, symbol) {
   if (!symbol) return false
   if (typeof symbol === 'string') return false
   const { location, address, type } = symbol
-  const offsets = normalizeOffsets(editor.project.offsets || {})
+  const offsets = ensureOffsets(editor.project.offsets || {})
   const key = location === 'memory' ? 'marker' : location
   const offset = offsets[key]?.offset || 0
   const index = Math.floor(address)
@@ -30,7 +30,7 @@ export function getSymbolValue(editor, symbol) {
  * @param {boolean} value
  */
 export function setSymbolBit(editor, symbol, value) {
-  const offsets = normalizeOffsets(editor.project.offsets || {})
+  const offsets = ensureOffsets(editor.project.offsets || {})
   const key = symbol.location === 'memory' ? 'marker' : symbol.location
   const offset = offsets[key]?.offset || 0
   const index = Math.floor(symbol.address)

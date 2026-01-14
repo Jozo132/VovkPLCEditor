@@ -1,5 +1,5 @@
 import {CSSimporter, debug_components} from '../utils/tools.js'
-import { ensureOffsets, normalizeOffsets } from '../utils/offsets.js'
+import {ensureOffsets} from '../utils/offsets.js'
 import {PLC_Program, PLC_Project} from '../utils/types.js'
 
 const importCSS = CSSimporter(import.meta.url)
@@ -91,13 +91,19 @@ const createNavHistory = editor => ({
             this.index = nextIndex
             this.isNavigating = true
             this.apply(entry)
-            setTimeout(() => { this.isNavigating = false }, 0)
+            setTimeout(() => {
+                this.isNavigating = false
+            }, 0)
             return true
         }
         return false
     },
-    back() { return this.go(-1) },
-    forward() { return this.go(1) },
+    back() {
+        return this.go(-1)
+    },
+    forward() {
+        return this.go(1)
+    },
 })
 
 const getGlobalNavState = () => {
@@ -125,7 +131,7 @@ const bindGlobalNavHotkeys = state => {
         const current = browserHistory.state || {}
         const index = typeof current.__vovkNavIndex === 'number' ? current.__vovkNavIndex : null
         if (index === null) {
-            const nextState = { ...current, __vovkNavIndex: 0 }
+            const nextState = {...current, __vovkNavIndex: 0}
             browserHistory.replaceState(nextState, document.title)
             state.navIndex = 0
             return 0
@@ -138,7 +144,7 @@ const bindGlobalNavHotkeys = state => {
         const currentIndex = ensureNavIndex()
         const nextIndex = currentIndex + 1
         const currentState = browserHistory.state || {}
-        browserHistory.pushState({ ...currentState, __vovkNavIndex: nextIndex }, document.title)
+        browserHistory.pushState({...currentState, __vovkNavIndex: nextIndex}, document.title)
         state.navIndex = nextIndex
         state.trapHoldIndex = nextIndex
     }
@@ -161,9 +167,7 @@ const bindGlobalNavHotkeys = state => {
             state.popstateHandling = true
             const newIndex = typeof e?.state?.__vovkNavIndex === 'number' ? e.state.__vovkNavIndex : null
             const oldIndex = typeof state.navIndex === 'number' ? state.navIndex : newIndex
-            const dir = (newIndex !== null && oldIndex !== null && newIndex !== oldIndex)
-                ? (newIndex < oldIndex ? -1 : 1)
-                : 0
+            const dir = newIndex !== null && oldIndex !== null && newIndex !== oldIndex ? (newIndex < oldIndex ? -1 : 1) : 0
             if (newIndex !== null) state.navIndex = newIndex
             if (state.trapEnabled) {
                 const editorId = state.hoverEditorId ?? state.activeEditorId ?? state.trapEditorId
@@ -182,9 +186,13 @@ const bindGlobalNavHotkeys = state => {
             } else if (state.trapHoldIndex !== null && dir < 0 && !state.suppressBrowserNav) {
                 state.suppressBrowserNav = true
                 browserHistory.back()
-                setTimeout(() => { state.suppressBrowserNav = false }, 0)
+                setTimeout(() => {
+                    state.suppressBrowserNav = false
+                }, 0)
             }
-            setTimeout(() => { state.popstateHandling = false }, 0)
+            setTimeout(() => {
+                state.popstateHandling = false
+            }, 0)
         })
     }
     document.addEventListener('keydown', e => {
@@ -203,7 +211,7 @@ const bindGlobalNavHotkeys = state => {
     let navMouseButton = null
     const resolveNavContext = e => {
         const target = e?.target
-        const findWorkspace = node => (node && typeof node.closest === 'function') ? node.closest('.plc-workspace') : null
+        const findWorkspace = node => (node && typeof node.closest === 'function' ? node.closest('.plc-workspace') : null)
         let workspace = findWorkspace(target)
         if (!workspace && typeof e?.clientX === 'number' && typeof e?.clientY === 'number') {
             const hit = document.elementFromPoint(e.clientX, e.clientY)
@@ -215,15 +223,15 @@ const bindGlobalNavHotkeys = state => {
             for (const [el, id] of state.workspaces.entries()) {
                 const rect = el.getBoundingClientRect()
                 if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-                    return { editorId: id, inWorkspace: true }
+                    return {editorId: id, inWorkspace: true}
                 }
             }
         }
         if (workspace) {
-            return { editorId: state.workspaces.get(workspace) || null, inWorkspace: true }
+            return {editorId: state.workspaces.get(workspace) || null, inWorkspace: true}
         }
         const fallbackId = state.hoverEditorId ?? state.activeEditorId
-        return { editorId: fallbackId || null, inWorkspace: false }
+        return {editorId: fallbackId || null, inWorkspace: false}
     }
     const handleNavMouseDown = e => {
         const isBack = e.button === 3
@@ -302,7 +310,7 @@ export class VovkPLCEditor {
     static version_build = VOVKPLC_VERSION_BUILD
 
     memory = new Array(100).fill(0)
-    /** @type { VovkPLCWorker } */
+    /** @type { VovkPLC | VovkPLCWorker } */
     runtime
     runtime_ready = false
     _lint_state = {
@@ -411,21 +419,22 @@ export class VovkPLCEditor {
         this.workspace.addEventListener('mouseleave', clearHover)
         this.workspace.addEventListener('mousemove', markHover)
         this.workspace.addEventListener('plc-device-update', () => {
-             this._updateOffsetsFromDevice()
+            this._updateOffsetsFromDevice()
         })
 
-        // this.runtime.initialize('/wasm/VovkPLC.wasm').then(() => {
-        //     // Compile 'exit' to flush out any initial runtime logs
-        //     try { this.runtime.compile('exit') } catch (e) { }
-        //     this.runtime_ready = true
-        // })
-        VovkPLC.createWorker('/wasm/VovkPLC.wasm', {silent: true}).then(worker => {
-            this.runtime = worker
+        this.runtime = new VovkPLC('/wasm/VovkPLC.wasm')
+        this.runtime.initialize().then(() => {
+            // Compile 'exit' to flush out any initial runtime logs
             try {
                 this.runtime.compile('exit')
             } catch (e) {}
             this.runtime_ready = true
         })
+        // VovkPLC.createWorker('/wasm/VovkPLC.wasm', {silent: false}).then(worker => {
+        //     this.runtime = worker
+        //     this.runtime.downloadBytecode('FF')
+        //     this.runtime_ready = true
+        // })
 
         this.context_manager = new ContextManager(this)
         this.window_manager = new WindowManager(this)
@@ -590,8 +599,8 @@ export class VovkPLCEditor {
     _updateOffsetsFromDevice() {
         if (!this.project || !this.device_manager?.connected || !this.device_manager.deviceInfo) return
         const dInfo = this.device_manager.deviceInfo
-        const offsets = this.project.offsets = ensureOffsets(this.project.offsets || {})
-        
+        const offsets = (this.project.offsets = ensureOffsets(this.project.offsets || {}))
+
         const map = {
             control: ['control_offset', 'control_size'],
             input: ['input_offset', 'input_size'],
@@ -603,36 +612,36 @@ export class VovkPLCEditor {
         let changed = false
         for (const [key, [offKey, sizeKey]] of Object.entries(map)) {
             if (typeof dInfo[offKey] === 'number' && typeof dInfo[sizeKey] === 'number') {
-                 if (offsets[key].offset !== dInfo[offKey] || offsets[key].size !== dInfo[sizeKey]) {
-                     offsets[key].offset = dInfo[offKey]
-                     offsets[key].size = dInfo[sizeKey]
-                     changed = true
-                 }
+                if (offsets[key].offset !== dInfo[offKey] || offsets[key].size !== dInfo[sizeKey]) {
+                    offsets[key].offset = dInfo[offKey]
+                    offsets[key].size = dInfo[sizeKey]
+                    changed = true
+                }
             }
         }
-        
+
         if (changed) {
             // Re-normalize just in case
-            this.project.offsets = normalizeOffsets(this.project.offsets)
-            
+            this.project.offsets = ensureOffsets(this.project.offsets)
+
             // Clear caches from all blocks to force re-evaluation with new offsets
             if (this.project.files) {
                 this.project.files.forEach(file => {
                     if (file.type === 'program' && Array.isArray(file.blocks)) {
-                        file.blocks.forEach(block => {
-                             delete block.cached_asm
-                             delete block.cached_checksum
-                             delete block.cached_symbols_checksum
-                             delete block.cached_symbol_refs
+                        file.blocks.forEach(block => { // @ts-ignore
+                            delete block.cached_asm // @ts-ignore
+                            delete block.cached_checksum // @ts-ignore
+                            delete block.cached_symbols_checksum // @ts-ignore
+                            delete block.cached_symbol_refs
                         })
                     }
                 })
             }
 
             // Notify UI
-             if (this.window_manager?.windows?.get('setup')) {
-                 this.window_manager.windows.get('setup').render()
-             }
+            if (this.window_manager?.windows?.get('setup')) {
+                this.window_manager.windows.get('setup').render()
+            }
         }
         return changed
     }
@@ -679,9 +688,7 @@ export class VovkPLCEditor {
     _getLintPrograms() {
         const treeRoot = this.window_manager?.tree_manager?.root
         if (Array.isArray(treeRoot) && treeRoot.length) {
-            const programs = treeRoot
-                .filter(node => node.type === 'file' && node.item?.item?.type === 'program')
-                .map(node => node.item.item)
+            const programs = treeRoot.filter(node => node.type === 'file' && node.item?.item?.type === 'program').map(node => node.item.item)
             if (programs.length) return programs
         }
         return (this.project?.files || []).filter(file => file.type === 'program')
@@ -691,7 +698,7 @@ export class VovkPLCEditor {
         const str = value || ''
         let hash = 0
         for (let i = 0; i < str.length; i++) {
-            hash = ((hash << 5) - hash) + str.charCodeAt(i)
+            hash = (hash << 5) - hash + str.charCodeAt(i)
             hash |= 0
         }
         return hash >>> 0
@@ -700,7 +707,7 @@ export class VovkPLCEditor {
     _buildSymbolCache() {
         const project = this.project
         const symbols = project?.symbols || []
-        const offsets = normalizeOffsets(project?.offsets || {})
+        const offsets = ensureOffsets(project?.offsets || {})
         const map = new Map()
         const details = new Map()
         const signatureParts = []
@@ -746,11 +753,11 @@ export class VovkPLCEditor {
         })
 
         const signature = this._hashString(signatureParts.join('||')).toString()
-        return { map, signature, details }
+        return {map, signature, details}
     }
 
     _extractAsmAddressRefsFromCode(code, offsets) {
-        const normalizedOffsets = offsets || normalizeOffsets(this.project?.offsets || {})
+        const normalizedOffsets = offsets || ensureOffsets(this.project?.offsets || {})
         const refs = []
         if (!code) return refs
 
@@ -759,12 +766,12 @@ export class VovkPLCEditor {
         let masked = ''
         let state = 'out' // out, string, char, comment
         const limit = code.length
-        
+
         for (let i = 0; i < limit; i++) {
             const char = code[i]
-            
+
             if (state === 'out') {
-                if (char === '/' && code[i+1] === '/') {
+                if (char === '/' && code[i + 1] === '/') {
                     state = 'comment'
                     masked += ' '
                 } else if (char === '"') {
@@ -785,14 +792,14 @@ export class VovkPLCEditor {
                 }
             } else if (state === 'string') {
                 masked += ' '
-                if (char === '"' && code[i-1] !== '\\') {
+                if (char === '"' && code[i - 1] !== '\\') {
                     state = 'out'
                 }
             } else if (state === 'char') {
-                 masked += ' '
-                 if (char === "'" && code[i-1] !== '\\') {
-                     state = 'out'
-                 }
+                masked += ' '
+                if (char === "'" && code[i - 1] !== '\\') {
+                    state = 'out'
+                }
             }
         }
 
@@ -801,34 +808,36 @@ export class VovkPLCEditor {
             X: 'input',
             Y: 'output',
             M: 'marker',
-            S: 'system'
+            S: 'system',
         }
         // Match: 1=Prefix, 2=Byte, 3=Bit (Optional) OR 4=Byte, 5=Bit
         const regex = /\b(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))\b/gi
         let match = null
         while ((match = regex.exec(masked))) {
-            let prefix = '', byteValStr = '', bitRawStr
-            
+            let prefix = '',
+                byteValStr = '',
+                bitRawStr
+
             if (match[1]) {
-                 prefix = match[1].toUpperCase()
-                 byteValStr = match[2]
-                 bitRawStr = match[3]
+                prefix = match[1].toUpperCase()
+                byteValStr = match[2]
+                bitRawStr = match[3]
             } else {
-                 // Numeric bit address
-                 byteValStr = match[4]
-                 bitRawStr = match[5]
+                // Numeric bit address
+                byteValStr = match[4]
+                bitRawStr = match[5]
             }
 
             const byteValue = Number.parseInt(byteValStr, 10)
             if (!Number.isFinite(byteValue)) continue
             const byte = Math.max(0, byteValue)
-            
+
             const bitValue = typeof bitRawStr === 'undefined' ? null : Number.parseInt(bitRawStr, 10)
             const bit = Number.isFinite(bitValue) ? Math.max(0, Math.min(bitValue, 7)) : null
-            
+
             let location = 'marker'
             let baseOffset = 0
-            
+
             if (prefix) {
                 location = locationMap[prefix] || 'marker'
                 baseOffset = normalizedOffsets[location]?.offset || 0
@@ -840,7 +849,7 @@ export class VovkPLCEditor {
             const addressLabel = bit !== null ? `${byte}.${bit}` : `${byte}`
             const canonicalName = `${prefix}${byte}${bit !== null ? '.' + bit : ''}`
             const absoluteAddress = baseOffset + byte
-            
+
             refs.push({
                 name: canonicalName,
                 token: match[0],
@@ -859,12 +868,12 @@ export class VovkPLCEditor {
 
     _ensureBlockAddressRefs(block, offsets) {
         if (!block) return
-        const normalizedOffsets = offsets || normalizeOffsets(this.project?.offsets || {})
+        const normalizedOffsets = offsets || ensureOffsets(this.project?.offsets || {})
         block.cached_address_refs = this._extractAsmAddressRefsFromCode(block.code || '', normalizedOffsets)
     }
 
     _getAsmAddressRefsForLive(offsets) {
-        const normalizedOffsets = offsets || normalizeOffsets(this.project?.offsets || {})
+        const normalizedOffsets = offsets || ensureOffsets(this.project?.offsets || {})
         const refs = []
         const seen = new Set()
         const programs = (this.project?.files || []).filter(file => file?.type === 'program')
@@ -911,7 +920,7 @@ export class VovkPLCEditor {
     _replaceSymbolsOnce(code, symbolMap) {
         const src = code || ''
         if (!symbolMap || symbolMap.size === 0) {
-            return { code: src, map: null }
+            return {code: src, map: null}
         }
         const map = []
         const re = /\b[A-Za-z_]\w*\b/g
@@ -975,7 +984,7 @@ export class VovkPLCEditor {
             })
         }
 
-        return { code: out, map }
+        return {code: out, map}
     }
 
     _ensureAsmCache(block, symbolsSignature, symbolMap, symbolDetails) {
@@ -1000,7 +1009,7 @@ export class VovkPLCEditor {
 
     _mapCachedRangeToSource(block, start, end) {
         const map = block?.cached_asm_map
-        if (!map || !map.length) return { start, end }
+        if (!map || !map.length) return {start, end}
 
         const findSeg = offset => {
             for (const seg of map) {
@@ -1019,9 +1028,7 @@ export class VovkPLCEditor {
         let mappedEnd = end
 
         if (startSeg) {
-            mappedStart = startSeg.replaced
-                ? startSeg.inStart
-                : startSeg.inStart + (start - startSeg.outStart)
+            mappedStart = startSeg.replaced ? startSeg.inStart : startSeg.inStart + (start - startSeg.outStart)
         }
 
         if (endSeg) {
@@ -1033,7 +1040,7 @@ export class VovkPLCEditor {
         }
 
         if (mappedEnd <= mappedStart) mappedEnd = mappedStart + 1
-        return { start: mappedStart, end: mappedEnd }
+        return {start: mappedStart, end: mappedEnd}
     }
 
     _buildAsmAssembly(options = {}) {
@@ -1042,9 +1049,9 @@ export class VovkPLCEditor {
         const blocks = []
         let assembly = ''
         const programs = this._getLintPrograms()
-        const { map, signature, details } = this._buildSymbolCache()
+        const {map, signature, details} = this._buildSymbolCache()
 
-        if (!programs.length) return { assembly, blocks }
+        if (!programs.length) return {assembly, blocks}
 
         programs.forEach(file => {
             if (!file.blocks) return
@@ -1063,19 +1070,19 @@ export class VovkPLCEditor {
                 assembly += code
                 const codeEnd = assembly.length
                 if (!assembly.endsWith('\n')) assembly += '\n'
-                blocks.push({ block, code, codeStart, codeEnd, program: file })
+                blocks.push({block, code, codeStart, codeEnd, program: file})
             })
         })
 
-        return { assembly, blocks }
+        return {assembly, blocks}
     }
 
     _buildLintAssembly() {
-        return this._buildAsmAssembly({ includeHeaders: true })
+        return this._buildAsmAssembly({includeHeaders: true})
     }
 
     _applyLintDiagnostics(blocks, diagnosticsByBlock) {
-        blocks.forEach(({ block }) => {
+        blocks.forEach(({block}) => {
             const editor = block.props?.text_editor
             if (editor && typeof editor.setDiagnostics === 'function') {
                 editor.setDiagnostics(diagnosticsByBlock.get(block.id) || [])
@@ -1084,12 +1091,12 @@ export class VovkPLCEditor {
     }
 
     async lintProject() {
-        const { assembly, blocks } = this._buildLintAssembly()
+        const {assembly, blocks} = this._buildLintAssembly()
         const emptyByBlock = new Map()
-        blocks.forEach(({ block }) => emptyByBlock.set(block.id, []))
+        blocks.forEach(({block}) => emptyByBlock.set(block.id, []))
 
         if (!this.runtime_ready || !this.runtime || typeof this.runtime.lint !== 'function') {
-            this._lint_state = { assembly, diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0 }
+            this._lint_state = {assembly, diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0}
             this._applyLintDiagnostics(blocks, emptyByBlock)
             if (this.window_manager?.setConsoleProblems) {
                 this.window_manager.setConsoleProblems([])
@@ -1098,7 +1105,7 @@ export class VovkPLCEditor {
         }
 
         if (!assembly.trim()) {
-            this._lint_state = { assembly, diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0 }
+            this._lint_state = {assembly, diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0}
             this._applyLintDiagnostics(blocks, emptyByBlock)
             if (this.window_manager?.setConsoleProblems) {
                 this.window_manager.setConsoleProblems([])
@@ -1119,7 +1126,7 @@ export class VovkPLCEditor {
         this._lint_state.runId = runId
 
         if (this.window_manager?.setConsoleProblems) {
-            this.window_manager.setConsoleProblems({ status: 'checking' })
+            this.window_manager.setConsoleProblems({status: 'checking'})
         }
 
         const promise = (async () => {
@@ -1127,7 +1134,22 @@ export class VovkPLCEditor {
             try {
                 const offsets = this.project?.offsets
                 if (offsets && typeof this.runtime.setRuntimeOffsets === 'function') {
-                    await this.runtime.setRuntimeOffsets(offsets)
+                    /*
+                        // Updated Layout based on new default sizes in plcasm-compiler.h
+                        // C: 0 (Size 64)
+                        // X: 64 (Size 64)
+                        // Y: 128 (Size 64)
+                        // S: 192 (Size 256)
+                        // M: 448 (Size 256)
+                        await runtime.callExport('setRuntimeOffsets', 0, 64, 128, 192, 448)
+                    */
+                    const normalized = ensureOffsets(offsets)
+                    const C = normalized?.control?.offset || 0
+                    const X = normalized?.input?.offset || 0
+                    const Y = normalized?.output?.offset || 0
+                    const S = normalized?.system?.offset || 0
+                    const M = normalized?.marker?.offset || 0
+                    await this.runtime.setRuntimeOffsets(C, X, Y, S, M)
                 }
                 problems = await this.runtime.lint(assembly)
             } catch (e) {
@@ -1136,7 +1158,7 @@ export class VovkPLCEditor {
 
             const diagnosticsByBlock = new Map()
             const problemsList = []
-            blocks.forEach(({ block }) => diagnosticsByBlock.set(block.id, []))
+            blocks.forEach(({block}) => diagnosticsByBlock.set(block.id, []))
 
             if (problems && problems.length) {
                 const lineStarts = [0]
@@ -1190,9 +1212,9 @@ export class VovkPLCEditor {
                     const localLine = before.split('\n').length
                     const lastNl = before.lastIndexOf('\n')
                     const localColumn = mappedStart - (lastNl === -1 ? -1 : lastNl)
-                    const language = target.block.language || (target.block.type === 'asm' ? 'plcasm' : (target.block.type || ''))
+                    const language = target.block.language || (target.block.type === 'asm' ? 'plcasm' : target.block.type || '')
                     const stackSource = target.block.language_stack || target.block.languageStack || null
-                    const languageStack = Array.isArray(stackSource) ? stackSource.filter(Boolean) : (language ? [language] : [])
+                    const languageStack = Array.isArray(stackSource) ? stackSource.filter(Boolean) : language ? [language] : []
                     problemsList.push({
                         type: problem.type || 'error',
                         message: problem.message || 'Lint error',
@@ -1215,7 +1237,7 @@ export class VovkPLCEditor {
 
             if (this._lint_state.runId !== runId) return this._lint_state
 
-            this._lint_state = { assembly, diagnosticsByBlock, inFlight: null, runId }
+            this._lint_state = {assembly, diagnosticsByBlock, inFlight: null, runId}
             this._applyLintDiagnostics(blocks, diagnosticsByBlock)
             if (this.window_manager?.setConsoleProblems) {
                 this.window_manager.setConsoleProblems(problemsList)
@@ -1223,7 +1245,7 @@ export class VovkPLCEditor {
             return this._lint_state
         })()
 
-        this._lint_state.inFlight = { assembly, promise }
+        this._lint_state.inFlight = {assembly, promise}
         const state = await promise
         if (this._lint_state.inFlight?.promise === promise) {
             this._lint_state.inFlight = null

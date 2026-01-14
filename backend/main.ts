@@ -13,6 +13,11 @@ const app = express()
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
 
+app.use((req, res, next) => {
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+    res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+    next();
+});
 
 app.use(express.static('./frontend/src')) // For development
 // app.use(express.static('./frontend/dist')) // For production

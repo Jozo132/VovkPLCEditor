@@ -1,3 +1,4 @@
+import { ensureOffsets } from '../utils/offsets.js'
 import { PLC_Program, PLC_Project, PLCEditor } from '../utils/types.js'
 
 const SYSTEM_SYMBOLS = [
@@ -310,8 +311,22 @@ end:                      // Label to jump to
     const runtime = this.#editor.runtime
     if (!runtime) throw new Error('Runtime not initialized')
     const offsets = this.#editor.project?.offsets
-    if (offsets && typeof runtime.setRuntimeOffsets === 'function') {
-        await runtime.setRuntimeOffsets(offsets)
+    if (offsets && typeof runtime.setRuntimeOffsets === 'function') {        
+        /*
+            // Updated Layout based on new default sizes in plcasm-compiler.h
+            // C: 0 (Size 64)
+            // X: 64 (Size 64)
+            // Y: 128 (Size 64)
+            // S: 192 (Size 256)
+            // M: 448 (Size 256)
+            await runtime.callExport('setRuntimeOffsets', 0, 64, 128, 192, 448)
+        */
+        const C = offsets?.control?.offset || 0
+        const X = offsets?.input?.offset || 0
+        const Y = offsets?.output?.offset || 0
+        const S = offsets?.system?.offset || 0
+        const M = offsets?.marker?.offset || 0
+        await this.#editor.runtime.setRuntimeOffsets(C, X, Y, S, M)
     }
     const cleanup = async() => {
         await runtime.setSilent(true)
