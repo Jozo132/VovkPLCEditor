@@ -296,6 +296,7 @@ export default class WindowManager {
             consoleState.lastHeight = nextHeight
             consoleBody.style.height = `${nextHeight}px`
         }
+        this.openConsole = openConsole
 
         const clearHoverHighlight = () => {
             if (this._activeProblemHover?.editor?.setHoverHighlight) {
@@ -1002,8 +1003,8 @@ export default class WindowManager {
         device_online_button.addEventListener('click', async () => this.#on_device_online_click())
         this.device_online_button = device_online_button
 
-        // Poll connection status for footer buttons
-        setInterval(() => {
+        // Listen for connection status changes
+        const updateConnectionStatus = () => {
             const connected = this.#editor.device_manager && this.#editor.device_manager.connected
             const status = workspace.querySelector('#footer-device-status')
             if (status) {
@@ -1051,8 +1052,53 @@ export default class WindowManager {
                     this._setHealthConnected(false)
                 }
             }
+            
+            // Auto-transition to offline mode when connection is lost
+            if (!connected && this.active_mode === 'online') {
+                this.active_mode = 'edit'
+                if (device_online_button) {
+                    // @ts-ignore
+                    device_online_button.innerText = 'Go online'
+                    device_online_button.classList.remove('orange')
+                    device_online_button.classList.add('green')
+                }
+                if (device_select_element) {
+                    device_select_element.removeAttribute('disabled')
+                }
+                if (device_info) {
+                    device_info.innerHTML = ''
+                }
+            }
+            
+            // Auto-transition to online mode when connection is restored (auto-reconnect)
+            if (connected && this.active_mode === 'edit') {
+                this.active_mode = 'online'
+                if (device_online_button) {
+                    // @ts-ignore
+                    device_online_button.innerText = 'Go offline'
+                    device_online_button.classList.remove('green')
+                    device_online_button.classList.add('orange')
+                }
+                if (device_select_element) {
+                    device_select_element.setAttribute('disabled', 'disabled')
+                }
+                if (device_info && this.#editor.device_manager?.deviceInfo) {
+                    const info = this.#editor.device_manager.deviceInfo
+                    device_info.innerHTML = `
+                        <div class="device-name">${info.device || 'Unknown Device'}</div>
+                        <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
+                    `
+                }
+            }
+            
             this.updateLiveMonitorState()
-        }, 500)
+        }
+
+        // Listen to device connection events
+        workspace.addEventListener('plc-device-update', updateConnectionStatus)
+        
+        // Initial status update
+        updateConnectionStatus()
 
         const navigation = this.workspace.querySelector('.plc-navigation')
         if (!navigation) throw new Error('Navigation not found')
@@ -1714,6 +1760,11 @@ export default class WindowManager {
             this.logToConsole('Program uploaded successfully.', 'success')
             this.logToConsole(`Upload took ${(endTime - startTime).toFixed(0)}ms`, 'info')
             this.logToConsole('----------------------------------------', 'info')
+            
+            // Reset data fetcher to clear stale memory cache
+            if (this.#editor.data_fetcher) {
+                this.#editor.data_fetcher.reset()
+            }
         } catch (e) {
             this.logToConsole(`Upload failed: ${e.message}`, 'error')
             this.logToConsole('----------------------------------------', 'info')
@@ -1739,7 +1790,9 @@ export default class WindowManager {
             device_online_button.innerText = '----------'
             const connected = await this.requestConnect(this.active_device)
             if (!connected) {
+                const errorMsg = editor.device_manager.error || 'Failed to connect to device'
                 console.error('Failed to connect to device')
+                this.logToConsole(errorMsg, 'error')
                 await editor.device_manager.disconnect()
                 device_online_button.removeAttribute('disabled')
                 if (!device_select_element_was_disabled) device_select_element.removeAttribute('disabled')
@@ -1799,6 +1852,11 @@ export default class WindowManager {
                          await new Promise(r => setTimeout(r, 200))
                          await this.#editor.device_manager.connection.downloadProgram(compiledBytecode)
                          
+                         // Reset data fetcher after program download
+                         if (this.#editor.data_fetcher) {
+                             this.#editor.data_fetcher.reset()
+                         }
+                         
                          // Delay 3: After Download, Before Monitoring
                          await new Promise(r => setTimeout(r, 200))
                          this.setMonitoringActive(true)
@@ -1806,7 +1864,7 @@ export default class WindowManager {
             }
         } else {
             device_info.innerHTML = ''
-            await editor.device_manager.disconnect()
+            await editor.device_manager.disconnect(true) // Mark as intentional
             this._healthConnectionState = false
             this._stopHealthPolling()
             this._setHealthConnected(false)

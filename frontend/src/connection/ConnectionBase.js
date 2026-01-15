@@ -1,4 +1,7 @@
 export default class ConnectionBase {
+    /** @type { (error: Error) => void } */
+    onDisconnected = null
+
     /** @type { () => Promise<boolean> } */
     async connect() { throw new Error("connect() not implemented"); }
 

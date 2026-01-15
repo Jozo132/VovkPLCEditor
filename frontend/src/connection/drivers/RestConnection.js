@@ -2,6 +2,7 @@ import ConnectionBase from "../ConnectionBase.js";
 
 export default class RestConnection extends ConnectionBase {
     baseUrl = ''
+    onDisconnected = null
     /** @param {string} [baseUrl] */
     constructor(baseUrl) {
         super();

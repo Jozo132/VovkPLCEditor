@@ -13,10 +13,16 @@ export default class SerialConnection extends ConnectionBase {
         this._commandRunning = false;
         this._commandQueueLimit = 50;
         this._commandTimeoutMs = 8000;
+        
+        this.serial.onDisconnect = (err) => {
+            if (this.onDisconnected) this.onDisconnected(err);
+        };
     }
 
-    async connect() {
-        await this.serial.begin({ baudRate: this.baudrate });
+    async connect(port = null) {
+        const options = { baudRate: this.baudrate }
+        if (port) options.port = port
+        await this.serial.begin(options);
         return true;
     }
 
@@ -59,6 +65,16 @@ export default class SerialConnection extends ConnectionBase {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.programDownload(bytecode);
             await this.writeChunked(command + "\n");
+            
+            // Wait for response
+            await this._readResponseLine(12000);
+            
+            // Flush any remaining data in the buffer to prevent offset issues
+            await new Promise(resolve => setTimeout(resolve, 100));
+            while (this.serial.available()) {
+                this.serial.readAll();
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
         }, { label: 'downloadProgram', timeoutMs: 12000 });
     }
 

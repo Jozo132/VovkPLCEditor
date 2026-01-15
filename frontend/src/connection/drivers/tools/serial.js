@@ -15,6 +15,16 @@ export default class SerialCLASS {
         this._readingLoopPromise = null;
         this._closing = false;
         this._writeMutex = Promise.resolve();
+        this.onDisconnect = null;
+        this._fatalErrorHandled = false;    // Track if disconnect was already handled
+    }
+
+    _handleFatalError(error) {
+        if (this._fatalErrorHandled) return; // Prevent duplicate handling
+        this._fatalErrorHandled = true;
+        if (this.debug) console.warn('Serial fatal error:', error);
+        if (this.onDisconnect) this.onDisconnect(error);
+        this.isOpen = false;
     }
 
     /**
@@ -24,7 +34,8 @@ export default class SerialCLASS {
      *     dataBits?: 7 | 8,
      *     stopBits?: 1 | 2,
      *     parity?: 'none' | 'even' | 'odd',
-     *     flowControl?: 'hardware' | 'none'
+     *     flowControl?: 'hardware' | 'none',
+     *     port?: SerialPort
      * }} [openOptions] - Options for opening the serial port.
      * @return {Promise<void>}
      */
@@ -45,9 +56,13 @@ export default class SerialCLASS {
             throw new Error('Serial port already open. Call end() before opening a new port.');
         }
         try {
-            // Request user to select a serial port (requires a user gesture in page)
-            // @ts-ignore
-            this.port = await navigator.serial.requestPort();
+            // Use provided port or request user to select a serial port (requires a user gesture in page)
+            if (openOptions.port) {
+                this.port = openOptions.port
+            } else {
+                // @ts-ignore
+                this.port = await navigator.serial.requestPort();
+            }
             // Open the port with given options (baudRate is required)
             if (!this.port.connected || !this.port.readable || !this.port.writable) {
                 if (this.debug) console.log(`Requesting serial port with options:`, openOptions);
@@ -55,6 +70,19 @@ export default class SerialCLASS {
                 // await this.port.setSignals({ dataTerminalReady: false, requestToSend: false }); // Doesn't help
             }
             this.isOpen = true;
+            this._fatalErrorHandled = false; // Reset for new connection
+
+            // Handle hardware disconnect
+            const onDisconnect = () => {
+                if (this.port) {
+                    this.port.removeEventListener('disconnect', onDisconnect);
+                }
+                if (!this._closing) {
+                    this._handleFatalError(new Error("Device disconnected"));
+                }
+            };
+            this.port.addEventListener('disconnect', onDisconnect);
+
         } catch (err) {
             // If user cancels the port selection or open fails, ensure state is reset
             this.port = null;
@@ -93,6 +121,7 @@ export default class SerialCLASS {
                     // (They are expected when cancelling the reader)&#8203;:contentReference[oaicite:12]{index=12}
                 } else {
                     console.error('Serial read error:', error);
+                    this._handleFatalError(error);
                 }
             } finally {
                 // Release the reader lock so that the port can be closed

@@ -9,7 +9,7 @@ export let ConnectionBase
 /**
  * @typedef {{ target: 'simulation' }} ConnectionOption_Simulation
  * @typedef {{ target: 'rest', host?: string }} ConnectionOption_Rest
- * @typedef {{ target: 'serial', baudrate?: number, debug?: boolean }} ConnectionOption_Serial
+ * @typedef {{ target: 'serial', baudrate?: number, debug?: boolean, port?: any }} ConnectionOption_Serial
  * @typedef { ConnectionOption_Simulation | ConnectionOption_Rest | ConnectionOption_Serial } ConnectionOptions
  * @type { ConnectionOptions } */
 export let ConnectionOptions
@@ -24,19 +24,22 @@ export async function initializeConnection(options, editor) {
     let connection
     if (target === "simulation") {
         connection = new SimulationConnection(editor);
+        await connection.connect();
+        return connection;
     } else if (target === "rest") {
         const { host } = options;
         if (!host) throw new Error("REST host URL is required");
         connection = new RestConnection(host);
+        await connection.connect();
+        return connection;
     } else if (target === "serial") {
-        const { baudrate, debug } = options;
+        const { baudrate, debug, port } = options;
         connection = new SerialConnection(baudrate, debug);
+        await connection.connect(port);
+        return connection;
     } else {
         throw new Error(`Unsupported connection target: ${target}`);
     }
-
-    await connection.connect();
-    return connection;
 }
 
 /**

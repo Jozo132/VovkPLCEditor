@@ -7,6 +7,7 @@ export default class SimulationConnection extends ConnectionBase {
     _runTimer = null
     _runIntervalMs = 200
     editor
+    onDisconnected = null
 
     /**
      * @param { PLCEditor } editor - The PLC editor instance

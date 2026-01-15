@@ -5,6 +5,9 @@ export default class DeviceManager {
   error = ''
   connected = false
   #editor
+  #intentionalDisconnect = false
+  #lastSerialPortInfo = null  // Store port info instead of port reference
+  #reconnectAttempting = false
   /** @param {PLCEditor} editor */
   constructor(editor) {
     this.#editor = editor
@@ -77,8 +80,54 @@ export default class DeviceManager {
       await this.disconnect()
       this.options = options || this.options
       if (!this.options) throw new Error("Connection options required")
-      this.connection = await initializeConnection(this.options, this.#editor)
+      
+      const targetName = this.options.target === 'serial' ? 'Serial Port' : this.options.target === 'simulation' ? 'Simulation' : this.options.target
+      if (this.#editor.window_manager?.logToConsole) {
+        this.#editor.window_manager.logToConsole(`Connecting to ${targetName}...`)
+      }
+
+      // Use options as-is if port is provided (for auto-reconnect), otherwise clean copy
+      const connectionOptions = this.options
+      
+      this.connection = await initializeConnection(connectionOptions, this.#editor)
       this.connected = true
+      this.#intentionalDisconnect = false
+      
+      // Store serial port info for auto-reconnect
+      if (this.options.target === 'serial' && this.connection?.serial?.port) {
+        try {
+          const port = this.connection.serial.port
+          const info = port.getInfo()
+          this.#lastSerialPortInfo = {
+            vendorId: info.usbVendorId,
+            productId: info.usbProductId,
+            baudRate: this.options.baudrate || 115200
+          }
+          // Save to project
+          if (this.#editor.project) {
+            this.#editor.project.lastSerialDevice = this.#lastSerialPortInfo
+          }
+        } catch (e) {
+          console.warn('Could not save serial port info:', e)
+        }
+      }
+      
+      this.connection.onDisconnected = (err) => {
+          console.warn("Connection lost:", err);
+          const wasUnexpected = !this.#intentionalDisconnect
+          if (this.#editor.window_manager?.logToConsole) {
+            const msg = err ? `Connection lost: ${err.message || err}` : "Connection lost"
+            this.#editor.window_manager.logToConsole(msg, 'error')
+            if (wasUnexpected && this.options?.target === 'serial') {
+              this.#editor.window_manager.logToConsole('Will attempt to reconnect when device is available...', 'warning')
+            }
+          }
+          this.disconnect();
+          if (wasUnexpected && this.options?.target === 'serial') {
+            this.#startAutoReconnect()
+          }
+      };
+
       this.#emitUpdate()
       try {
         this.deviceInfo = await this.connection.getInfo(true)
@@ -86,10 +135,17 @@ export default class DeviceManager {
         if (this.options && this.options.debug) {
           console.log("Device info:", this.deviceInfo)
         }
+        if (this.#editor.window_manager?.logToConsole) {
+          this.#editor.window_manager.logToConsole(`Connected to ${targetName} successfully.`, 'success')
+        }
         this.error = ''
       } catch (err) {
         this.connected = false
-        console.error("Failed to get device info:", err)
+        const msg = `Failed to get device info: ${err?.message || err}`
+        console.error(msg)
+        if (this.#editor.window_manager?.logToConsole) {
+          this.#editor.window_manager.logToConsole(msg, 'error')
+        }
         this.#setError(err)
         this.#emitUpdate()
       }
@@ -97,7 +153,11 @@ export default class DeviceManager {
       this.connected = false
       const no_port_selected = err && err.message && err.message.includes('No port selected by the user')
       if (!no_port_selected) {
-        console.error("Failed to connect to device:", err)
+        const msg = `Failed to connect to device: ${err?.message || err}`
+        console.error(msg)
+        if (this.#editor.window_manager?.logToConsole) {
+          this.#editor.window_manager.logToConsole(msg, 'error')
+        }
         this.#setError(err)
       }
       this.#emitUpdate()
@@ -108,11 +168,16 @@ export default class DeviceManager {
   /**
    * Disconnect from current device
    */
-  async disconnect() {
+  async disconnect(intentional = false) {
+    this.#intentionalDisconnect = intentional
     await disconnectConnection(this.connection)
     this.connection = null
     this.connected = false
     this.deviceInfo = null
+    // Clear port info on intentional disconnect
+    if (intentional) {
+      this.#lastSerialPortInfo = null
+    }
     this.#emitUpdate()
   }
 
@@ -234,5 +299,84 @@ export default class DeviceManager {
     this.deviceInfo = null
     this.error = ''
     this.options = null
+  }
+
+  #startAutoReconnect() {
+    if (this.#reconnectAttempting) return
+    if (!('serial' in navigator)) return
+    if (!this.#lastSerialPortInfo) return
+    
+    this.#reconnectAttempting = true
+    const portInfo = this.#lastSerialPortInfo
+    const lastOptions = {...this.options}
+    
+    // Helper to find matching port from getPorts()
+    const findMatchingPort = async () => {
+      try {
+        const ports = await navigator.serial.getPorts()
+        return ports.find(port => {
+          const info = port.getInfo()
+          return info.usbVendorId === portInfo.vendorId && 
+                 info.usbProductId === portInfo.productId
+        })
+      } catch (e) {
+        return null
+      }
+    }
+    
+    // Helper to attempt reconnection with fresh port
+    const attemptReconnect = async () => {
+      const matchingPort = await findMatchingPort()
+      if (!matchingPort) return false
+      
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      if (this.#editor.window_manager?.logToConsole) {
+        this.#editor.window_manager.logToConsole('Device detected, attempting to reconnect...', 'info')
+      }
+      
+      try {
+        // Pass the fresh port object
+        const reconnectOptions = {...lastOptions, port: matchingPort}
+        await this.connect(reconnectOptions)
+        if (this.connected && this.#editor.window_manager?.logToConsole) {
+          this.#editor.window_manager.logToConsole('Successfully reconnected to device!', 'success')
+        }
+        return true
+      } catch (err) {
+        if (this.#editor.window_manager?.logToConsole) {
+          this.#editor.window_manager.logToConsole(`Failed to reconnect: ${err.message || err}`, 'error')
+        }
+        return false
+      }
+    }
+    
+    // Listen for connect events
+    const onConnect = async () => {
+      const success = await attemptReconnect()
+      if (success) {
+        navigator.serial.removeEventListener('connect', onConnect)
+        clearInterval(pollInterval)
+        this.#reconnectAttempting = false
+      }
+    }
+    
+    navigator.serial.addEventListener('connect', onConnect)
+    
+    // Poll for port availability as fallback
+    const pollInterval = setInterval(async () => {
+      if (!this.#reconnectAttempting || this.connected) {
+        clearInterval(pollInterval)
+        navigator.serial.removeEventListener('connect', onConnect)
+        return
+      }
+      
+      const success = await attemptReconnect()
+      if (success) {
+        navigator.serial.removeEventListener('connect', onConnect)
+        clearInterval(pollInterval)
+        this.#reconnectAttempting = false
+      }
+    }, 2000)
   }
 }

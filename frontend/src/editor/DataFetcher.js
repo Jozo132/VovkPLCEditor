@@ -107,6 +107,31 @@ export default class DataFetcher {
     }
 
     /**
+     * Reset the fetcher state - clears cache and forces re-evaluation of all registrations
+     * Call this after program download or offset changes
+     */
+    reset() {
+        // Clear memory cache
+        this.last_known_memory = new Uint8Array(65536)
+        
+        // Clear batch index
+        this.batch_index = 0
+        
+        // Re-trigger all callbacks with empty data to force UI updates
+        // This will cause all consumers to re-register with fresh addresses
+        for (const entry of this.registry.values()) {
+            const emptyData = new Uint8Array(entry.size)
+            entry.callbacks.forEach(cb => {
+                try {
+                    cb(emptyData)
+                } catch (e) {
+                    console.warn('Callback error during reset:', e)
+                }
+            })
+        }
+    }
+
+    /**
      * Resolve symbol or address string to { address, size, type, bit }
      * @param {string | object} input 
      */
