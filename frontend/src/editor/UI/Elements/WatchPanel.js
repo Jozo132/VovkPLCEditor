@@ -21,6 +21,8 @@ const WATCH_TYPES = {
 export default class WatchPanel {
     active_device = 'simulation'
     entries = []
+    STORAGE_KEY = 'vovk_plc_watch_values'
+    _saveTimeout = null
 
     /**
      * @param {import('../../Editor.js').VovkPLCEditor} editor 
@@ -32,6 +34,9 @@ export default class WatchPanel {
         this.minimized = false
         this.selectedIndex = -1
         this.render()
+        
+        // Restore last values from localStorage
+        this.restoreValues()
     }
 
     /** @type { (entries: any[]) => void } */
@@ -44,6 +49,10 @@ export default class WatchPanel {
             if (typeof item === 'string') return { name: item, value: '-', type: '' }
             return { name: item.name, type: item.type || '', value: '-' }
         })
+        
+        // Restore last values from localStorage
+        this.restoreValues()
+        
         this.entries.forEach(e => this.startMonitoring(e))
         this.renderList()
     }
@@ -766,6 +775,9 @@ export default class WatchPanel {
                 else entry.valueEl.style.color = ''
             }
             entry.value = val
+            
+            // Save value to localStorage (debounced)
+            this.debounceSaveValues()
         }
         
         this.editor.data_fetcher.register('watch', entry.resolved.address, entry.resolved.size, entry.update)
@@ -781,5 +793,76 @@ export default class WatchPanel {
             this.stopMonitoring(e)
             this.startMonitoring(e)
         })
+    }
+    
+    /**
+     * Get project identifier for localStorage key
+     */
+    getProjectKey() {
+        // Use project name if available, otherwise use a default key
+        const projectName = this.editor.project?.info?.name || 'default_project'
+        return `${this.STORAGE_KEY}_${projectName}`
+    }
+    
+    /**
+     * Debounced save to avoid excessive localStorage writes
+     */
+    debounceSaveValues() {
+        if (this._saveTimeout) {
+            clearTimeout(this._saveTimeout)
+        }
+        this._saveTimeout = setTimeout(() => {
+            this.saveValues()
+            this._saveTimeout = null
+        }, 1000) // Save 1 second after last update
+    }
+    
+    /**
+     * Save watch values to localStorage
+     */
+    saveValues() {
+        try {
+            const data = {}
+            this.entries.forEach(entry => {
+                if (entry.name && entry.value !== '-') {
+                    data[entry.name] = {
+                        value: entry.value,
+                        type: entry.type,
+                        timestamp: Date.now()
+                    }
+                }
+            })
+            localStorage.setItem(this.getProjectKey(), JSON.stringify(data))
+        } catch (e) {
+            console.warn('[WatchPanel] Failed to save values to localStorage', e)
+        }
+    }
+    
+    /**
+     * Restore watch values from localStorage
+     */
+    restoreValues() {
+        try {
+            const saved = localStorage.getItem(this.getProjectKey())
+            if (!saved) return
+            
+            const data = JSON.parse(saved)
+            this.entries.forEach(entry => {
+                const savedEntry = data[entry.name]
+                if (savedEntry && savedEntry.value !== undefined) {
+                    entry.value = savedEntry.value
+                    // Restore type if it was manually overridden
+                    if (savedEntry.type && !entry.type) {
+                        entry.type = savedEntry.type
+                    }
+                    // Update UI if element exists
+                    if (entry.valueEl) {
+                        entry.valueEl.textContent = entry.value
+                    }
+                }
+            })
+        } catch (e) {
+            console.warn('[WatchPanel] Failed to restore values from localStorage', e)
+        }
     }
 }

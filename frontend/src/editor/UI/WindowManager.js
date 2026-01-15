@@ -976,12 +976,6 @@ export default class WindowManager {
         if (!watchContainer) throw new Error('Watch container not found')
         this.watch_panel = new WatchPanel(editor, watchContainer)
         
-        // Load Watch Items
-        try {
-            const items = editor.project?.watch || []
-            if (Array.isArray(items)) this.watch_panel.setEntries(items)
-        } catch(e) { console.warn('Failed to load watch items', e) }
-        
         // Save on change
         this.watch_panel.onListChange = (items) => {
              if (editor.project) {
@@ -2158,8 +2152,16 @@ export default class WindowManager {
         this.refreshDeviceOptions()
         // this.#editor.draw()
 
-        if (this.watch_panel && typeof this.watch_panel.refresh === 'function') {
-            this.watch_panel.refresh()
+        // Load Watch Items from project
+        if (this.watch_panel) {
+            try {
+                const items = project?.watch || []
+                if (Array.isArray(items) && items.length > 0) {
+                    this.watch_panel.setEntries(items)
+                } else if (typeof this.watch_panel.refresh === 'function') {
+                    this.watch_panel.refresh()
+                }
+            } catch(e) { console.warn('Failed to load watch items', e) }
         }
 
         // Open main program
