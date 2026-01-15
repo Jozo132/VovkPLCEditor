@@ -156,6 +156,18 @@ const sidebar_watch_icon_source = {
     `
 }
 
+const monitor_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <ellipse fill="none" stroke="#ddd" stroke-width="2" cx="7" cy="12" rx="4.5" ry="4"/>
+        <ellipse fill="none" stroke="#ddd" stroke-width="2" cx="17" cy="12" rx="4.5" ry="4"/>
+        <line stroke="#ddd" stroke-width="2" x1="11.5" y1="12" x2="12.5" y2="12"/>
+        <path fill="none" stroke="#ddd" stroke-width="2" d="M2.5 12 L1 11"/>
+        <path fill="none" stroke="#ddd" stroke-width="2" d="M21.5 12 L23 11"/>
+    `
+}
+
 await icon_dealer.importIcon({ type: 'folder', name: 'plc-icon-folder', image: `url('${ImageRenderer.renderSVG(folder_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'program', name: 'plc-icon-gears', image: `url('${ImageRenderer.renderSVG(program_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'symbols', name: 'plc-icon-symbols', image: `url('${ImageRenderer.renderSVG(symbols_icon_source)}')` })
@@ -168,3 +180,4 @@ await icon_dealer.importIcon({ type: 'upload', name: 'plc-icon-upload', image: `
 await icon_dealer.importIcon({ type: 'sidebar-project', name: 'plc-icon-sidebar-project', image: `url('${ImageRenderer.renderSVG(sidebar_project_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'sidebar-health', name: 'plc-icon-sidebar-health', image: `url('${ImageRenderer.renderSVG(sidebar_health_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'sidebar-watch', name: 'plc-icon-sidebar-watch', image: `url('${ImageRenderer.renderSVG(sidebar_watch_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'monitor', name: 'plc-icon-monitor', image: `url('${ImageRenderer.renderSVG(monitor_icon_source)}')` })

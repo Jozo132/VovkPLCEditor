@@ -79,6 +79,10 @@ export class MiniCodeEditor {
 .mce-preview-pill.on { background:#3a3a3a; color:#1fba5f; border-color:#1fba5f; }
 .mce-preview-pill.off { background:#3a3a3a; color:rgba(200, 200, 200, 0.5); border-color:#555; }
 .mce-preview-pill.bit { min-width:2.5em; }
+.mce-preview-pill.byte, .mce-preview-pill.u8, .mce-preview-pill.i8 { min-width:3em; }
+.mce-preview-pill.int, .mce-preview-pill.u16, .mce-preview-pill.i16, .mce-preview-pill.word { min-width:4.5em; }
+.mce-preview-pill.dint, .mce-preview-pill.u32, .mce-preview-pill.i32, .mce-preview-pill.dword, .mce-preview-pill.real, .mce-preview-pill.float, .mce-preview-pill.f32, .mce-preview-pill.timer { min-width:6em; }
+.mce-preview-pill.u64, .mce-preview-pill.i64, .mce-preview-pill.f64, .mce-preview-pill.lword { min-width:8em; }
 .mce-marker:hover::after {
     content: attr(data-msg);
     position: absolute; bottom: 100%; left: 0;

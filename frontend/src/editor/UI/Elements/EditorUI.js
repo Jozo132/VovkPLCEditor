@@ -116,7 +116,6 @@ export default class EditorUI {
     updateMonitoringState(active = false) {
         this.monitoringActive = !!active
         if (!this.monitor_button) return
-        this.monitor_button.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
         this.monitor_button.classList.toggle('active', this.monitoringActive)
         
         if (this.live_edit_button) {
@@ -199,11 +198,16 @@ export default class EditorUI {
         const monitorBtn = document.createElement('button')
         monitorBtn.classList.add('plc-btn', 'monitor-btn')
         monitorBtn.setAttribute('data-monitor-toggle', 'true')
+        monitorBtn.setAttribute('title', 'Toggle Live Monitoring')
         monitorBtn.style.height = LOCK_SIZE // Match height
         monitorBtn.style.display = 'flex' // Ensure flex box for text alignment if needed
         monitorBtn.style.alignItems = 'center'
         monitorBtn.style.justifyContent = 'center'
         monitorBtn.style.marginLeft = '0' // Reset margin since it's in container
+        
+        const monitorIcon = document.createElement('span')
+        monitorIcon.className = 'plc-icon plc-icon-monitor'
+        monitorBtn.appendChild(monitorIcon)
         
         monitorBtn.addEventListener('click', () => {
             this.master?.window_manager?.toggleMonitoringActive?.()

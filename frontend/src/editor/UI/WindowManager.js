@@ -21,7 +21,7 @@ export default class WindowManager {
     /** @type {'simulation' | 'device'} */
     active_device = 'simulation'
     _monitoringActive = false
-    _monitoringAvailable = false
+    _monitoringAvailable = true  // Always available - can toggle in any state
     _liveEditEnabled = false
     _monitoringConnectionState = null
     _healthConnectionState = null
@@ -976,6 +976,24 @@ export default class WindowManager {
         if (!watchContainer) throw new Error('Watch container not found')
         this.watch_panel = new WatchPanel(editor, watchContainer)
         
+        // Restore monitoring state from localStorage
+        try {
+            const savedMonitoringState = localStorage.getItem('vovk_plc_monitoring_active')
+            if (savedMonitoringState !== null) {
+                this._monitoringActive = JSON.parse(savedMonitoringState)
+                // Propagate the restored state to any existing windows
+                setTimeout(() => {
+                    for (const win of this.windows.values()) {
+                        if (win && typeof win.updateMonitoringState === 'function') {
+                            win.updateMonitoringState(this._monitoringActive)
+                        }
+                    }
+                }, 0)
+            }
+        } catch (e) {
+            console.warn('Failed to restore monitoring state', e)
+        }
+        
         // Save on change
         this.watch_panel.onListChange = (items) => {
              if (editor.project) {
@@ -1033,8 +1051,9 @@ export default class WindowManager {
 
             if (this._monitoringConnectionState !== connected) {
                 this._monitoringConnectionState = connected
-                this.setMonitoringActive(false)
-                this.updateMonitoringAvailability(!!connected)
+                // Don't enforce monitor state off - keep user's preference
+                // Monitoring is always available - can be toggled in any state
+                this.updateMonitoringAvailability(true)
             }
             if (this._healthConnectionState !== connected) {
                 this._healthConnectionState = connected
@@ -2287,10 +2306,14 @@ export default class WindowManager {
         if (this._monitoringActive === next) return
         this._monitoringActive = next
         
-        // Reset Live Edit to LOCKED (false) when monitoring starts
-        if (next) {
-            this._liveEditEnabled = false
+        // Save state to localStorage
+        try {
+            localStorage.setItem('vovk_plc_monitoring_active', JSON.stringify(next))
+        } catch (e) {
+            console.warn('Failed to save monitoring state', e)
         }
+        
+        // Don't auto-lock when monitoring starts - let user control lock explicitly
 
         for (const win of this.windows.values()) {
             if (win && typeof win.updateMonitoringState === 'function') {

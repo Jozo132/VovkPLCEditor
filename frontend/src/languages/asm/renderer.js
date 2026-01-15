@@ -202,7 +202,16 @@ export const ladderRenderer = {
             return [...timerRefs, ...filteredSymbols, ...filteredAddresses]
         },
         previewValueProvider: entry => {
+            // Helper to format time with auto-scaling units
+            const formatTime = (ms) => {
+                if (ms < 1000) return `${ms}ms`
+                if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+                const minutes = Math.floor(ms / 60000)
+                const seconds = Math.floor((ms % 60000) / 1000)
+                return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
+            }
             if (!editor.window_manager?.isMonitoringActive?.()) return null
+            if (!editor.device_manager?.connected) return null // Only show values when online
             const live = editor.live_symbol_values?.get(entry?.name)
             
             // For timers, we might not have the ref yet but we need to show SOMETHING 
@@ -252,9 +261,12 @@ export const ladderRenderer = {
                 }
 
                 if (hasPT && hasET) {
-                    text = String(Math.max(0, Number(pt) - Number(et)))
+                    const remaining = Math.max(0, Number(pt) - Number(et))
+                    text = formatTime(remaining)
+                    className += ' timer'
                 } else if (hasPT && !hasET && entry.isTimerPT) {
-                    text = String(pt)
+                    text = formatTime(pt)
+                    className += ' timer'
                 }
 
                 if (entry.isTimerStorage && et > 0) {
@@ -264,6 +276,9 @@ export const ladderRenderer = {
 
             if (entry?.type === 'bit' || live.type === 'bit') {
                 className += ` ${live.value ? 'on' : 'off'} bit`
+            } else if (!entry?.isTimerStorage && !entry?.isTimerPT && live.type) {
+                // Add type class for non-timer values to ensure consistent width
+                className += ` ${live.type}`
             }
             return { text, className }
         },

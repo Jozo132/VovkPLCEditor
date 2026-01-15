@@ -104,7 +104,9 @@ export default class SetupUI {
                 <div class="plc-editor-header">
                     <h2 style="margin-top: 0px; margin-bottom: 3px;">Device Configuration</h2>
                     <p>System Settings and Memory Map</p>
-                    <button class="plc-btn monitor-btn" data-monitor-toggle="true">Monitor</button>
+                    <button class="plc-btn monitor-btn" data-monitor-toggle="true" title="Toggle Live Monitoring">
+                        <span class="plc-icon plc-icon-monitor"></span>
+                    </button>
                 </div>
             </div>
             <div class="plc-editor-body setup-body">
@@ -397,13 +399,7 @@ export default class SetupUI {
 
     updateMonitoringAvailability(available = false) {
         this.monitoringAvailable = !!available
-        if (!this.monitor_buttons || !this.monitor_buttons.length) return
-        this.monitor_buttons.forEach(btn => {
-            btn.style.display = this.monitoringAvailable ? '' : 'none'
-        })
-        if (!this.monitoringAvailable) {
-            this.updateMonitoringState(false)
-        }
+        // Keep button always enabled and visible - allow toggling even when disconnected
     }
     
     hide() {

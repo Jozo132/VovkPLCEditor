@@ -78,7 +78,9 @@ export default class MemoryUI {
                 <div class="plc-editor-header">
                     <h2 style="margin-top: 0px; margin-bottom: 3px;">Memory Map</h2>
                     <p>Device memory inspection</p>
-                    <button class="plc-btn monitor-btn" data-monitor-toggle="true">Monitor</button>
+                    <button class="plc-btn monitor-btn" data-monitor-toggle="true" title="Toggle Live Monitoring">
+                        <span class="plc-icon plc-icon-monitor"></span>
+                    </button>
                 </div>
             </div>
             <div class="plc-editor-body memory-body">
@@ -194,7 +196,6 @@ export default class MemoryUI {
     updateMonitoringState(active = false) {
         this.monitoringActive = !!active
         this.monitor_buttons.forEach(btn => {
-            btn.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
             btn.classList.toggle('active', this.monitoringActive)
         })
         if (!this.hidden) {
@@ -204,12 +205,8 @@ export default class MemoryUI {
 
     updateMonitoringAvailability(available = false) {
         this.monitoringAvailable = !!available
-        this.monitor_buttons.forEach(btn => {
-            btn.style.display = this.monitoringAvailable ? '' : 'none'
-        })
-        if (!this.monitoringAvailable) {
-            this.updateMonitoringState(false)
-        }
+        // Keep button always enabled - allow toggling even when disconnected
+        // This preserves user's monitoring preference for when connection returns
     }
 
     setMonitoringState(isMonitoring) {
@@ -224,7 +221,6 @@ export default class MemoryUI {
 
         this.monitor_buttons.forEach(btn => {
             btn.classList.toggle('active', this.monitoringActive)
-            btn.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
         })
         
         if (wasActive !== this.monitoringActive) {
