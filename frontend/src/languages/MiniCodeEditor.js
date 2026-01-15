@@ -2091,9 +2091,11 @@ const asmInstructions = {
         writeBitDU: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Pulse Coil (Rising).\nWrites 1 to target only on the rising edge of the accumulator value.', 'u8.writeBitDU output1 state_var'),
         writeBitDD: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Pulse Coil (Falling).\nWrites 1 to target only on the falling edge of the accumulator value.', 'u8.writeBitDD output1 state_var'),
         
+        writeBitOn: doc([{name: 'addr.bit', type: 'bit_symbol'}], 'Write 1 to target bit.', 'u8.writeBitOn output1'),
         writeBitOnDU: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Set Coil on Rising Edge.\nSets target to 1 on rising edge of accumulator.', 'u8.writeBitOnDU output1 state_var'),
         writeBitOnDD: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Set Coil on Falling Edge.\nSets target to 1 on falling edge of accumulator.', 'u8.writeBitOnDD output1 state_var'),
         
+        writeBitOff: doc([{name: 'addr.bit', type: 'bit_symbol'}], 'Write 0 to target bit.', 'u8.writeBitOff output1'),
         writeBitOffDU: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Reset Coil on Rising Edge.\nSets target to 0 on rising edge of accumulator.', 'u8.writeBitOffDU output1 state_var'),
         writeBitOffDD: doc([{name: 'target', type: 'bit_symbol'}, {name: 'state', type: 'bit_symbol'}], 'Reset Coil on Falling Edge.\nSets target to 0 on falling edge of accumulator.', 'u8.writeBitOffDD output1 state_var'),
 
