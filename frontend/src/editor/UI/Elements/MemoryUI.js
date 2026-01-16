@@ -36,6 +36,12 @@ export default class MemoryUI {
     constructor(master) {
         this.master = master
 
+        // Restore display mode from localStorage
+        const savedMode = localStorage.getItem('vovk_plc_memory_display_mode')
+        if (savedMode && ['hex', 'bin', 'byte'].includes(savedMode)) {
+            this.displayMode = savedMode
+        }
+
         const div = document.createElement('div')
         div.classList.add('plc-editor', 'memory-editor')
         this.div = div
@@ -84,15 +90,15 @@ export default class MemoryUI {
                 </div>
             </div>
             <div class="plc-editor-body memory-body">
-                <div class="memory-toolbar">
-                    <span class="memory-toolbar-label">Display</span>
-                    <button class="memory-mode-btn" data-mode="hex">HEX</button>
-                    <button class="memory-mode-btn" data-mode="bin">BIN</button>
-                    <button class="memory-mode-btn" data-mode="byte">BYTE</button>
-                </div>
                 <div class="memory-layout">
                     <div class="memory-sidebar"></div>
                     <div class="memory-content">
+                        <div class="memory-toolbar">
+                            <span class="memory-toolbar-label">Display</span>
+                            <button class="memory-mode-btn" data-mode="hex">HEX</button>
+                            <button class="memory-mode-btn" data-mode="bin">BIN</button>
+                            <button class="memory-mode-btn" data-mode="byte">BYTE</button>
+                        </div>
                         <div class="memory-status"></div>
                         <div class="memory-output-host">
                             <div class="memory-output-wrap">
@@ -164,6 +170,7 @@ export default class MemoryUI {
         if (!['hex', 'bin', 'byte'].includes(next)) return
         if (this.displayMode === next) return
         this.displayMode = next
+        localStorage.setItem('vovk_plc_memory_display_mode', next)
         this.updateDisplayButtons()
         if (this._lastSnapshot) {
             this.renderSnapshot(
@@ -311,7 +318,7 @@ export default class MemoryUI {
     }
 
     _getBytesPerRow() {
-        return this.displayMode === 'bin' ? 1 : 16
+        return this.displayMode === 'bin' ? 2 : 16
     }
 
     _getLineHeight() {
@@ -346,13 +353,35 @@ export default class MemoryUI {
     _getLayoutMetrics(baseRange) {
         const range = baseRange || this._getScopeRange()
         const maxAddr = range.size > 0 ? range.start + range.size - 1 : range.start
-        const addrWidth = Math.max(2, String(maxAddr).length)
+        const addrWidth = Math.max(3, String(maxAddr).length)
         const metrics = this._getFontMetrics()
         const cols = this.displayMode === 'bin' ? 8 : 16
         const cellChars = this.displayMode === 'hex' ? 2 : (this.displayMode === 'byte' ? 3 : 1)
         const gap = metrics.charWidth
         const addrWidthPx = addrWidth * metrics.charWidth
         const cellWidth = cellChars * metrics.charWidth + gap
+        
+        if (this.displayMode === 'bin') {
+            const blockGap = metrics.charWidth * 4
+            const singleBlockDataWidth = cols * cellWidth
+            // Address + gap + bits
+            const blockWidth = addrWidthPx + gap + singleBlockDataWidth
+            const contentWidth = blockWidth * 2 + blockGap
+            return {
+                ...metrics,
+                addrWidth,
+                addrWidthPx,
+                cols,
+                cellChars,
+                cellWidth,
+                gap,
+                contentWidth,
+                blockWidth,
+                blockGap,
+                isBinSplit: true
+            }
+        }
+
         const contentWidth = addrWidthPx + gap + cols * cellWidth
         return {
             ...metrics,
@@ -552,14 +581,29 @@ export default class MemoryUI {
         this.ctx.font = layout.font
         this.ctx.textBaseline = 'top'
 
-        const headerX = offsetX + layout.addrWidthPx + layout.gap
         this.ctx.fillStyle = '#888'
-        for (let col = 0; col < layout.cols; col++) {
-            const label = this.displayMode === 'bin'
-                ? String(col)
-                : String(col).padStart(2, '0')
-            const x = headerX + col * layout.cellWidth
-            this.ctx.fillText(label, x, 0)
+
+        if (layout.isBinSplit) {
+            // Block 1 Header
+            for (let col = 0; col < 8; col++) {
+                const x = (offsetX + layout.addrWidthPx + layout.gap) + col * layout.cellWidth
+                this.ctx.fillText(String(col), x, 0)
+            }
+            // Block 2 Header
+            const block2Offset = layout.blockWidth + layout.blockGap
+            for (let col = 0; col < 8; col++) {
+                const x = (offsetX + block2Offset + layout.addrWidthPx + layout.gap) + col * layout.cellWidth
+                this.ctx.fillText(String(col), x, 0)
+            }
+        } else {
+            const headerX = offsetX + layout.addrWidthPx + layout.gap
+            for (let col = 0; col < layout.cols; col++) {
+                const label = this.displayMode === 'bin'
+                    ? String(col)
+                    : String(col).padStart(2, '0')
+                const x = headerX + col * layout.cellWidth
+                this.ctx.fillText(label, x, 0)
+            }
         }
 
         const snapshot = this._lastSnapshot
@@ -575,34 +619,56 @@ export default class MemoryUI {
             const rowAddr = base.start + row * bytesPerRow
             if (rowAddr >= base.start + base.size) break
             const y = layout.lineHeight + (row - startRow) * layout.lineHeight
-            const addrLabel = String(rowAddr).padStart(layout.addrWidth, '0')
-            
-             // Address is always opaque
-            this.ctx.globalAlpha = 1.0
-            this.ctx.fillStyle = '#888'
-            this.ctx.fillText(addrLabel, offsetX, y)
+
+            // Standard Address (only if not split bin)
+            if (!layout.isBinSplit) {
+                const addrLabel = String(rowAddr).padStart(layout.addrWidth, '0')
+                this.ctx.globalAlpha = 1.0
+                this.ctx.fillStyle = '#888'
+                this.ctx.fillText(addrLabel, offsetX, y)
+            }
 
             // Apply transparency to values if paused
             this.ctx.globalAlpha = valueAlpha
 
-            if (this.displayMode === 'bin') {
-                const byteIndex = rowAddr - snapshotStart
-                const rawVal = snapshotBytes ? snapshotBytes[byteIndex] : undefined
-                const hasByte = !placeholder && typeof rawVal === 'number' && Number.isFinite(rawVal)
-                const byteVal = hasByte ? rawVal : 0
-                for (let bit = 0; bit < layout.cols; bit++) {
-                    const bitVal = hasByte ? ((byteVal >> bit) & 1) : 0
-                    const text = placeholder || !hasByte ? '-' : String(bitVal)
-                    const color = placeholder || !hasByte
-                        ? placeholderColor
-                        : (bitVal === 0 ? '#000' : '#fff')
-                    const x = headerX + bit * layout.cellWidth
-                    this.ctx.fillStyle = color
-                    this.ctx.fillText(text, x, y)
+            if (layout.isBinSplit) {
+                for (let b = 0; b < 2; b++) {
+                    const addr = rowAddr + b
+                    if (addr >= base.start + base.size) break
+
+                    const blockOffset = b === 0 ? 0 : (layout.blockWidth + layout.blockGap)
+                    const bx = offsetX + blockOffset
+                    
+                    // Address inside block
+                    const addrLabel = String(addr).padStart(layout.addrWidth, '0')
+                    this.ctx.globalAlpha = 1.0 // Address always opaque
+                    this.ctx.fillStyle = '#888'
+                    this.ctx.fillText(addrLabel, bx, y)
+                    
+                    // Data
+                    this.ctx.globalAlpha = valueAlpha
+                    const byteIndex = addr - snapshotStart
+                    const rawVal = snapshotBytes ? snapshotBytes[byteIndex] : undefined
+                    const hasByte = !placeholder && typeof rawVal === 'number' && Number.isFinite(rawVal)
+                    const byteVal = hasByte ? rawVal : 0
+                    
+                    for (let bit = 0; bit < 8; bit++) {
+                        const bitVal = hasByte ? ((byteVal >> bit) & 1) : 0
+                        const text = placeholder || !hasByte ? '-' : String(bitVal)
+                        const color = placeholder || !hasByte
+                            ? placeholderColor
+                            : (bitVal === 0 ? '#000' : '#fff')
+                        
+                        const bitX = bx + layout.addrWidthPx + layout.gap + bit * layout.cellWidth
+                        this.ctx.fillStyle = color
+                        this.ctx.fillText(text, bitX, y)
+                    }
                 }
                 continue
             }
 
+            // Standard Hex/Byte drawing
+            const headerX = offsetX + layout.addrWidthPx + layout.gap
             for (let col = 0; col < layout.cols; col++) {
                 const addr = rowAddr + col
                 if (addr >= base.start + base.size) break
