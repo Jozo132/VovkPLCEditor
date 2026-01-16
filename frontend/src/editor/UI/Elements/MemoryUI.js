@@ -449,11 +449,30 @@ export default class MemoryUI {
         const canRead = connected && this.monitoringActive
         if (!canRead) {
             this._setStatus('')
+            
+            // Logic to preserve locked data (snapshot) if available
             const snapshot = this._lastSnapshot
-            if (snapshot && snapshot.placeholder && snapshot.start === range.start && snapshot.size === range.size && !force) {
+            let preserve = false
+            
+            if (snapshot && snapshot.bytes && !snapshot.placeholder && snapshot.start === range.start && snapshot.size === range.size) {
+                 preserve = true
+                 
+                 // However, if we are connected to a NEW device/session that differs from the snapshot source, we should clear it
+                 // If we are disconnected, we keep it (Offline View / Locked)
+                 if (connected) {
+                     const currentConn = deviceManager.connection
+                     // If we have a tracked connection for this snapshot and it doesn't match current, clear it
+                     if (this._snapshotConnection && this._snapshotConnection !== currentConn) {
+                         preserve = false
+                     }
+                 }
+            }
+
+            if (preserve) {
                 this._scheduleDraw()
                 return
             }
+
             this.renderSnapshot(null, range.start, range.size, true, range)
             return
         }
@@ -470,6 +489,10 @@ export default class MemoryUI {
                 : raw && raw.buffer
                     ? new Uint8Array(raw.buffer, raw.byteOffset || 0, raw.byteLength || raw.length || 0)
                     : Uint8Array.from(raw || [])
+            
+            // Update connection tracking for this fresh data
+            this._snapshotConnection = deviceManager.connection
+            
             this.renderSnapshot(bytes, range.start, range.size, false, range)
         } catch (e) {
             this._setStatus('')
