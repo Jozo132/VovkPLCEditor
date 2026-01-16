@@ -426,6 +426,18 @@ export default class SymbolsUI {
                 tr.classList.add('selected')
             }
 
+            // Drag Start
+            tr.draggable = true
+            tr.addEventListener('dragstart', (e) => {
+                e.dataTransfer.effectAllowed = 'copy'
+                const payload = JSON.stringify({
+                    name: symbol.name,
+                    type: symbol.type
+                })
+                e.dataTransfer.setData('vovk-app/symbol', payload)
+                e.dataTransfer.setData('text/plain', symbol.name) // Fallback
+            })
+
             // Icon Column
             const tdIcon = document.createElement('td')
             tdIcon.classList.add('symbol-icon-cell')

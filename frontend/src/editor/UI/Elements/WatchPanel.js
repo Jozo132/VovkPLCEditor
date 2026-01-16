@@ -198,6 +198,31 @@ export default class WatchPanel {
                 }
             })
         }
+
+        // Handle Symbol Drops on the panel
+        element.addEventListener('dragover', (e) => {
+            if (e.dataTransfer.types.includes('vovk-app/symbol')) {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'copy'
+                element.classList.add('drag-over')
+            }
+        })
+        
+        element.addEventListener('dragleave', (e) => {
+            element.classList.remove('drag-over')
+        })
+        
+        element.addEventListener('drop', (e) => {
+            element.classList.remove('drag-over')
+            const data = e.dataTransfer.getData('vovk-app/symbol')
+            if (data) {
+                e.preventDefault()
+                try {
+                    const item = JSON.parse(data)
+                    this.addEntry(item.name, item.type)
+                } catch(e) {}
+            }
+        })
         
         this.renderList()
     }
@@ -372,6 +397,19 @@ export default class WatchPanel {
         this.inputEl.value = ''
         this.renderList()
     }
+    
+    addEntry(name, type = '') {
+        const value = name ? name.trim() : ''
+        if (!value) return
+        
+        if (this.entries.some(e => e.name === value)) return
+
+        const entry = { name: value, value: '-', type: type }
+        this.startMonitoring(entry)
+        this.entries.push(entry)
+        this._notifyChange()
+        this.renderList()
+    }
 
     /*
     onListClick(e) {
@@ -433,6 +471,8 @@ export default class WatchPanel {
             })
             
             row.addEventListener('dragover', (e) => {
+                if (e.dataTransfer.types.includes('vovk-app/symbol')) return
+
                 e.preventDefault()
                 e.dataTransfer.dropEffect = "move"
                 // Only style if valid drop target
@@ -448,6 +488,8 @@ export default class WatchPanel {
             })
             
             row.addEventListener('drop', (e) => {
+                if (e.dataTransfer.types.includes('vovk-app/symbol')) return
+
                 e.preventDefault()
                 // Find drop target row
                 const targetRow = e.target.closest('.plc-device-watch-row')
