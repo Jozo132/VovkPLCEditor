@@ -13,6 +13,7 @@ import LanguageManager from './LanguageManager.js'
 import ContextManager from './ContextManager.js'
 import Actions from './Actions.js'
 import EditorUI from './UI/Elements/EditorUI.js'
+import LivePatcher from './LivePatcher.js'
 import VOVKPLC_VERSION_BUILD from './BuildNumber.js'
 
 Actions.initialize() // Enable global actions for all instances of VovkPLCEditor
@@ -418,6 +419,9 @@ export class VovkPLCEditor {
         this.workspace.addEventListener('mouseenter', markHover)
         this.workspace.addEventListener('mouseleave', clearHover)
         this.workspace.addEventListener('mousemove', markHover)
+
+        // Initialize Program Patcher
+        this.program_patcher = new LivePatcher(this)
         this.workspace.addEventListener('plc-device-update', () => {
             this._updateOffsetsFromDevice()
         })
@@ -898,8 +902,9 @@ export class VovkPLCEditor {
             }
             
             if (storageAddr !== -1) {
+                // Use stable name based on storage address instead of text position
                 const storageRef = {
-                    name: `${storageToken}@t${storageStart}`,
+                    name: `tim_storage_M${storageAddr}`,
                     originalName: storageToken,
                     type: 'u32', 
                     absoluteAddress: storageAddr,
@@ -915,12 +920,30 @@ export class VovkPLCEditor {
                     storageRef.presetName = presetToken
                 }
                 refs.push(storageRef)
+                
+                // Add timer Q output state pill (flags byte at offset +8, bit 0)
+                refs.push({
+                    name: `tim_output_M${storageAddr}`,
+                    originalName: 'Q',
+                    type: 'bit',
+                    absoluteAddress: storageAddr + 8,  // Flags byte at offset +8
+                    bitOffset: 0,  // TIMER_FLAG_Q is bit 0
+                    start: storageStart,  // Position before storage token
+                    end: storageStart,    // Zero-width, rendered as pill
+                    isTimerOutput: true,
+                    timerType: instr,
+                    storageAddress: storageAddr
+                })
             }
             
             if (presetToken.startsWith('#')) {
                 const val = parseInt(presetToken.substring(1), 10)
+                // Use stable name based on timer storage address instead of text position
+                // e.g., "tim_const_M192_p2" instead of "tim_const_p2@t73"
+                // This way the name doesn't change when you edit code before it
+                const timerName = storageAddr !== -1 ? `M${storageAddr}` : `pos${presetStart}`
                 refs.push({
-                    name: `${presetToken}@t${presetStart}`,
+                    name: `tim_const_${timerName}_p2`,
                     originalName: presetToken,
                     type: 'u32',
                     value: val,
@@ -945,8 +968,9 @@ export class VovkPLCEditor {
                  }
                  
                  if (presetAddr !== -1) {
+                     // Use stable name based on preset memory address
                      refs.push({
-                        name: `${presetToken}@t${presetStart}`,
+                        name: `tim_memory_M${presetAddr}`,
                         originalName: presetToken,
                         type: 'u32',
                         absoluteAddress: presetAddr,

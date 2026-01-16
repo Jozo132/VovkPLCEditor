@@ -76,6 +76,8 @@ export class MiniCodeEditor {
 .mce-preview-pill { display:inline-flex; vertical-align:middle; position:relative; align-items:center; justify-content:center; height:1.1em; padding:0 0.4em; border-radius:0.2em; background:#464646; color:#fff; border:1px solid #464646; font-size:0.85em; line-height:1; font-weight:600; white-space:nowrap; pointer-events:auto; cursor:pointer; z-index:6; box-shadow:0 1px 1px rgba(0,0,0,0.2); outline: none; margin: 0 0.2em; box-sizing: border-box; user-select: none; }
 .mce-preview-pill:hover { filter: brightness(1.2); border-color: #007acc; }
 .mce-preview-pill:focus { border-color: #007acc; box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.5); z-index: 20; outline: none; }
+.mce-preview-pill:not([tabindex]) { cursor: default; user-select: none; }
+.mce-preview-pill:not([tabindex]):hover { filter: none; border-color: #464646; }
 .mce-preview-pill.on { background:#3a3a3a; color:#1fba5f; border-color:#1fba5f; }
 .mce-preview-pill.off { background:#3a3a3a; color:rgba(200, 200, 200, 0.5); border-color:#555; }
 .mce-preview-pill.bit { min-width:2.5em; }
@@ -83,6 +85,7 @@ export class MiniCodeEditor {
 .mce-preview-pill.int, .mce-preview-pill.u16, .mce-preview-pill.i16, .mce-preview-pill.word { min-width:4.5em; }
 .mce-preview-pill.dint, .mce-preview-pill.u32, .mce-preview-pill.i32, .mce-preview-pill.dword, .mce-preview-pill.real, .mce-preview-pill.float, .mce-preview-pill.f32, .mce-preview-pill.timer { min-width:6em; }
 .mce-preview-pill.u64, .mce-preview-pill.i64, .mce-preview-pill.f64, .mce-preview-pill.lword { min-width:8em; }
+.mce-preview-pill.editable-constant { border-style: dashed; border-color: #d7ba7d; }
 .mce-marker:hover::after {
     content: attr(data-msg);
     position: absolute; bottom: 100%; left: 0;
@@ -1005,8 +1008,10 @@ export class MiniCodeEditor {
                      text = String(p.val)
                  }
 
+                 // Check if entry is non-interactive (no tab selection)
+                 const tabindexAttr = p.entry?.nonInteractive ? '' : ' tabindex="0"'
                  const validMarker = String.fromCharCode(markerCode++)
-                 const html = `<span class="mce-preview-pill ${cls}" data-pill-index="${idx}" tabindex="0">${esc(text)}</span>`
+                 const html = `<span class="mce-preview-pill ${cls}" data-pill-index="${idx}"${tabindexAttr}>${esc(text)}</span>`
                  visualMarkers.set(validMarker, html)
 
                  if (newValJson !== oldValJson) {
@@ -1016,6 +1021,12 @@ export class MiniCodeEditor {
                      const newCls = `mce-preview-pill ${cls}`
                      if (el.className !== newCls) el.className = newCls
                      if (el.dataset.pillIndex !== String(idx)) el.dataset.pillIndex = String(idx)
+                     // Update tabindex for non-interactive pills
+                     if (p.entry?.nonInteractive) {
+                         el.removeAttribute('tabindex')
+                     } else if (!el.hasAttribute('tabindex')) {
+                         el.setAttribute('tabindex', '0')
+                     }
                  }
              })
 
@@ -1060,7 +1071,9 @@ export class MiniCodeEditor {
                 } else {
                      text = String(p.val)
                 }
-                const html = `<span class="mce-preview-pill ${cls}" data-pill-index="${idx}" tabindex="0">${esc(text)}</span>`
+                // Check if entry is non-interactive (no tab selection)
+                const tabindexAttr = p.entry?.nonInteractive ? '' : ' tabindex="0"'
+                const html = `<span class="mce-preview-pill ${cls}" data-pill-index="${idx}"${tabindexAttr}>${esc(text)}</span>`
                 visualMarkers.set(validMarker, html)
                 
                 lastPos = p.pos

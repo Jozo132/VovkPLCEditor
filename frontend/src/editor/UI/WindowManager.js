@@ -1656,6 +1656,19 @@ export default class WindowManager {
                 }
                 this.logToConsole('----------------------------------------', 'info')
             }
+            
+            // Auto-scan for patchable constants after successful compilation (always run, even in silent mode)
+            if (this.#editor.program_patcher) {
+                try {
+                    const patchables = await this.#editor.program_patcher.scanPatchableConstants()
+                    if (patchables.length > 0 && !suppressInfo) {
+                        console.log(`Found ${patchables.length} patchable constant(s)`)
+                    }
+                } catch (e) {
+                    console.warn('Failed to scan patchable constants:', e)
+                }
+            }
+            
             return true
         } catch (e) {
             if (!silent) {
@@ -1781,6 +1794,230 @@ export default class WindowManager {
         } catch (e) {
             this.logToConsole(`Upload failed: ${e.message}`, 'error')
             this.logToConsole('----------------------------------------', 'info')
+        }
+    }
+
+    /**
+     * Scans the project for patchable constants
+     * @returns {Array<{name: string, type: string, current_value: number, bytecode_offset: number, instruction_name: string, timer_address: number}>}
+     */
+    async scanPatchableConstants() {
+        if (!this.#editor.program_patcher) {
+            console.error('Bytecode patcher not initialized')
+            return []
+        }
+        return this.#editor.program_patcher.scanPatchableConstants()
+    }
+
+    /**
+     * Patches a constant value in the bytecode and re-uploads
+     * @param {number} bytecodeOffset - Offset in bytecode where the constant is stored
+     * @param {number} newValue - New value to set
+     * @returns {Promise<{success: boolean, message: string}>}
+     */
+    async patchConstant(bytecodeOffset, newValue) {
+        if (!this.#editor.program_patcher) {
+            return { success: false, message: 'Bytecode patcher not initialized' }
+        }
+
+        const result = await this.#editor.program_patcher.patchConstant(bytecodeOffset, newValue)
+        
+        if (result.success) {
+            this.logToConsole(result.message, 'success')
+        } else {
+            this.logToConsole(result.message, 'error')
+        }
+        
+        return result
+    }
+
+    /**
+     * Reads the current value of a constant from bytecode
+     * @param {number} bytecodeOffset
+     * @returns {Promise<{success: boolean, value?: number, message?: string}>}
+     */
+    async readConstant(bytecodeOffset) {
+        if (!this.#editor.program_patcher) {
+            return { success: false, message: 'Bytecode patcher not initialized' }
+        }
+        return await this.#editor.program_patcher.readConstant(bytecodeOffset)
+    }
+
+    /**
+     * Opens a dialog to patch a constant value
+     */
+    async openPatchDialog() {
+        // Scan for patchable constants
+        const constants = await this.scanPatchableConstants()
+        
+        if (constants.length === 0) {
+            new Popup({
+                title: 'No Patchable Constants',
+                description: 'No patchable constants found in the compiled program.',
+                content: `<div style="color: #ccc; line-height: 1.6;">
+                    Make sure you have:<br>
+                    1. Compiled the project<br>
+                    2. Used instructions with constant parameters<br>
+                    <span style="color: #888;">(e.g., TON M69 #500, u8.const 100)</span>
+                </div>`,
+                buttons: [{ text: 'OK', value: 'ok', background: '#007bff', color: 'white' }]
+            })
+            return
+        }
+
+        // Create list of constants
+        const listContainer = document.createElement('div')
+        listContainer.style.cssText = 'max-height: 300px; overflow-y: auto; margin: 10px 0;'
+        
+        const list = document.createElement('div')
+        list.style.cssText = 'display: flex; flex-direction: column; gap: 5px;'
+        
+        let selectedIndex = -1
+        
+        constants.forEach((c, i) => {
+            const item = document.createElement('div')
+            item.style.cssText = `
+                padding: 8px 12px;
+                background: #2d2d2d;
+                border: 1px solid #3c3c3c;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: all 0.2s;
+                font-family: 'Consolas', 'Courier New', monospace;
+            `
+            
+            let desc = `<div style="color: #4fc1ff; font-weight: 600; margin-bottom: 4px;">${c.name}</div>`
+            desc += `<div style="color: #fff;">Value: <span style="color: #b5cea8;">${c.current_value}</span></div>`
+            
+            if (c.flags & 0x10) { // IR_FLAG_TIMER
+                desc += `<div style="color: #888; font-size: 11px;">${c.instruction_name} at M${c.timer_address}, line ${c.source_line}</div>`
+            } else {
+                desc += `<div style="color: #888; font-size: 11px;">${c.operand_type}, line ${c.source_line}:${c.source_column}</div>`
+            }
+            
+            item.innerHTML = desc
+            
+            item.addEventListener('mouseenter', () => {
+                if (selectedIndex !== i) {
+                    item.style.background = '#3c3c3c'
+                    item.style.borderColor = '#555'
+                }
+            })
+            item.addEventListener('mouseleave', () => {
+                if (selectedIndex !== i) {
+                    item.style.background = '#2d2d2d'
+                    item.style.borderColor = '#3c3c3c'
+                }
+            })
+            item.addEventListener('click', () => {
+                // Deselect others
+                list.querySelectorAll('div').forEach(el => {
+                    el.style.background = '#2d2d2d'
+                    el.style.borderColor = '#3c3c3c'
+                })
+                // Select this
+                selectedIndex = i
+                item.style.background = '#0078d4'
+                item.style.borderColor = '#0078d4'
+            })
+            
+            list.appendChild(item)
+        })
+        
+        listContainer.appendChild(list)
+
+        const selectedConstant = await Popup.promise({
+            title: 'Select Constant to Patch',
+            description: `Select a constant from the list below (${constants.length} found):`,
+            content: listContainer,
+            width: '500px',
+            buttons: [
+                { text: 'Next', value: 'next', background: '#007bff', color: 'white', 
+                  verify: () => selectedIndex !== -1 },
+                { text: 'Cancel', value: 'cancel' }
+            ]
+        })
+        
+        if (selectedConstant !== 'next' || selectedIndex === -1) return
+
+        const constant = constants[selectedIndex]
+        
+        // Create value input dialog
+        const inputContainer = document.createElement('div')
+        inputContainer.style.cssText = 'display: flex; flex-direction: column; gap: 12px;'
+        
+        // Info display
+        const info = document.createElement('div')
+        info.style.cssText = 'background: #2d2d2d; padding: 12px; border-radius: 4px; font-family: "Consolas", monospace; font-size: 12px; line-height: 1.6;'
+        info.innerHTML = `
+            <div style="color: #4fc1ff; font-weight: 600; margin-bottom: 8px;">${constant.name}</div>
+            <div style="color: #ccc;">Type: <span style="color: #4ec9b0;">${constant.operand_type}</span></div>
+            <div style="color: #ccc;">Current: <span style="color: #b5cea8;">${constant.current_value}</span></div>
+            ${constant.timer_address !== undefined ? `<div style="color: #ccc;">Timer: <span style="color: #c586c0;">M${constant.timer_address}</span></div>` : ''}
+            <div style="color: #888; font-size: 11px; margin-top: 6px;">Source: Line ${constant.source_line}, Column ${constant.source_column}</div>
+            <div style="color: #666; font-size: 11px;">Bytecode: 0x${constant.bytecode_offset.toString(16).toUpperCase()}</div>
+        `
+        
+        const valueInput = document.createElement('input')
+        valueInput.type = 'number'
+        valueInput.value = constant.current_value.toString()
+        valueInput.style.cssText = `
+            padding: 8px 12px;
+            background: #1e1e1e;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 14px;
+            font-family: 'Consolas', monospace;
+        `
+        valueInput.placeholder = constant.flags & 0x10 ? 'Enter time in milliseconds' : `Enter ${constant.operand_type} value`
+        
+        inputContainer.appendChild(info)
+        inputContainer.appendChild(valueInput)
+
+        const result = await Popup.promise({
+            title: 'Patch Constant Value',
+            description: constant.flags & 0x10 ? 'Enter new preset time (milliseconds):' : `Enter new value (${constant.operand_type}):`,
+            content: inputContainer,
+            width: '450px',
+            buttons: [
+                { text: 'Patch', value: 'patch', background: '#0078d4', color: 'white',
+                  verify: () => {
+                    const val = constant.operand_type === 'f32' || constant.operand_type === 'f64' 
+                        ? parseFloat(valueInput.value) 
+                        : parseInt(valueInput.value)
+                    if (!Number.isFinite(val)) {
+                        valueInput.style.borderColor = 'red'
+                        return false
+                    }
+                    valueInput.style.borderColor = '#3c3c3c'
+                    return true
+                  }
+                },
+                { text: 'Cancel', value: 'cancel' }
+            ],
+            onOpen: () => {
+                valueInput.focus()
+                valueInput.select()
+            }
+        })
+        
+        if (result !== 'patch') return
+        
+        const newValue = constant.operand_type === 'f32' || constant.operand_type === 'f64' 
+            ? parseFloat(valueInput.value) 
+            : parseInt(valueInput.value)
+
+        const patchResult = await this.patchConstant(constant.bytecode_offset, newValue)
+        
+        new Popup({
+            title: patchResult.success ? 'Success' : 'Error',
+            description: patchResult.message,
+            buttons: [{ text: 'OK', value: 'ok', background: patchResult.success ? '#28a745' : '#dc3545', color: 'white' }]
+        })
+        
+        if (patchResult.success && this.isMonitoringActive()) {
+            this.updateWatchValues()
         }
     }
 
@@ -2182,6 +2419,23 @@ export default class WindowManager {
                 }
             } catch(e) { console.warn('Failed to load watch items', e) }
         }
+        
+        // Compile project to generate IR data and scan for patchable constants
+        // Wait for runtime to fully initialize and warmup to complete
+        setTimeout(async () => {
+            if (!this.#editor?.runtime_ready) {
+                console.log('[WindowManager] Runtime not ready yet, waiting...')
+                return
+            }
+            
+            try {
+                console.log('[WindowManager] Running automatic compilation for IR scan...')
+                const success = await this.handleCompile({ silent: true })
+                console.log('[WindowManager] Automatic compilation result:', success)
+            } catch (err) {
+                console.warn('Failed to compile on project load:', err)
+            }
+        }, 3000)
 
         // Open main program
         // if (project.files) {
@@ -2313,6 +2567,20 @@ export default class WindowManager {
             console.warn('Failed to save monitoring state', e)
         }
         
+        // Clear ALL render caches when toggling monitor mode to force fresh pill generation
+        const editor = this.#editor
+        if (editor?.project_manager?.project?.blocks) {
+            for (const block of editor.project_manager.project.blocks) {
+                block.cached_checksum = null
+                block.cached_asm = null
+                block.cached_asm_map = null
+                block.cached_symbol_refs = null
+                block.cached_address_refs = null
+                block.cached_timer_refs = null
+                block.cached_symbols_checksum = null
+            }
+        }
+        
         // Don't auto-lock when monitoring starts - let user control lock explicitly
 
         for (const win of this.windows.values()) {
@@ -2422,6 +2690,19 @@ export default class WindowManager {
                  editor.setMonitoringVisuals(false)
              }
              this.setHealthDimmed(true)
+             
+             // Refresh all editor values to hide pills when monitoring stops
+             if (editor.project && editor.project.files) {
+                editor.project.files.forEach(file => {
+                    if (file.blocks) {
+                        file.blocks.forEach(block => {
+                            if (block.props && block.props.text_editor && typeof block.props.text_editor.refreshLive === 'function') {
+                                block.props.text_editor.refreshLive()
+                            }
+                        })
+                    }
+                })
+            }
         }
     }
     

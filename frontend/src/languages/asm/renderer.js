@@ -3,6 +3,39 @@ import { RendererModule } from "../types.js"
 import { Popup } from "../../editor/UI/Elements/components/popup.js"
 // import { resolveBlockState } from "./evaluator.js"
 
+// De-duplicating logger to avoid spam
+const createDedupLogger = () => {
+    const recentLogs = new Map() // key -> { count, lastTime }
+    const DEDUPE_WINDOW = 1000 // ms
+    
+    return (prefix, data) => {
+        const key = prefix + JSON.stringify(data)
+        const now = Date.now()
+        const recent = recentLogs.get(key)
+        
+        if (recent && (now - recent.lastTime) < DEDUPE_WINDOW) {
+            recent.count++
+            return // Skip duplicate
+        }
+        
+        if (recent && recent.count > 1) {
+            console.log(`${prefix} (repeated ${recent.count} times)`)
+        }
+        
+        console.log(prefix, data)
+        recentLogs.set(key, { count: 1, lastTime: now })
+        
+        // Cleanup old entries
+        if (recentLogs.size > 100) {
+            const cutoff = now - DEDUPE_WINDOW * 2
+            for (const [k, v] of recentLogs.entries()) {
+                if (v.lastTime < cutoff) recentLogs.delete(k)
+            }
+        }
+    }
+}
+const dlog = createDedupLogger()
+
 const ADDRESS_REGEX = /^(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i
 const ADDRESS_LOCATION_MAP = {
     C: 'control',
@@ -49,8 +82,12 @@ export const ladderRenderer = {
       const resolveEntryInfo = (entry) => {
         let fullType = entry.type || 'byte'
         let addressStr = ''
-        if (entry.name && editor.project && editor.project.symbols) {
-            const symbol = editor.project.symbols.find(s => s.name === entry.name)
+        
+        // For timer refs with originalName, use that for lookup
+        const lookupName = entry.originalName || entry.name
+        
+        if (lookupName && editor.project && editor.project.symbols) {
+            const symbol = editor.project.symbols.find(s => s.name === lookupName)
             if (symbol) {
                 fullType = symbol.type
                 const addr = symbol.address
@@ -65,15 +102,132 @@ export const ladderRenderer = {
                      addressStr = `${prefix}${addr}`
                 }
             } else {
-                addressStr = entry.name
+                addressStr = lookupName
             }
         } else {
-            addressStr = entry.name
+            addressStr = lookupName || entry.name
         }
         return { addressStr, fullType }
       }
 
       const handlePreviewAction = async (entry, actionName) => {
+        // ============================================================
+        // LIVE PATCHING: Timer presets and embedded constants
+        // Uses LivePatcher to modify and re-upload program bytecode
+        // ============================================================
+        if (entry?.isTimerPT && entry?.bytecode_offset !== undefined && typeof entry.presetValue === 'number') {
+            if (actionName !== 'edit') return
+            
+            if (!editor.device_manager?.connected) {
+                new Popup({
+                    title: 'Connection Required',
+                    description: 'Device must be connected to edit timer presets',
+                    buttons: [{ text: 'OK', value: 'ok', background: '#dc3545', color: 'white' }]
+                })
+                return
+            }
+            
+            try {
+                const patcher = editor.program_patcher
+                if (!patcher) {
+                    new Popup({
+                        title: 'Error',
+                        description: 'Live patcher not available',
+                        buttons: [{ text: 'OK', value: 'ok', background: '#dc3545', color: 'white' }]
+                    })
+                    return
+                }
+                
+                const formResult = await Popup.form({
+                    title: `Edit #${entry.presetValue}`,
+                    description: `Enter new timer preset (milliseconds)`,
+                    inputs: [
+                        { type: 'number', name: 'value', label: 'Preset (ms)', value: entry.presetValue }
+                    ],
+                    buttons: [
+                        { text: 'Write', value: 'confirm' },
+                        { text: 'Cancel', value: 'cancel' }
+                    ]
+                })
+                
+                if (!formResult || typeof formResult.value === 'undefined') return
+                
+                const newValue = parseInt(formResult.value)
+                
+                const patchResult = await patcher.patchConstant(entry.bytecode_offset, newValue)
+                
+                if (patchResult.success) {
+                    // Update source code to match patched bytecode
+                    const oldToken = `#${entry.presetValue}`
+                    const newToken = `#${newValue}`
+                    
+                    console.log('[PATCH] Updating source:', {
+                        oldToken,
+                        newToken,
+                        entryStart: entry.start,
+                        entryEnd: entry.end
+                    })
+                    
+                    // Replace at the specific position, not the first occurrence
+                    if (entry.start !== undefined && entry.end !== undefined) {
+                        block.code = block.code.substring(0, entry.start) + 
+                                     newToken + 
+                                     block.code.substring(entry.end)
+                    } else {
+                        // Fallback to simple replace (shouldn't happen)
+                        block.code = block.code.replace(oldToken, newToken)
+                    }
+                    
+                    // Update text editor to show new code
+                    const textEditor = block.props?.text_editor
+                    if (textEditor?.setValue) {
+                        // Clear all caches so recompilation rebuilds everything fresh
+                        block.cached_checksum = null
+                        block.cached_asm = null
+                        block.cached_asm_map = null
+                        block.cached_symbol_refs = null
+                        block.cached_address_refs = null
+                        block.cached_timer_refs = null
+                        block.cached_symbols_checksum = null
+                        
+                        // Update display (pills will be regenerated by recompilation)
+                        textEditor.setValue(block.code)
+                    }
+                    
+                    // Mark project dirty
+                    if (editor.project_manager?.checkAndSave) {
+                        editor.project_manager.checkAndSave()
+                    }
+                    
+                    // Trigger full recompilation to rebuild everything cleanly
+                    setTimeout(async () => {
+                        console.log('[PATCH] Recompiling to rebuild IR and symbol map...')
+                        if (editor.window_manager?.handleCompile) {
+                            await editor.window_manager.handleCompile({ silent: true })
+                        }
+                    }, 100)
+                } else {
+                    new Popup({
+                        title: 'Error',
+                        description: patchResult.message,
+                        buttons: [{ text: 'OK', value: 'ok', background: '#dc3545', color: 'white' }]
+                    })
+                }
+            } catch (err) {
+                console.error('[ASM Renderer] Error patching constant:', err)
+                new Popup({
+                    title: 'Error',
+                    description: err.message || 'Unknown error',
+                    buttons: [{ text: 'OK', value: 'ok', background: '#dc3545', color: 'white' }]
+                })
+            }
+            return
+        }
+        
+        // ============================================================
+        // MEMORY WRITES: Runtime variables (I/O, markers, timers)
+        // Uses direct memory access for variables in memory space
+        // ============================================================
         if (!editor.window_manager?.isMonitoringActive?.()) return
         const connection = editor.device_manager?.connection
         if (!connection) return
@@ -182,7 +336,40 @@ export const ladderRenderer = {
         readOnly: !!editor.edit_locked,
         blockId: block.id,
         previewEntriesProvider: () => {
+            // Only show pills when monitoring is active AND device is connected
+            const isMonitoring = editor.window_manager?.isMonitoringActive?.()
+            const isConnected = editor.device_manager?.connected
+            if (!isMonitoring || !isConnected) {
+                return []
+            }
+            
+            // ✅ CRITICAL FIX: Validate cache against current code checksum
+            // If code has changed (different checksum), invalidate ALL cached positions
+            const currentCode = block.code || ''
+            const currentChecksum = editor._hashString?.(currentCode)?.toString() || null
+            
+            // dlog('[PILLS DEBUG]', {
+            //     blockId: block.id,
+            //     currentChecksum,
+            //     cachedChecksum: block.cached_checksum,
+            //     codeLength: currentCode.length,
+            //     hasCachedRefs: !!block.cached_symbol_refs,
+            //     checksumMatch: currentChecksum === block.cached_checksum
+            // })
+            
+            if (currentChecksum && currentChecksum !== block.cached_checksum) {
+                // Code changed - invalidate ALL position-based caches
+                console.log('[PILLS] Cache invalidated - code changed!')
+                block.cached_checksum = null
+                block.cached_symbol_refs = null
+                block.cached_address_refs = null
+                block.cached_timer_refs = null
+                block.cached_asm = null
+                block.cached_asm_map = null
+            }
+            
             if (!block.cached_symbol_refs && typeof editor._buildSymbolCache === 'function' && typeof editor._ensureAsmCache === 'function') {
+                console.log('[PILLS] Rebuilding cache...')
                 const cache = editor._buildSymbolCache()
                 editor._ensureAsmCache(block, cache.signature, cache.map, cache.details)
             }
@@ -194,10 +381,53 @@ export const ladderRenderer = {
             const addressRefs = block.cached_address_refs || []
             const timerRefs = block.cached_timer_refs || []
             
+            // dlog('[PILLS] Refs loaded:', {
+            //     symbolRefs: symbolRefs.length,
+            //     addressRefs: addressRefs.length,
+            //     timerRefs: timerRefs.length,
+            //     timerSample: timerRefs[0]
+            // })
+            
+            // Match timer constant presets with patchable constants from LivePatcher
+            if (editor.program_patcher?.patchableConstants && timerRefs.length > 0) {
+                const patchableMap = new Map()
+                
+                // Build map of timer_address -> constant
+                for (const [offset, constant] of editor.program_patcher.patchableConstants) {
+                    if ((constant.flags & 0x10) && constant.timer_address !== undefined) {
+                        patchableMap.set(constant.timer_address, constant)
+                    }
+                }
+                
+                // Match timer preset refs by storage address
+                for (const timerRef of timerRefs) {
+                    if (timerRef.isTimerPT && !timerRef.isPresetAddress && typeof timerRef.presetValue === 'number') {
+                        // This is a constant preset (#500) - try to match with patchable constant
+                        if (timerRef.storageAddress !== -1) {
+                            const patchable = patchableMap.get(timerRef.storageAddress)
+                            if (patchable && patchable.current_value === timerRef.presetValue) {
+                                // Match found! Enhance the ref with bytecode info
+                                timerRef.bytecode_offset = patchable.bytecode_offset
+                                timerRef.patchable_type = patchable.operand_type
+                                timerRef.timer_address = patchable.timer_address
+                            }
+                        }
+                    }
+                }
+            }
+            
             // Avoid duplicate pills at same position
             const timerRanges = new Set(timerRefs.map(r => `${r.start}-${r.end}`))
             const filteredSymbols = symbolRefs.filter(r => !timerRanges.has(`${r.start}-${r.end}`))
             const filteredAddresses = addressRefs.filter(r => !timerRanges.has(`${r.start}-${r.end}`))
+            
+            // Mark timer storage as non-interactive (visible but not selectable)
+            // Mark timer output as non-interactive too
+            timerRefs.forEach(r => {
+                if (r.isTimerStorage || r.isTimerOutput) {
+                    r.nonInteractive = true
+                }
+            })
             
             return [...timerRefs, ...filteredSymbols, ...filteredAddresses]
         },
@@ -210,24 +440,34 @@ export const ladderRenderer = {
                 const seconds = Math.floor((ms % 60000) / 1000)
                 return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
             }
-            if (!editor.window_manager?.isMonitoringActive?.()) return null
-            if (!editor.device_manager?.connected) return null // Only show values when online
+            
+            // When offline, show constant preset values
+            if (!editor.window_manager?.isMonitoringActive?.() || !editor.device_manager?.connected) {
+                if (entry?.isTimerPT && typeof entry.presetValue === 'number') {
+                    return { text: formatTime(entry.presetValue), className: 'u32 timer' }
+                }
+                return null
+            }
+            
+            // When online (monitoring), show live values
             const live = editor.live_symbol_values?.get(entry?.name)
             
-            // For timers, we might not have the ref yet but we need to show SOMETHING 
-            // if we are monitoring. However, if live doesn't exist, we fallback.
-            if (!live || typeof live.text !== 'string') {
-                 // Optimization: if it's a timer PT with constant value, we can at least show that
-                 if (entry?.isTimerPT && typeof entry.presetValue === 'number') {
-                     return { text: String(entry.presetValue), className: '' }
-                 }
-                 return null
-            }
+            // DEBUG: Log what we're trying to display
+            const result = (() => {
+                if (!live || typeof live.text !== 'string') return null
             
             let className = ''
             let text = live.text
 
-            // Timer monitoring: show remaining time
+            // Timer output state (Q bit)
+            if (entry?.isTimerOutput) {
+                const isOn = live.value ? true : false
+                text = isOn ? 'ON' : 'OFF'
+                className = `${isOn ? 'on' : 'off'} bit timer-output`
+                return { text, className }
+            }
+
+            // Timer monitoring: show remaining/elapsed time
             if (entry?.isTimerStorage || entry?.isTimerPT) {
                 let et = 0
                 let pt = 0
@@ -235,28 +475,42 @@ export const ladderRenderer = {
                 let hasET = false
 
                 if (entry.isTimerStorage) {
+                    // Storage shows elapsed time
                     et = live.value || 0
                     hasET = true
+                    // Try to get preset value
                     if (typeof entry.presetValue === 'number') {
                         pt = entry.presetValue
                         hasPT = true
                     } else if (entry.presetName) {
-                        const ptLive = editor.live_symbol_values?.get(entry.presetName) || [...editor.live_symbol_values.values()].find(l => l.absoluteAddress === entry.storageAddress + 0 && l.type === 'u32'); // Dummy fallback
-                        if (ptLive) {
+                        // Preset is in memory - look it up
+                        const ptLive = editor.live_symbol_values?.get(entry.presetName)
+                        if (ptLive && typeof ptLive.value === 'number') {
                             pt = ptLive.value
                             hasPT = true
                         }
                     }
                 } else if (entry.isTimerPT) {
-                    pt = (typeof entry.presetValue === 'number') ? entry.presetValue : (live.value || 0)
-                    hasPT = true
-                    // Need ET from storage
+                    // Preset pills
+                    if (entry.isPresetAddress) {
+                        // TON_MEM: preset is in memory, show live value
+                        pt = live.value || 0
+                        hasPT = true
+                    } else {
+                        // TON_CONST: preset is constant (#500)
+                        pt = entry.presetValue || 0
+                        hasPT = true
+                    }
+                    
+                    // Get elapsed time from storage
                     if (entry.storageAddress !== -1) {
-                         const storageLive = [...editor.live_symbol_values.values()].find(l => l.absoluteAddress === entry.storageAddress && (l.type === 'u32' || l.type === 'dint'))
-                         if (storageLive) {
-                             et = storageLive.value || 0
-                             hasET = true
-                         }
+                        const storageLive = [...editor.live_symbol_values.values()].find(
+                            l => l.absoluteAddress === entry.storageAddress && (l.type === 'u32' || l.type === 'dint')
+                        )
+                        if (storageLive) {
+                            et = storageLive.value || 0
+                            hasET = true
+                        }
                     }
                 }
 
@@ -264,26 +518,62 @@ export const ladderRenderer = {
                     const remaining = Math.max(0, Number(pt) - Number(et))
                     text = formatTime(remaining)
                     className += ' timer'
-                } else if (hasPT && !hasET && entry.isTimerPT) {
+                } else if (hasPT) {
                     text = formatTime(pt)
+                    className += ' timer'
+                } else if (hasET) {
+                    text = formatTime(et)
                     className += ' timer'
                 }
 
                 if (entry.isTimerStorage && et > 0) {
-                     className += ' active-timer'
+                    className += ' active-timer'
                 }
             }
 
             if (entry?.type === 'bit' || live.type === 'bit') {
                 className += ` ${live.value ? 'on' : 'off'} bit`
             } else if (!entry?.isTimerStorage && !entry?.isTimerPT && live.type) {
-                // Add type class for non-timer values to ensure consistent width
                 className += ` ${live.type}`
             }
             return { text, className }
+            })()
+            
+            // dlog('[PILL VALUE]', {
+            //     name: entry?.name,
+            //     hasLive: !!live,
+            //     liveText: live?.text,
+            //     result: result,
+            //     isTimer: entry?.isTimerStorage || entry?.isTimerPT
+            // })
+            
+            return result
         },
         onPreviewAction: (entry, action) => handlePreviewAction(entry, action),
         onPreviewContextMenu: (entry, event) => {
+            // Block context menu for timer storage and timer output - they're read-only
+            if (entry?.isTimerStorage || entry?.isTimerOutput) {
+                return // No context menu for read-only timer pills
+            }
+            
+            // Handle timer constant presets (bytecode patching)
+            if (entry?.isTimerPT && !entry.isPresetAddress && typeof entry.presetValue === 'number' && entry.bytecode_offset !== undefined) {
+                if (!editor.device_manager?.connected) return
+                
+                const items = [
+                    { label: 'Edit Preset...', name: 'edit', icon: 'edit', type: 'item' }
+                ]
+                
+                const contextMenu = editor.context_manager
+                if (contextMenu && typeof contextMenu.show === 'function') {
+                    contextMenu.show(event, items, async (actionName) => {
+                        await handlePreviewAction(entry, actionName)
+                    })
+                }
+                return
+            }
+            
+            // Handle memory variables (addresses and timer storage)
             if (!editor.window_manager?.isMonitoringActive?.()) return
             const { addressStr, fullType } = resolveEntryInfo(entry)
             
