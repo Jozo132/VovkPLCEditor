@@ -557,7 +557,7 @@ export default class SymbolsUI {
     updateMonitoringState(active = false) {
         this.monitoringActive = !!active
         this.monitor_buttons.forEach(btn => {
-            btn.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
+            // btn.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
             btn.classList.toggle('active', this.monitoringActive)
         })
         // Refresh cells to update opacity

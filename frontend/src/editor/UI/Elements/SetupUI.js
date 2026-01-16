@@ -392,7 +392,7 @@ export default class SetupUI {
         this.monitoringActive = !!active
         if (!this.monitor_buttons || !this.monitor_buttons.length) return
         this.monitor_buttons.forEach(btn => {
-            btn.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
+            // btn.textContent = this.monitoringActive ? 'Monitoring' : 'Monitor'
             btn.classList.toggle('active', this.monitoringActive)
         })
     }
