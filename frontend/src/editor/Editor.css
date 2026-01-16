@@ -230,6 +230,34 @@ ul {
     background: #A44;
 }
 
+.plc-device-online {
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+    background: #1fba5f; /* Green default */
+    border: 1px solid transparent; /* Match alignment */
+    color: white;
+    cursor: pointer;
+    border-radius: 0px; /* Square */
+    display: flex;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    align-items: center;
+    line-height: normal;
+    box-sizing: border-box;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.plc-spin {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
 .plc-device-online[disabled] {
     background: #444;
     color: #888;

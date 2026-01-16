@@ -11,6 +11,7 @@ import EditorUI from './Elements/EditorUI.js'
 import SymbolsUI from './Elements/SymbolsUI.js'
 import SetupUI from './Elements/SetupUI.js'
 import MemoryUI from './Elements/MemoryUI.js'
+import {CustomDropdown} from './Elements/CustomDropdown.js'
 
 /** @typedef { EditorUI | SymbolsUI | SetupUI } WindowType */
 
@@ -43,6 +44,67 @@ export default class WindowManager {
     highlightItem = element => this.tree_manager.highlightItem(element)
     removeHighlight = () => this.tree_manager.removeHighlight()
 
+    // Serial Polling Methods
+    _handleSerialEvent = (event) => {
+         // console.log('[WindowManager] Serial event detected:', event.type)
+         // Delay slightly to allow system to register port availability
+         if (this.connectionMode === 'serial') {
+             setTimeout(() => {
+                 this.updateDeviceDropdown()
+             }, 200)
+             setTimeout(() => {
+                 this.updateDeviceDropdown()
+             }, 1000)
+         }
+    }
+
+    _startSerialPolling = () => {
+         const hasSerial = 'serial' in navigator;
+         // console.log(`[WindowManager] _startSerialPolling called. Existing Timer: ${this.serialDevicePollingTimer}, Has Serial: ${hasSerial}`)
+         
+         // Always clear to ensure fresh start
+         if (this.serialDevicePollingTimer) {
+             clearInterval(this.serialDevicePollingTimer)
+             this.serialDevicePollingTimer = null
+         }
+         
+         // Remove existing listeners just in case
+         if (hasSerial) {
+             navigator.serial.removeEventListener('connect', this._handleSerialEvent)
+             navigator.serial.removeEventListener('disconnect', this._handleSerialEvent)
+             
+             // Add listeners
+             navigator.serial.addEventListener('connect', this._handleSerialEvent)
+             navigator.serial.addEventListener('disconnect', this._handleSerialEvent)
+             // console.log('[WindowManager] Serial Event Listeners Attached')
+         } else {
+             // console.warn('[WindowManager] serial API not available in navigator')
+         }
+         
+         // Poll for changes
+         this.serialDevicePollingTimer = setInterval(() => {
+             // Only update if mode is serial
+             if (this.connectionMode === 'serial' && hasSerial) {
+                 const isReconnecting = this.device_online_button && this.device_online_button.title === 'Cancel reconnect'
+                 if (!isReconnecting) {
+                     this.updateDeviceDropdown()
+                 }
+             }
+         }, 1000)
+    }
+
+    _stopSerialPolling = () => {
+         // console.log('[WindowManager] Stopping Serial Polling')
+         if (this.serialDevicePollingTimer) {
+             clearInterval(this.serialDevicePollingTimer)
+             this.serialDevicePollingTimer = null
+         }
+         if ('serial' in navigator) {
+             navigator.serial.removeEventListener('connect', this._handleSerialEvent)
+             navigator.serial.removeEventListener('disconnect', this._handleSerialEvent)
+         }
+    }
+
     #editor
     /** @param {PLCEditor} editor */
     constructor(editor) {
@@ -67,16 +129,24 @@ export default class WindowManager {
                                     <span class="plc-connection-title" style="font-weight: bold; color: #bbb;">CONNECTION</span>
                                 </div>
                                 <div class="plc-connection-body" style="padding: 4px; display: flex; flex-direction: column;">
-                                    <div class="plc-device" style="display: flex; gap: 4px; margin-bottom: 4px;">
-                                        <!-- Left side: dropdown with options 'Device' and 'Simulation,  the right side: button for going online with text content 'Go online'  -->
-                                        <div class="plc-device-dropdown" style="flex: 1;">
-                                            <select id="plc-device-select-field" style="width: 100%; height: 22px; font-size: 11px; background: #3c3c3c; border: 1px solid #3c3c3c; color: #f0f0f0;">
-                                                <option value="simulation">Simulation</option>
-                                                <!-- More options will be added dynamically -->
-                                            </select>
-                                        </div>
-                                        <div class="plc-device-online green" tabindex="0" style="height: 22px; line-height: 20px; padding: 0 6px; font-size: 11px; display: flex; align-items: center; justify-content: center; border: 1px solid transparent; min-width: 60px;">Go online</div>
+                                    <!-- Connection Mode Selector -->
+                                    <div class="plc-connection-mode" style="display: flex; gap: 4px; margin-bottom: 4px;">
+                                        <select class="plc-mode-select" style="flex: 1; height: 30px; font-size: 11px; background: #3c3c3c; border: 1px solid #3c3c3c; color: #f0f0f0;">
+                                            <option value="simulation">Simulation</option>
+                                            <option value="serial">Serial/USB</option>
+                                        </select>
                                     </div>
+                                    
+                                    <!-- New Device Button (for serial mode) -->
+                                    <button class="plc-new-device-btn" style="display: none; height: 30px; font-size: 11px; background: #0e639c; border: 1px solid #0e639c; color: #fff; cursor: pointer; padding: 0 6px; margin-bottom: 4px;">+ Connect New Device...</button>
+                                    
+                                    <!-- Device selector and connect button -->
+                                    <div class="plc-device-row" style="display: flex; gap: 4px; margin-bottom: 4px; justify-content: flex-end;">
+                                        <div class="plc-device-select-container" style="flex: 1;"></div>
+                                        <div class="plc-simulation-label" style="flex: 1; display: none; align-items: center; color: #888; font-size: 11px; padding-left: 2px;">WASM PLC Simulator</div>
+                                        <div class="plc-device-online green" tabindex="0" title="Connect" style="width: 30px; height: 30px; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; border: 1px solid transparent; cursor: pointer; background: #1fba5f;">○</div>
+                                    </div>
+                                    
                                     <div class="plc-device-info">
                                         <!-- Device info will be displayed here -->
                                     </div>
@@ -1005,15 +1075,304 @@ export default class WindowManager {
         }
 
 
-        const device_select_element = workspace.querySelector('.plc-device-dropdown select')
-        if (!device_select_element) throw new Error('Device select element not found')
-        device_select_element.addEventListener('change', () => this.#on_device_select_change())
-        this.device_select_element = device_select_element
+        // Connection mode switching
+        this.connectionMode = 'simulation'
+        const modeSelect = workspace.querySelector('.plc-mode-select')
+        const deviceSelectContainer = workspace.querySelector('.plc-device-select-container')
+        const simulationLabel = workspace.querySelector('.plc-simulation-label')
+        const newDeviceBtn = workspace.querySelector('.plc-new-device-btn')
+        
+        if (!modeSelect || !deviceSelectContainer) throw new Error('Mode or device select not found')
+        
+        this.modeSelect = modeSelect
+        this.deviceSelectContainer = deviceSelectContainer
+        this.simulationLabel = simulationLabel
+        this.newDeviceBtn = newDeviceBtn
+        
+        // Restore connection mode and device from project
+        if (editor.project?.connectionMode) {
+            this.connectionMode = editor.project.connectionMode
+            modeSelect.value = this.connectionMode
+            // Show/hide new device button based on mode
+            if (newDeviceBtn) {
+                newDeviceBtn.style.display = 'none' // button moved to dropdown
+            }
+            if (this.deviceSelectContainer) {
+                this.deviceSelectContainer.style.display = this.connectionMode === 'serial' ? 'block' : 'none'
+            }
+            if (this.simulationLabel) {
+                this.simulationLabel.style.display = this.connectionMode === 'simulation' ? 'flex' : 'none'
+            }
+        } else {
+             // Default state (simulation)
+             if (this.simulationLabel) {
+                this.simulationLabel.style.display = 'flex'
+             }
+        }
+        
+        // Initialize CustomDropdown
+        this.deviceDropdown = new CustomDropdown({
+            container: deviceSelectContainer,
+            placeholder: 'Select device...',
+            onChange: async (value, label, subtitle) => {
+                if (value === '_action_new_device') {
+                    // Always disconnect first if connected
+                    if (this.#editor.device_manager?.connected) {
+                        await this.#editor.device_manager.disconnect(true)
+                        this.active_mode = 'edit'
+                    }
+                    
+                    // Set device and connect
+                    this.active_device = 'serial'
+                    await this.#on_device_online_click()
+                    return
+                }
 
-        const device_online_button = workspace.querySelector('.plc-device-online')
-        if (!device_online_button) throw new Error('Device online button not found')
-        device_online_button.addEventListener('click', async () => this.#on_device_online_click())
+                // Store selected value for connect button
+                this.selectedDeviceValue = value
+                
+                // Track serial preference separately
+                if (value !== '_simulation' && value !== '_none' && value !== '_error' && !value.toString().startsWith('_action')) {
+                    this._savedSerialDevice = value
+                    if (editor.project) {
+                        editor.project.selectedSerialDevice = value
+                    }
+                }
+                
+                // Trigger UI update to refresh button state immediately
+                this.updateDeviceDropdown()
+
+                // Save to project
+                if (editor.project) {
+                    editor.project.selectedDevice = value
+                    if (editor.project_manager?.forceSave) {
+                        editor.project_manager.forceSave()
+                    }
+                }
+            }
+        })
+        
+        // Restore selected device from project
+        if (editor.project?.selectedDevice) {
+            this.selectedDeviceValue = editor.project.selectedDevice
+        }
+        if (editor.project?.selectedSerialDevice) {
+            this._savedSerialDevice = editor.project.selectedSerialDevice
+        }
+        
+        // Serial device polling and events
+        // this.serialDevicePollingTimer = null // Moved to initialization to avoid overwrite if startup happens early
+        // Methods moved to class fields: _startSerialPolling, _stopSerialPolling, _handleSerialEvent
+        
+        modeSelect.addEventListener('change', () => {
+            this.connectionMode = modeSelect.value
+            // Save to project
+            if (editor.project) {
+                editor.project.connectionMode = this.connectionMode
+                if (editor.project_manager?.forceSave) {
+                    editor.project_manager.forceSave()
+                }
+            }
+            this.updateDeviceDropdown()
+            
+            // Show/hide new device button based on mode
+            if (newDeviceBtn) {
+                newDeviceBtn.style.display = 'none' // button moved to dropdown
+            }
+
+            // Show/hide device dropdown container based on mode
+            if (this.deviceSelectContainer) {
+                this.deviceSelectContainer.style.display = modeSelect.value === 'serial' ? 'block' : 'none'
+            }
+            if (this.simulationLabel) {
+                this.simulationLabel.style.display = modeSelect.value === 'simulation' ? 'flex' : 'none'
+            }
+            
+            // Start/stop polling based on mode
+            if (this.connectionMode === 'serial') {
+                this._startSerialPolling()
+            } else {
+                this._stopSerialPolling()
+            }
+        })
+        
+        // Start polling if serial mode is active
+        if (this.connectionMode === 'serial') {
+            this._startSerialPolling()
+        }
+        
+        // New device button handler
+        if (newDeviceBtn) {
+            newDeviceBtn.addEventListener('click', async () => {
+                // Always disconnect first if connected
+                if (this.#editor.device_manager?.connected) {
+                    await this.#editor.device_manager.disconnect(true)
+                    this.active_mode = 'edit'
+                }
+                
+                // Set device and connect
+                this.active_device = 'serial'
+                await this.#on_device_online_click()
+            })
+        }
+
+        // Device connect button
+        const deviceButton = workspace.querySelector('.plc-device-row .plc-device-online')
+        if (deviceButton) {
+            deviceButton.addEventListener('click', async () => {
+                // Ignore matching click if marked offline/disabled via style logic
+                if (deviceButton.hasAttribute('data-offline')) {
+                    return
+                }
+
+                // Check if in reconnecting state - click acts as cancel
+                // We check the title or some flag, but checking innerText or just the DeviceManager state is safer
+                // However, DeviceManager state is not directly exposed as public property, but we can check if button is orange/reconnecting
+                if (deviceButton.title === 'Cancel reconnect') {
+                    if (this.#editor.device_manager?.cancelReconnect) {
+                        this.#editor.device_manager.cancelReconnect()
+                    }
+                    return
+                }
+
+                const selectedValue = this.selectedDeviceValue
+                
+                if (selectedValue === '_simulation') {
+                    this.active_device = 'simulation'
+                    await this.#on_device_online_click()
+                } else if (selectedValue.startsWith('_port_')) {
+                    // Paired device selected via index (legacy or fallback)
+                    const portIndex = parseInt(selectedValue.replace('_port_', ''))
+                    await this.connectToPairedDevice(portIndex)
+                } else if (selectedValue.startsWith('_usb_')) {
+                    // Paired device selected via USB Key
+                    if (!('serial' in navigator)) return
+                    
+                    const usbKey = selectedValue.replace('_usb_', '')
+                    const [vidStr, pidStr] = usbKey.split(':')
+                    const vid = parseInt(vidStr, 16)
+                    const pid = parseInt(pidStr, 16)
+                    
+                    try {
+                        const ports = await navigator.serial.getPorts()
+                        const targetPortIndex = ports.findIndex(p => {
+                            const info = p.getInfo()
+                            return info.usbVendorId === vid && info.usbProductId === pid
+                        })
+                        
+                        if (targetPortIndex >= 0) {
+                             await this.connectToPairedDevice(targetPortIndex)
+                             // Force an immediate update to reflect connection status
+                             setTimeout(() => this.updateDeviceDropdown(), 500) 
+                        } else {
+                            // Device is selected but physically offline
+                            // We can't connect to it
+                             this.logToConsole('Device is offline. Please plug it in.', 'warning')
+                        }
+                    } catch (e) {
+                         this.logToConsole('Error finding device: ' + e.message, 'error')
+                    }
+                } else if (selectedValue && selectedValue.toString().startsWith('_offline_')) {
+                    // Legacy Offline device (should be handled by _usb_ now, but keeping for safety)
+                    return
+                } else if (selectedValue === '_none' || selectedValue === '_error') {
+                    // Do nothing for disabled options
+                    return
+                }
+            })
+            this.device_online_button = deviceButton
+        }
+
+        const device_select_element = null // Removed old dropdown
+        const device_online_button = deviceButton
         this.device_online_button = device_online_button
+        
+        // Initial device dropdown population
+        this.updateDeviceDropdown()
+
+        // Listen for device info updates to refresh dropdown with device names
+        workspace.addEventListener('plc-device-update', (e) => {
+            const detail = e.detail || {}
+            
+            // Handle reconnection state (UI Feedback)
+            if (this.device_online_button && (detail.reconnecting !== undefined || detail.connected !== undefined)) {
+                if (detail.reconnecting) {
+                    // Reconnecting state
+                    this.device_online_button.innerHTML = '<span class="codicon codicon-loading plc-spin"></span>'
+                    this.device_online_button.title = 'Cancel reconnect'
+                    this.device_online_button.style.background = '#FFA500' // Orange
+                    this.device_online_button.style.color = '#fff'
+                    this.device_online_button.removeAttribute('disabled')
+                    
+                    // Disable dropdown during reconnect
+                    if (this.deviceDropdown) {
+                        // We can't easily disable the whole custom dropdown, but we can make it ignore clicks or appear disabled
+                        // For now let's just update the dropdown options to be disabled
+                        // But updateDeviceDropdown might overwrite this.
+                        // Best way: modify updateDeviceDropdown to respect reconnecting state
+                    }
+                } else if (!detail.connected) {
+                    // Disconnected state (reset button)
+                    if (this.device_online_button.innerHTML.includes('codicon-loading')) {
+                        this.device_online_button.innerText = '○'
+                        this.device_online_button.title = 'Connect'
+                        this.device_online_button.style.background = '#1fba5f'
+                        this.device_online_button.style.color = '#fff'
+                    }
+                }
+            }
+
+            // Update dropdown if reconnect state changes
+            if (detail.reconnecting !== undefined) {
+                this.updateDeviceDropdown()
+            }
+
+            // Store device name when info is received
+            if (detail.connected && detail.info && this.connectionMode === 'serial') {
+                const info = detail.info
+                const editor = this.#editor
+                
+                if (editor.device_manager?.connection?.serial?.port) {
+                    const port = editor.device_manager.connection.serial.port
+                    const portInfo = port.getInfo()
+                    if (portInfo.usbVendorId && portInfo.usbProductId) {
+                        const portKey = `${portInfo.usbVendorId.toString(16).padStart(4, '0')}:${portInfo.usbProductId.toString(16).padStart(4, '0')}`
+                        if (!editor.project.serialDeviceNames) {
+                            editor.project.serialDeviceNames = {}
+                        }
+                        const deviceLabel = info.device || 'Unnamed'
+                        const arch = info.arch || ''
+                        const fullName = arch ? `${deviceLabel} [${arch}]` : deviceLabel
+                        
+                        // Store as object with timestamps
+                        const existing = editor.project.serialDeviceNames[portKey]
+                        const now = Date.now()
+                        let created = now
+                        
+                        if (typeof existing === 'string') {
+                            // Legacy string format
+                            created = now // resetting created as we don't know
+                        } else if (existing && existing.created) {
+                            created = existing.created
+                        }
+
+                        editor.project.serialDeviceNames[portKey] = {
+                            name: fullName,
+                            created: created,
+                            lastConnected: now
+                        }
+
+                        // Save project to persist device names
+                        if (editor.project_manager?.forceSave) {
+                            editor.project_manager.forceSave()
+                        }
+                    }
+                }
+                
+                // Device info received, update dropdown to show device name
+                setTimeout(() => this.updateDeviceDropdown(), 100)
+            }
+        })
 
         // Listen for connection status changes
         const updateConnectionStatus = () => {
@@ -1039,6 +1398,33 @@ export default class WindowManager {
             if (downloadBtn) {
                 downloadBtn.style.opacity = connected ? '1' : '0.5'
                 downloadBtn.style.pointerEvents = connected ? 'all' : 'none'
+            }
+            
+            // Disable mode selector, new device button, and device dropdown when connected
+            if (this.modeSelect) {
+                if (connected) {
+                    this.modeSelect.setAttribute('disabled', 'disabled')
+                } else {
+                    this.modeSelect.removeAttribute('disabled')
+                }
+            }
+            if (this.newDeviceBtn) {
+                if (connected) {
+                    this.newDeviceBtn.setAttribute('disabled', 'disabled')
+                    this.newDeviceBtn.style.opacity = '0.5'
+                    this.newDeviceBtn.style.cursor = 'not-allowed'
+                } else {
+                    this.newDeviceBtn.removeAttribute('disabled')
+                    this.newDeviceBtn.style.opacity = '1'
+                    this.newDeviceBtn.style.cursor = 'pointer'
+                }
+            }
+            if (this.deviceDropdown) {
+                if (connected) {
+                    this.deviceDropdown.disable()
+                } else {
+                    this.deviceDropdown.enable()
+                }
             }
 
             // Update Setup Window if active/exists
@@ -1071,9 +1457,10 @@ export default class WindowManager {
                 this.active_mode = 'edit'
                 if (device_online_button) {
                     // @ts-ignore
-                    device_online_button.innerText = 'Go online'
-                    device_online_button.classList.remove('orange')
-                    device_online_button.classList.add('green')
+                    device_online_button.innerText = '○'
+                    device_online_button.title = 'Connect'
+                    device_online_button.style.background = '#1fba5f'
+                    device_online_button.style.color = '#fff'
                 }
                 if (device_select_element) {
                     device_select_element.removeAttribute('disabled')
@@ -1088,9 +1475,10 @@ export default class WindowManager {
                 this.active_mode = 'online'
                 if (device_online_button) {
                     // @ts-ignore
-                    device_online_button.innerText = 'Go offline'
-                    device_online_button.classList.remove('green')
-                    device_online_button.classList.add('orange')
+                    device_online_button.innerText = '✕'
+                    device_online_button.title = 'Disconnect'
+                    device_online_button.style.background = '#dc3545'
+                    device_online_button.style.color = '#fff'
                 }
                 if (device_select_element) {
                     device_select_element.setAttribute('disabled', 'disabled')
@@ -1105,6 +1493,11 @@ export default class WindowManager {
             }
             
             this.updateLiveMonitorState()
+            
+            // Update paired devices list when connection status changes
+            if (this.connectionMode === 'serial') {
+                this.updateDeviceDropdown()
+            }
         }
 
         // Listen to device connection events
@@ -1146,6 +1539,8 @@ export default class WindowManager {
         
         this.#initPanelResizables(workspace)
         this.#initContextMenus(workspace)
+        // Initialize initial state
+        this.updateDeviceDropdown()
     }
 
     #initContextMenus(workspace) {
@@ -1158,7 +1553,7 @@ export default class WindowManager {
                 target: connectionHeader,
                 onOpen: () => [
                     { type: 'item', label: this.active_device === 'simulation' ? 'Switch to Device' : 'Switch to Simulation', name: 'toggle_device' },
-                    { type: 'item', label: this.active_mode === 'online' ? 'Disconnect' : 'Go Online', name: 'toggle_online' }
+                    { type: 'item', label: this.active_mode === 'online' ? 'Disconnect' : 'Connect', name: 'toggle_online' }
                 ],
                 onClose: (key) => {
                     if (key === 'toggle_device') {
@@ -2024,15 +2419,24 @@ export default class WindowManager {
     #on_device_online_click = async () => {
         const editor = this.#editor
         const device_info = this.device_info
-        const device_select_element = this.device_select_element
         const device_online_button = this.device_online_button
         // If attribute is disabled, return
         if (device_online_button.hasAttribute('disabled')) return
         const mode = this.active_mode === 'edit' ? 'online' : 'edit'
 
+        // Determine device based on connection mode if going online
+        if (mode === 'online') {
+            // Only auto-set if active_device isn't already explicitly set
+            if (!this.active_device || this.active_device === '') {
+                if (this.connectionMode === 'simulation') {
+                    this.active_device = 'simulation'
+                } else if (this.connectionMode === 'serial') {
+                    this.active_device = 'serial'
+                }
+            }
+        }
+
         device_online_button.setAttribute('disabled', 'disabled')
-        const device_select_element_was_disabled = device_select_element.hasAttribute('disabled')
-        if (!device_select_element_was_disabled) device_select_element.setAttribute('disabled', 'disabled')
         if (mode === 'online') {
             // @ts-ignore
             const before = device_online_button.innerText
@@ -2045,13 +2449,19 @@ export default class WindowManager {
                 this.logToConsole(errorMsg, 'error')
                 await editor.device_manager.disconnect()
                 device_online_button.removeAttribute('disabled')
-                if (!device_select_element_was_disabled) device_select_element.removeAttribute('disabled')
                 // @ts-ignore
-                device_online_button.innerText = before
+                device_online_button.innerText = '○'
+                device_online_button.title = 'Connect'
+                device_online_button.style.background = '#1fba5f'
+                device_online_button.style.color = '#fff'
                 device_info.innerHTML = editor.device_manager.error || ''
                 this._healthConnectionState = false
                 this._stopHealthPolling()
                 this._setHealthConnected(false)
+                // Update paired devices list to refresh connection status
+                if (this.connectionMode === 'serial') {
+                    this.updateDeviceDropdown()
+                }
                 return
             }
             const info = editor.device_manager.deviceInfo
@@ -2060,6 +2470,45 @@ export default class WindowManager {
                     <div class="device-name">${info.device || 'Unknown Device'}</div>
                     <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
                 `
+                
+                // Store device name and info in project for future reference
+                if (this.connectionMode === 'serial' && editor.device_manager?.connection?.serial?.port) {
+                    const port = editor.device_manager.connection.serial.port
+                    const portInfo = port.getInfo()
+                    if (portInfo.usbVendorId && portInfo.usbProductId) {
+                        const portKey = `${portInfo.usbVendorId.toString(16).padStart(4, '0')}:${portInfo.usbProductId.toString(16).padStart(4, '0')}`
+                        if (!editor.project.serialDeviceNames) {
+                            editor.project.serialDeviceNames = {}
+                        }
+                        const deviceLabel = info.device || 'Unnamed'
+                        const arch = info.arch || ''
+                        const fullName = arch ? `${deviceLabel} [${arch}]` : deviceLabel
+                        
+                        // Store as object with timestamps
+                        const existing = editor.project.serialDeviceNames[portKey]
+                        const now = Date.now()
+                        let created = now
+                        
+                        if (typeof existing === 'string') {
+                            created = now
+                        } else if (existing && existing.created) {
+                            created = existing.created
+                        }
+
+                        editor.project.serialDeviceNames[portKey] = {
+                            name: fullName,
+                            created: created,
+                            lastConnected: now
+                        }
+
+                        // Save project to persist device names
+                        if (editor.project_manager?.forceSave) {
+                            editor.project_manager.forceSave()
+                        }
+                        // Update dropdown after storing device name
+                        this.updateDeviceDropdown()
+                    }
+                }
             }
             else device_info.innerHTML = 'Unknown device'
             this._healthConnectionState = true
@@ -2120,21 +2569,24 @@ export default class WindowManager {
             this._setHealthConnected(false)
         }
         device_online_button.removeAttribute('disabled')
-        if (!device_select_element_was_disabled) device_select_element.removeAttribute('disabled')
 
         // @ts-ignore
-        device_online_button.innerText = mode === 'online' ? 'Go offline' : 'Go online'
         if (mode === 'online') {
-            device_select_element.setAttribute('disabled', 'disabled')
-            device_online_button.classList.remove('green')
-            device_online_button.classList.add('orange')
+            device_online_button.innerText = '✕'
+            device_online_button.title = 'Disconnect'
+            device_online_button.style.background = '#dc3545'
+            device_online_button.style.color = '#fff'
         } else {
-            device_select_element.removeAttribute('disabled')
-            device_online_button.classList.remove('orange')
-            device_online_button.classList.add('green')
+            device_online_button.innerText = '○'
+            device_online_button.title = 'Connect'
+            device_online_button.style.background = '#1fba5f'
+            device_online_button.style.color = '#fff'
         }
         this.active_mode = mode
         this.updateLiveMonitorState()
+        
+        // Clear active_device after use to allow auto-detection next time
+        this.active_device = null
     }
 
     #on_navigation_minimize_toggle = () => {
@@ -2183,44 +2635,17 @@ export default class WindowManager {
     }
 
     refreshDeviceOptions = () => {
-        const options = this.#editor.device_manager.devices
-        if (!options) throw new Error('Options not provided')
-        if (!Array.isArray(options)) throw new Error('Options must be an array')
-        if (options.length === 0) throw new Error('Options array is empty')
-        // Update dropdown with options
-        const device_select_element = this.#editor.workspace.querySelector('.plc-device-dropdown select')
-        if (!device_select_element) throw new Error('Device select element not found')
-        device_select_element.innerHTML = ''
-        options.forEach(option => {
-            const {name, key, disabled} = option
-            const opt = document.createElement('option')
-            opt.value = key
-            opt.innerText = name
-            const isDisabled = !!disabled
-            if (isDisabled) {
-                opt.setAttribute('disabled', 'disabled')
-                opt.setAttribute('title', disabled)
-            }
-            // @ts-ignore
-            opt.disabled = isDisabled
-            // @ts-ignore
-            opt.classList.add('device-option')
-            device_select_element.appendChild(opt)
-        }) // @ts-ignore
-        // Set active device to first option
-        this.active_device = options[0].key // @ts-ignore
-        device_select_element.value = this.active_device
+        // This method is now handled by updateDeviceDropdown()
+        // Keep for compatibility but make it a no-op or redirect
+        if (this.updateDeviceDropdown) {
+            this.updateDeviceDropdown()
+        }
     }
 
     setActiveDevice(device) {
-        const select = this.#editor.workspace.querySelector('.plc-device-dropdown select')
-        if (!select) return
-        // Check if device exists in options
-        const option = select.querySelector(`option[value="${device}"]`)
-        if (option && !option.disabled) {
-            this.active_device = device
-            select.value = device
-        }
+        // Legacy method - no longer needed with new connection UI
+        // The device is now selected via mode dropdown and device dropdown
+        this.active_device = device
     }
 
     get_focusable_elements = () => {
@@ -2403,6 +2828,42 @@ export default class WindowManager {
     /** @param { PLC_Project } project */
     openProject(project) {
         this.project = project
+
+        // Restore connection mode and device selection
+        if (project.connectionMode) {
+            this.connectionMode = project.connectionMode
+            if (this.modeSelect) {
+                this.modeSelect.value = this.connectionMode
+            }
+            if (this.newDeviceBtn) {
+                this.newDeviceBtn.style.display = 'none' // Moved to dropdown
+            }
+            if (this.deviceSelectContainer) {
+                this.deviceSelectContainer.style.display = this.connectionMode === 'serial' ? 'block' : 'none'
+            }
+            if (this.simulationLabel) {
+                this.simulationLabel.style.display = this.connectionMode === 'simulation' ? 'flex' : 'none'
+            }
+            
+            // Ensure polling state matches mode
+            if (this.connectionMode === 'serial') {
+                if (!this.serialDevicePollingTimer) this._startSerialPolling()
+            } else {
+                if (this.serialDevicePollingTimer) this._stopSerialPolling()
+            }
+        }
+        
+        if (project.selectedDevice) {
+            this.selectedDeviceValue = project.selectedDevice
+            
+            // Validate selection against mode
+            if (this.connectionMode === 'serial' && this.selectedDeviceValue === '_simulation') {
+                this.selectedDeviceValue = null
+            } else if (this.connectionMode === 'simulation' && this.selectedDeviceValue !== '_simulation') {
+                this.selectedDeviceValue = '_simulation'
+            }
+        }
+
         this.tree_manager.draw_navigation_tree(true)
         // this.tab_manager.draw_tabs()
         this.refreshDeviceOptions()
@@ -3278,5 +3739,350 @@ export default class WindowManager {
         setupDrag(toolsBar, 'right');
 
         apply();
+    }
+
+    async updateDeviceDropdown() {
+        if (!this.deviceDropdown) {
+            // console.warn('[WindowManager] updateDeviceDropdown skipped - no deviceDropdown')
+            return
+        }
+        
+        // Self-Healing: Ensure serial polling is active if we are in serial mode
+        // This handles cases where mode was switched via Project Load or other means without triggering the change event
+        if (this.connectionMode === 'serial' && !this.serialDevicePollingTimer && 'serial' in navigator) {
+             // console.log('[WindowManager] Auto-starting serial polling found to be inactive')
+             this._startSerialPolling()
+        }
+        
+        // console.log('[WindowManager] updateDeviceDropdown called. Mode:', this.connectionMode)
+        
+        const mode = this.connectionMode
+        let newOptions = []
+        let selectedValueToSet = null
+
+        if (mode === 'simulation') {
+            newOptions.push({
+                type: 'option',
+                value: '_simulation',
+                label: 'Simulation',
+                subtitle: null,
+                disabled: false,
+                isConnected: false,
+                isOffline: false
+            })
+            selectedValueToSet = '_simulation'
+        } else if (mode === 'serial') {
+            if (!('serial' in navigator)) {
+                newOptions.push({
+                    type: 'option',
+                    value: '_none',
+                    label: 'Serial not supported',
+                    subtitle: null,
+                    disabled: true
+                })
+                selectedValueToSet = '_none'
+            } else {
+                try {
+                    const ports = await navigator.serial.getPorts()
+                    // console.log('[WindowManager] Detected ports:', ports.length)
+                    /*
+                    if (ports.length > 0) {
+                        ports.forEach((p, i) => {
+                            const info = p.getInfo();
+                            console.log(`[WindowManager] Port ${i}:`, info.usbVendorId, info.usbProductId)
+                        })
+                    }
+                    */
+                    const addedKeys = new Set()
+                    
+                    // Helper to get stored device info safely (handles legacy string format)
+                    const getStoredInfo = (usbKey) => {
+                        const stored = this.#editor.project?.serialDeviceNames?.[usbKey]
+                        if (!stored) return null
+                        if (typeof stored === 'string') {
+                            return { name: stored, created: 0, lastConnected: 0 }
+                        }
+                        return stored
+                    }
+
+                    // Collect all potential options first
+                    const allDevices = []
+
+                    // 1. Online Ports
+                    ports.forEach((port, index) => {
+                        const info = port.getInfo()
+                        const isConnected = this.#editor.device_manager?.connected && 
+                                           this.#editor.device_manager?.connection?.serial?.port === port
+                        
+                        let value = `_port_${index}`
+                        let label = `Serial Device ${index + 1}`
+                        let subtitle = null
+                        let lastConnected = 0
+                        let usbKey = null
+
+                        if (info.usbVendorId && info.usbProductId) {
+                            const vendorId = info.usbVendorId.toString(16).padStart(4, '0')
+                            const productId = info.usbProductId.toString(16).padStart(4, '0')
+                            usbKey = `${vendorId}:${productId}`
+                            value = `_usb_${usbKey}`
+                            
+                            const stored = getStoredInfo(usbKey)
+                            if (stored) {
+                                label = stored.name
+                                lastConnected = stored.lastConnected || 0
+                            } else {
+                                label = 'Unnamed Device' // Cleaner default
+                            }
+                            subtitle = `USB ${usbKey}`
+                        }
+
+                        if (usbKey) addedKeys.add(usbKey)
+
+                        // Check if reconnecting - disable all options if so
+                        const isReconnecting = this.device_online_button && this.device_online_button.title === 'Cancel reconnect'
+
+                        allDevices.push({
+                            type: 'option',
+                            value,
+                            label,
+                            subtitle,
+                            disabled: isReconnecting,
+                            isConnected,
+                            isOffline: false,
+                            isAvailable: true,
+                            lastConnected,
+                            portIndex: index // Helper for connection lookup fallback
+                        })
+
+                        if (isConnected) selectedValueToSet = value
+                        else if (this.selectedDeviceValue === value) selectedValueToSet = value
+                        else if (this._savedSerialDevice === value) selectedValueToSet = value // Restore preference
+                    })
+                    
+                    // console.log('[WindowManager] Online ports processing done. selectedValueToSet:', selectedValueToSet)
+                    
+                    // 2. Offline History
+                    const serialDeviceNames = this.#editor.project?.serialDeviceNames
+                    if (serialDeviceNames && Object.keys(serialDeviceNames).length > 0) {
+                        for (const [usbKey, entry] of Object.entries(serialDeviceNames)) {
+                            // Check against already added keys
+                            if (addedKeys.has(usbKey)) continue 
+                            
+                            const name = typeof entry === 'string' ? entry : entry.name
+                            const lastConnected = typeof entry === 'string' ? 0 : (entry.lastConnected || 0)
+                            
+                            const value = `_usb_${usbKey}`
+                            
+                            // Check if reconnecting - disable all options if so
+                            const isReconnecting = this.device_online_button && this.device_online_button.title === 'Cancel reconnect'
+
+                            allDevices.push({
+                                type: 'option',
+                                value: value,
+                                label: name,
+                                subtitle: `USB ${usbKey}`,
+                                disabled: isReconnecting,
+                                isConnected: false,
+                                isOffline: true, // Mark as offline visually
+                                isAvailable: false,
+                                lastConnected
+                            })
+                            
+                            if (this.selectedDeviceValue === value) selectedValueToSet = value
+                            else if (this._savedSerialDevice === value && !selectedValueToSet) selectedValueToSet = value 
+                        }
+                    }
+
+                    // console.log('[WindowManager] Offline history processing done. selectedValueToSet:', selectedValueToSet)
+
+                    // Sort: (1) Connected first, (2) Available first, (3) Last connected DESC
+                    allDevices.sort((a, b) => {
+                        if (a.isConnected !== b.isConnected) return a.isConnected ? -1 : 1 
+                        if (a.isAvailable !== b.isAvailable) return a.isAvailable ? -1 : 1
+                        return b.lastConnected - a.lastConnected
+                    })
+
+                    // Add to options
+                    newOptions = [...allDevices]
+
+                    // If no devices found
+                    if (newOptions.length === 0) {
+                        newOptions.push({
+                            type: 'option',
+                            value: '_none',
+                            label: 'No paired devices',
+                            subtitle: null,
+                            disabled: true
+                        })
+                        if (!this.selectedDeviceValue || this.selectedDeviceValue.startsWith('_')) {
+                            selectedValueToSet = '_none'
+                        }
+                    } else if (!selectedValueToSet) {
+                         // Default to first available, or first item if none available
+                         const firstAvailable = newOptions.find(o => o.isAvailable)
+                         selectedValueToSet = firstAvailable ? firstAvailable.value : newOptions[0].value
+                    }
+
+                    // Add "Connect New Device" action
+                    const isReconnecting = this.device_online_button && this.device_online_button.title === 'Cancel reconnect'
+                    newOptions.push({ type: 'separator', text: '' })
+                    newOptions.push({
+                        type: 'option',
+                        value: '_action_new_device',
+                        label: '+ Connect new device',
+                        subtitle: null,
+                        disabled: isReconnecting,
+                        isConnected: false,
+                        isOffline: false
+                    })
+
+                } catch (err) {
+                    console.error('Failed to get paired devices:', err)
+                    newOptions.push({
+                        type: 'option',
+                        value: '_error',
+                        label: 'Error loading devices',
+                        subtitle: null,
+                        disabled: true
+                    })
+                }
+            }
+        }
+
+        // Cache Check
+        const newStateStr = JSON.stringify(newOptions) + mode + selectedValueToSet + (this.device_online_button?.title || '')
+        // NON-BLOCKING CACHE CHECK FOR DEBUGGING
+        if (this._lastDropdownState === newStateStr) {
+             // console.log('[WindowManager] Cache hit, but forcing update to ensure button state')
+        }
+        this._lastDropdownState = newStateStr
+
+        // Render
+        this.deviceDropdown.clear()
+        
+        newOptions.forEach(opt => {
+            if (opt.type === 'separator') {
+                this.deviceDropdown.addSeparator(opt.text)
+            } else {
+                this.deviceDropdown.addOption(opt.value, opt.label, opt.subtitle, opt.disabled, opt.isConnected, opt.isOffline)
+            }
+        })
+        
+        // Ensure we preserve the selection even if device is offline (logic above handles it via selectedValueToSet)
+        if (selectedValueToSet) {
+            // Note: selectOption logic was updated to NOT trigger onChange callback by default
+            // This prevents infinite loops when updateDeviceDropdown is called FROM onChange
+            this.deviceDropdown.selectOption(selectedValueToSet)
+            
+            // Implicitly set valid selection for persistence
+             if (selectedValueToSet !== this.selectedDeviceValue) {
+                this.selectedDeviceValue = selectedValueToSet
+                 if (this.#editor.project) {
+                    this.#editor.project.selectedDevice = selectedValueToSet
+                 }
+            }
+        }
+
+        // Update Connect Button State based on selection availability
+        if (this.device_online_button) {
+            const isReconnecting = this.device_online_button.title === 'Cancel reconnect'
+            const isBusy = this.device_online_button.innerText === '----------'
+            const isConnected = this.#editor.device_manager?.connected
+            
+            if (!isReconnecting && !isBusy && !isConnected) {
+                const selectedOption = newOptions.find(o => o.value === selectedValueToSet)
+                const isOffline = !selectedOption || selectedOption.isOffline || selectedOption.value === '_none' || selectedOption.value === '_error' || (selectedOption.disabled && selectedOption.value !== '_simulation')
+                
+                // console.log(`[WindowManager] Button update check. selectedValue: ${selectedValueToSet}, isOffline: ${isOffline}`)
+
+                if (isOffline) {
+                    this.device_online_button.style.background = '#444' // Grey
+                    this.device_online_button.style.color = '#888'
+                    this.device_online_button.style.border = '1px solid #444'
+                    this.device_online_button.style.cursor = 'not-allowed'
+                    this.device_online_button.setAttribute('data-offline', 'true')
+                } else {
+                    this.device_online_button.style.background = '#1fba5f' // Green
+                    this.device_online_button.style.color = '#fff'
+                    this.device_online_button.style.border = '1px solid transparent'
+                    this.device_online_button.style.cursor = 'pointer'
+                    this.device_online_button.removeAttribute('data-offline')
+                }
+            }
+        }
+    }
+    
+    async connectToPairedDevice(portIndex) {
+        if (!('serial' in navigator)) return
+        
+        try {
+            const ports = await navigator.serial.getPorts()
+            const port = ports[portIndex]
+            if (!port) {
+                this.logToConsole('Selected device not found', 'error')
+                return
+            }
+            
+            // Check if already connected to this device
+            const alreadyConnected = this.#editor.device_manager?.connected && 
+                                     this.#editor.device_manager?.connection?.serial?.port === port
+            
+            if (alreadyConnected) {
+                // Disconnect
+                await this.#editor.device_manager.disconnect(true)
+                this.active_mode = 'edit'
+                this.device_online_button.innerText = '○'
+                this.device_online_button.title = 'Connect'
+                this.device_online_button.style.background = '#1fba5f'
+                this.device_online_button.style.color = '#fff'
+                this.device_info.innerHTML = ''
+                return
+            }
+            
+            // Connect to the selected port
+            this.device_online_button.setAttribute('disabled', 'disabled')
+            this.device_online_button.innerText = '----------'
+            
+            const dm = this.#editor.device_manager
+            await dm.connect({
+                target: 'serial',
+                baudrate: 115200,
+                port: port
+            })
+            
+            if (dm.connected) {
+                this.active_mode = 'online'
+                this.device_online_button.innerText = '✕'
+                this.device_online_button.title = 'Disconnect'
+                this.device_online_button.style.background = '#dc3545'
+                this.device_online_button.style.color = '#fff'
+                
+                const info = dm.deviceInfo
+                if (info) {
+                    this.device_info.innerHTML = `
+                        <div class="device-name">${info.device || 'Unknown Device'}</div>
+                        <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
+                    `
+                }
+                
+                // Don't call updateDeviceDropdown here - it's already called by the connection status handler
+            }
+        } catch (err) {
+            console.error('Failed to connect to paired device:', err)
+            this.logToConsole(`Failed to connect: ${err.message || err}`, 'error')
+        } finally {
+            this.device_online_button.removeAttribute('disabled')
+            if (this.device_online_button.innerText === '----------') {
+                this.device_online_button.innerText = '○'
+                this.device_online_button.title = 'Connect'
+                this.device_online_button.style.background = '#1fba5f'
+                this.device_online_button.style.color = '#fff'
+            }
+        }
+    }
+
+    async updatePairedDevicesList() {
+        // Legacy method - now redirects to updateDeviceDropdown
+        await this.updateDeviceDropdown()
     }
 }

@@ -8,6 +8,9 @@ export default class DeviceManager {
   #intentionalDisconnect = false
   #lastSerialPortInfo = null  // Store port info instead of port reference
   #reconnectAttempting = false
+  #reconnectInterval = null
+  #reconnectListener = null
+  #reconnectTimeout = null
   /** @param {PLCEditor} editor */
   constructor(editor) {
     this.#editor = editor
@@ -52,7 +55,11 @@ export default class DeviceManager {
 
   #emitUpdate() {
       const event = new CustomEvent('plc-device-update', { 
-          detail: { connected: this.connected, info: this.deviceInfo } 
+          detail: { 
+            connected: this.connected, 
+            info: this.deviceInfo,
+            reconnecting: this.#reconnectAttempting
+          } 
       })
       this.#editor.workspace.dispatchEvent(event)
   }
@@ -122,9 +129,10 @@ export default class DeviceManager {
               this.#editor.window_manager.logToConsole('Will attempt to reconnect when device is available...', 'warning')
             }
           }
-          this.disconnect();
           if (wasUnexpected && this.options?.target === 'serial') {
             this.#startAutoReconnect()
+          } else {
+             this.disconnect();
           }
       };
 
@@ -288,17 +296,56 @@ export default class DeviceManager {
     return this.connection.monitor()
   }
 
+  async disconnect(intentional = false) {
+    this.#intentionalDisconnect = intentional
+    this.connected = false
+    this.#emitUpdate()
+    
+    // Only clear connection if we are not attempting to reconnect or if intentional
+    if (intentional || !this.#reconnectAttempting) {
+        if (this.connection) {
+            await this.connection.disconnect()
+            this.connection = null
+        }
+        this.deviceInfo = null
+    }
+    this.error = ''
+  }
 
-
-  destroy() {
+  async destroy() {
     if (this.connection) {
-      this.connection.disconnect()
+      await this.connection.disconnect()
       this.connection = null
     }
     this.devices = []
     this.deviceInfo = null
     this.error = ''
-    this.options = null
+  }
+
+  cancelReconnect() {
+    if (!this.#reconnectAttempting) return
+
+    if (this.#reconnectInterval) {
+      clearInterval(this.#reconnectInterval)
+      this.#reconnectInterval = null
+    }
+    if (this.#reconnectListener) {
+      navigator.serial.removeEventListener('connect', this.#reconnectListener)
+      this.#reconnectListener = null
+    }
+    if (this.#reconnectTimeout) {
+      clearTimeout(this.#reconnectTimeout)
+      this.#reconnectTimeout = null
+    }
+    
+    this.#reconnectAttempting = false
+    
+    if (this.#editor.window_manager?.logToConsole) {
+      this.#editor.window_manager.logToConsole('Auto-reconnection cancelled.', 'warning')
+    }
+    
+    // Ensure we are fully disconnected and UI is reset
+    this.disconnect(true)
   }
 
   #startAutoReconnect() {
@@ -307,9 +354,21 @@ export default class DeviceManager {
     if (!this.#lastSerialPortInfo) return
     
     this.#reconnectAttempting = true
+    this.#emitUpdate() // Notify UI that we are reconnecting
+
     const portInfo = this.#lastSerialPortInfo
     const lastOptions = {...this.options}
     
+    // Auto-cancel after 30 seconds
+    this.#reconnectTimeout = setTimeout(() => {
+        if (this.#reconnectAttempting) {
+            if (this.#editor.window_manager?.logToConsole) {
+                this.#editor.window_manager.logToConsole('Auto-reconnection timed out after 30s.', 'warning')
+            }
+            this.cancelReconnect()
+        }
+    }, 30000)
+
     // Helper to find matching port from getPorts()
     const findMatchingPort = async () => {
       try {
@@ -339,8 +398,11 @@ export default class DeviceManager {
         // Pass the fresh port object
         const reconnectOptions = {...lastOptions, port: matchingPort}
         await this.connect(reconnectOptions)
-        if (this.connected && this.#editor.window_manager?.logToConsole) {
-          this.#editor.window_manager.logToConsole('Successfully reconnected to device!', 'success')
+        if (this.connected) {
+          if (this.#editor.window_manager?.logToConsole) {
+            this.#editor.window_manager.logToConsole('Successfully reconnected to device!', 'success')
+          }
+          this.cancelReconnect() // Clean up listeners but state is now "connected"
         }
         return true
       } catch (err) {
@@ -352,31 +414,27 @@ export default class DeviceManager {
     }
     
     // Listen for connect events
-    const onConnect = async () => {
+    this.#reconnectListener = async () => {
       const success = await attemptReconnect()
       if (success) {
-        navigator.serial.removeEventListener('connect', onConnect)
-        clearInterval(pollInterval)
-        this.#reconnectAttempting = false
+       // Handled inside attemptReconnect success path
       }
     }
     
-    navigator.serial.addEventListener('connect', onConnect)
+    navigator.serial.addEventListener('connect', this.#reconnectListener)
     
     // Poll for port availability as fallback
-    const pollInterval = setInterval(async () => {
-      if (!this.#reconnectAttempting || this.connected) {
-        clearInterval(pollInterval)
-        navigator.serial.removeEventListener('connect', onConnect)
+    this.#reconnectInterval = setInterval(async () => {
+      if (!this.#reconnectAttempting) {
+        this.cancelReconnect()
         return
       }
       
       const success = await attemptReconnect()
       if (success) {
-        navigator.serial.removeEventListener('connect', onConnect)
-        clearInterval(pollInterval)
-        this.#reconnectAttempting = false
+        // Handled inside attemptReconnect success path
       }
     }, 2000)
   }
 }
+
