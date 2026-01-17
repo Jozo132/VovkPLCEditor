@@ -504,7 +504,10 @@ export const ladderRenderer = {
                     }
 
                     // When online (monitoring), show live values
-                    const live = editor.live_symbol_values?.get(entry?.name)
+                    let live = editor.live_symbol_values?.get(entry?.name)
+                    if (!live && entry?.originalName) {
+                        live = editor.live_symbol_values?.get(entry.originalName)
+                    }
 
                     // DEBUG: Log what we're trying to display
                     const result = (() => {
@@ -536,6 +539,15 @@ export const ladderRenderer = {
                                 if (typeof entry.presetValue === 'number') {
                                     pt = entry.presetValue
                                     hasPT = true
+                                } else if (entry.presetAddress !== undefined) {
+                                    // Preset is in memory via address - robust lookup
+                                    const ptLive = [...editor.live_symbol_values.values()].find(
+                                        l => l.absoluteAddress === entry.presetAddress && (l.type === 'u32' || l.type === 'dint')
+                                    )
+                                    if (ptLive && typeof ptLive.value === 'number') {
+                                        pt = ptLive.value
+                                        hasPT = true
+                                    }
                                 } else if (entry.presetName) {
                                     // Preset is in memory - look it up
                                     const ptLive = editor.live_symbol_values?.get(entry.presetName)

@@ -935,6 +935,21 @@ export class VovkPLCEditor {
 
             const parsedVal = parsePreset(presetToken)
             const isConstant = parsedVal !== null
+            
+            let presetAddr = -1
+            if (!isConstant) {
+                 const pAddrMatch = /^(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(presetToken)
+                 if (pAddrMatch) {
+                    let prefix = pAddrMatch[1] ? pAddrMatch[1].toUpperCase() : ''
+                    let byte = parseInt(pAddrMatch[2] || pAddrMatch[4], 10)
+                    let loc = prefix ? ({C:'control', X:'input', Y:'output', M:'marker', S:'system'}[prefix] || 'marker') : 'memory'
+                    let base = loc === 'memory' ? 0 : (normalizedOffsets[loc]?.offset || 0)
+                    presetAddr = base + byte
+                 } else if (symbolDetails && symbolDetails.has(presetToken)) {
+                    const sym = symbolDetails.get(presetToken)
+                    presetAddr = sym.absoluteAddress
+                 }
+            }
 
             if (storageAddr !== -1) {
                 // Use stable name based on storage address instead of text position
@@ -953,6 +968,7 @@ export class VovkPLCEditor {
                     storageRef.presetValue = parsedVal
                 } else {
                     storageRef.presetName = presetToken
+                    if (presetAddr !== -1) storageRef.presetAddress = presetAddr
                 }
                 refs.push(storageRef)
                 
@@ -989,19 +1005,6 @@ export class VovkPLCEditor {
                     presetValue: val
                 })
             } else {
-                 let presetAddr = -1
-                 const pAddrMatch = /^(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(presetToken)
-                 if (pAddrMatch) {
-                    let prefix = pAddrMatch[1] ? pAddrMatch[1].toUpperCase() : ''
-                    let byte = parseInt(pAddrMatch[2] || pAddrMatch[4], 10)
-                    let loc = prefix ? ({C:'control', X:'input', Y:'output', M:'marker', S:'system'}[prefix] || 'marker') : 'memory'
-                    let base = loc === 'memory' ? 0 : (normalizedOffsets[loc]?.offset || 0)
-                    presetAddr = base + byte
-                 } else if (symbolDetails && symbolDetails.has(presetToken)) {
-                    const sym = symbolDetails.get(presetToken)
-                    presetAddr = sym.absoluteAddress
-                 }
-                 
                  if (presetAddr !== -1) {
                      // Use stable name based on preset memory address
                      refs.push({
