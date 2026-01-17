@@ -876,7 +876,8 @@ export class VovkPLCEditor {
         if (!code) return refs
 
         // Match timer instructions: ton/tof/tp storage preset
-        const timerRegex = /\b(?:u8\.)?(ton|tof|tp)\b\s+([A-Za-z_]\w*(?:\.\d+)?|[CXYMS]\d+(?:\.\d+)?)\s+(#\d+|[A-Za-z_]\w*(?:\.\d+)?|[CXYMS]\d+(?:\.\d+)?)\b/gi
+        // Preset can be #123 (raw ms) or T#... (IEC style, e.g. T#5s, T#1h30m)
+        const timerRegex = /\b(?:u8\.)?(ton|tof|tp)\b\s+([A-Za-z_]\w*(?:\.\d+)?|[CXYMS]\d+(?:\.\d+)?)\s+((?:T#[A-Za-z0-9_]+|#\d+)|[A-Za-z_]\w*(?:\.\d+)?|[CXYMS]\d+(?:\.\d+)?)\b/gi
         
         let match = null
         while ((match = timerRegex.exec(code))) {
@@ -901,6 +902,40 @@ export class VovkPLCEditor {
                 storageAddr = sym.absoluteAddress
             }
             
+            // Helper to parse preset value
+            const parsePreset = (token) => {
+                if (token.startsWith('#')) return parseInt(token.substring(1), 10)
+                if (token.toUpperCase().startsWith('T#')) {
+                    const content = token.substring(2)
+                    // Parse multi-part time strings, e.g. "1h30m", "4h3s", "250ms"
+                    const partRegex = /(\d+)(ms|s|m|h|d)/gi
+                    let totalMs = 0
+                    let hasMatch = false
+                    let pMatch
+                    
+                    while ((pMatch = partRegex.exec(content))) {
+                        hasMatch = true
+                        const val = parseInt(pMatch[1], 10)
+                        const unit = pMatch[2].toLowerCase()
+                        if (unit === 's') totalMs += val * 1000
+                        else if (unit === 'm') totalMs += val * 60000
+                        else if (unit === 'h') totalMs += val * 3600000
+                        else if (unit === 'd') totalMs += val * 86400000
+                        else totalMs += val // ms
+                    }
+                    
+                    if (hasMatch) return totalMs
+                    
+                    // Fallback for just numbers (technically invalid IEC but good to handle)
+                     const simple = parseInt(content, 10)
+                     return isNaN(simple) ? null : simple
+                }
+                return null
+            }
+
+            const parsedVal = parsePreset(presetToken)
+            const isConstant = parsedVal !== null
+
             if (storageAddr !== -1) {
                 // Use stable name based on storage address instead of text position
                 const storageRef = {
@@ -914,8 +949,8 @@ export class VovkPLCEditor {
                     timerType: instr,
                     storageAddress: storageAddr
                 }
-                if (presetToken.startsWith('#')) {
-                    storageRef.presetValue = parseInt(presetToken.substring(1), 10)
+                if (isConstant) {
+                    storageRef.presetValue = parsedVal
                 } else {
                     storageRef.presetName = presetToken
                 }
@@ -936,8 +971,8 @@ export class VovkPLCEditor {
                 })
             }
             
-            if (presetToken.startsWith('#')) {
-                const val = parseInt(presetToken.substring(1), 10)
+            if (isConstant) {
+                const val = parsedVal
                 // Use stable name based on timer storage address instead of text position
                 // e.g., "tim_const_M192_p2" instead of "tim_const_p2@t73"
                 // This way the name doesn't change when you edit code before it

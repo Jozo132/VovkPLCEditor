@@ -2167,6 +2167,7 @@ MiniCodeEditor.registerLanguage('asm', {
     rules: [
         {regex: /\/\*[\s\S]*?\*\//g, className: 'cmt'},
         {regex: /\/\/.*$/gm, className: 'cmt'},
+        {regex: /T#[A-Za-z0-9_]+/gi, className: 'num'},
         {regex: /#(?:\s*\d+)?/g, className: 'num'},
         {regex: /^\s*([A-Za-z_]\w*):/gm, className: 'function'}, // Labels
         {
