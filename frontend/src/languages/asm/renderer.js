@@ -139,122 +139,163 @@ export const ladderRenderer = {
 
                         // Detect if using IEC time format (T#...) or raw format (#...)
                         const isIecFormat = entry.originalName && entry.originalName.toUpperCase().startsWith('T#')
+                        // FIX: Ensure value matches the type expected by Popup.js (number for type: 'number')
+                        let currentInput = isIecFormat ? entry.originalName : entry.presetValue
 
-                        const formResult = await Popup.form({
+                        await Popup.form({
                             title: isIecFormat ? `Edit ${entry.originalName}` : `Edit #${entry.presetValue}`,
                             description: isIecFormat ? 'Enter new timer preset (e.g. T#5s, T#500ms)' : `Enter new timer preset (milliseconds)`,
-                            inputs: [
-                                {
+                            inputs: [{
                                     type: isIecFormat ? 'text' : 'number',
                                     name: 'value',
                                     label: isIecFormat ? 'Preset' : 'Preset (ms)',
-                                    value: isIecFormat ? entry.originalName : entry.presetValue,
+                                    value: currentInput,
                                 },
+                                {
+                                    type: 'text',
+                                    name: 'error',
+                                    label: ' ',
+                                    readonly: true,
+                                    value: '',
+                                    margin: '0',
+                                }
                             ],
-                            buttons: [
-                                {text: 'Write', value: 'confirm'},
-                                {text: 'Cancel', value: 'cancel'},
-                            ],
+                            buttons: [{
+                                text: 'Write',
+                                value: 'confirm'
+                            }, {
+                                text: 'Cancel',
+                                value: 'cancel'
+                            }, ],
+                            verify: async (states) => {
+                                states.error.value = ''
+                                states.value.clearError()
+
+                                let newValue = 0
+                                let newToken = ''
+                                const inputValue = states.value.value
+
+                                try {
+                                    const strVal = String(inputValue).trim()
+                                    if (!strVal) throw new Error("Value cannot be empty")
+
+                                    // Parse the user input
+                                    if (isIecFormat) {
+                                        if (strVal.toUpperCase().startsWith('T#')) {
+                                            // Validates no spaces or invalid chars between components
+                                            if (!/^T#(\d+(?:ms|s|m|h|d))+$/i.test(strVal)) {
+                                                throw new Error("Invalid format. Spaces are not allowed (e.g., T#45d3s)")
+                                            }
+
+                                            const content = strVal.substring(2)
+                                            const partRegex = /(\d+)(ms|s|m|h|d)/gi
+                                            let totalMs = 0
+                                            let hasMatch = false
+                                            let pMatch
+                                            while ((pMatch = partRegex.exec(content))) {
+                                                hasMatch = true
+                                                const val = parseInt(pMatch[1], 10)
+                                                const unit = pMatch[2].toLowerCase()
+                                                if (unit === 's') totalMs += val * 1000
+                                                else if (unit === 'm') totalMs += val * 60000
+                                                else if (unit === 'h') totalMs += val * 3600000
+                                                else if (unit === 'd') totalMs += val * 86400000
+                                                else totalMs += val
+                                            }
+
+                                            if (hasMatch) {
+                                                newValue = totalMs
+                                            } else {
+                                                // Fallback usually unreachable due to regex check above, 
+                                                // but kept for safety if regex allows something odd
+                                                const simple = parseInt(content, 10)
+                                                if (isNaN(simple)) throw new Error("Invalid T# format")
+                                                newValue = simple
+                                            }
+                                            newToken = strVal
+                                        } else if (strVal.startsWith('#')) {
+                                            // User switched to raw format
+                                            newValue = parseInt(strVal.substring(1), 10)
+                                            newToken = strVal
+                                        } else {
+                                            // Assume simple number text input is milliseconds
+                                            newValue = parseInt(strVal, 10)
+                                            if (isNaN(newValue)) throw new Error("Invalid time format")
+                                            newToken = `#${newValue}`
+                                        }
+                                    } else {
+                                        newValue = parseInt(strVal, 10)
+                                        newToken = `#${newValue}`
+                                    }
+
+                                    // Range Check
+                                    if (isNaN(newValue) || newValue < 0 || newValue > 4294967295) {
+                                        throw new Error("Value out of valid range")
+                                    }
+
+                                    const patchResult = await patcher.patchConstant(entry.bytecode_offset, newValue)
+
+                                    if (patchResult.success) {
+                                        // Update source code to match patched bytecode
+                                        const oldToken = entry.originalName || `#${entry.presetValue}`
+
+                                        console.log('[PATCH] Updating source:', {
+                                            oldToken,
+                                            newToken,
+                                            entryStart: entry.start,
+                                            entryEnd: entry.end,
+                                        })
+
+                                        // Replace at the specific position, not the first occurrence
+                                        if (entry.start !== undefined && entry.end !== undefined) {
+                                            block.code = block.code.substring(0, entry.start) + newToken + block.code.substring(entry.end)
+                                        } else {
+                                            // Fallback to simple replace (shouldn't happen)
+                                            block.code = block.code.replace(oldToken, newToken)
+                                        }
+
+                                        // Update text editor to show new code
+                                        const textEditor = block.props?.text_editor
+                                        if (textEditor?.setValue) {
+                                            // Clear all caches so recompilation rebuilds everything fresh
+                                            block.cached_checksum = null
+                                            block.cached_asm = null
+                                            block.cached_asm_map = null
+                                            block.cached_symbol_refs = null
+                                            block.cached_address_refs = null
+                                            block.cached_timer_refs = null
+                                            block.cached_symbols_checksum = null
+
+                                            // Update display (pills will be regenerated by recompilation)
+                                            textEditor.setValue(block.code)
+                                        }
+
+                                        // Mark project dirty
+                                        if (editor.project_manager?.checkAndSave) {
+                                            editor.project_manager.checkAndSave()
+                                        }
+
+                                        // Trigger full recompilation to rebuild everything cleanly
+                                        setTimeout(async () => {
+                                            console.log('[PATCH] Recompiling to rebuild IR and symbol map...')
+                                            if (editor.window_manager?.handleCompile) {
+                                                await editor.window_manager.handleCompile({
+                                                    silent: true
+                                                })
+                                            }
+                                        }, 100)
+                                        return true
+                                    } else {
+                                        throw new Error(`Write Failed: ${patchResult.message}`)
+                                    }
+
+                                } catch (e) {
+                                    states.error.value = e.message
+                                    states.value.setError()
+                                    return false
+                                }
+                            }
                         })
-
-                        if (!formResult || typeof formResult.value === 'undefined') return
-
-                        let newValue = 0
-                        let newToken = ''
-
-                        // Parse the user input
-                        if (isIecFormat) {
-                            const strVal = formResult.value.trim()
-                            if (strVal.toUpperCase().startsWith('T#')) {
-                                const content = strVal.substring(2)
-                                const m = /^(\d+)(ms|s|m|h|d)?$/i.exec(content)
-                                if (m) {
-                                    const val = parseInt(m[1], 10)
-                                    const unit = (m[2] || 'ms').toLowerCase()
-                                    if (unit === 's') newValue = val * 1000
-                                    else if (unit === 'm') newValue = val * 60000
-                                    else if (unit === 'h') newValue = val * 3600000
-                                    else if (unit === 'd') newValue = val * 86400000
-                                    else newValue = val
-                                } else {
-                                    // Fallback if parsing fails but starts with T#
-                                    newValue = parseInt(content, 10) || 0
-                                }
-                                newToken = strVal
-                            } else if (strVal.startsWith('#')) {
-                                // User switched to raw format
-                                newValue = parseInt(strVal.substring(1), 10)
-                                newToken = strVal
-                            } else {
-                                // Assume simple number text input is milliseconds
-                                // But for IEC intent, better to prepend T#?
-                                // Or if they deleted T#, maybe they want raw.
-                                // Let's assume raw if they removed prefixes.
-                                newValue = parseInt(strVal, 10)
-                                if (isNaN(newValue)) throw new Error('Invalid time format')
-                                newToken = `#${newValue}`
-                            }
-                        } else {
-                            newValue = parseInt(formResult.value)
-                            newToken = `#${newValue}`
-                        }
-
-                        const patchResult = await patcher.patchConstant(entry.bytecode_offset, newValue)
-
-                        if (patchResult.success) {
-                            // Update source code to match patched bytecode
-                            const oldToken = entry.originalName || `#${entry.presetValue}`
-
-                            console.log('[PATCH] Updating source:', {
-                                oldToken,
-                                newToken,
-                                entryStart: entry.start,
-                                entryEnd: entry.end,
-                            })
-
-                            // Replace at the specific position, not the first occurrence
-                            if (entry.start !== undefined && entry.end !== undefined) {
-                                block.code = block.code.substring(0, entry.start) + newToken + block.code.substring(entry.end)
-                            } else {
-                                // Fallback to simple replace (shouldn't happen)
-                                block.code = block.code.replace(oldToken, newToken)
-                            }
-
-                            // Update text editor to show new code
-                            const textEditor = block.props?.text_editor
-                            if (textEditor?.setValue) {
-                                // Clear all caches so recompilation rebuilds everything fresh
-                                block.cached_checksum = null
-                                block.cached_asm = null
-                                block.cached_asm_map = null
-                                block.cached_symbol_refs = null
-                                block.cached_address_refs = null
-                                block.cached_timer_refs = null
-                                block.cached_symbols_checksum = null
-
-                                // Update display (pills will be regenerated by recompilation)
-                                textEditor.setValue(block.code)
-                            }
-
-                            // Mark project dirty
-                            if (editor.project_manager?.checkAndSave) {
-                                editor.project_manager.checkAndSave()
-                            }
-
-                            // Trigger full recompilation to rebuild everything cleanly
-                            setTimeout(async () => {
-                                console.log('[PATCH] Recompiling to rebuild IR and symbol map...')
-                                if (editor.window_manager?.handleCompile) {
-                                    await editor.window_manager.handleCompile({silent: true})
-                                }
-                            }, 100)
-                        } else {
-                            new Popup({
-                                title: 'Error',
-                                description: patchResult.message,
-                                buttons: [{text: 'OK', value: 'ok', background: '#dc3545', color: 'white'}],
-                            })
-                        }
                     } catch (err) {
                         console.error('[ASM Renderer] Error patching constant:', err)
                         new Popup({

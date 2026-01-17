@@ -3088,7 +3088,9 @@ export default class WindowManager {
         // Locking Logic:
         // Unlock editing when Connected (Online), but Lock when Monitoring.
         // If Live Edit is enabled, we force unlock.
-        const isLocked = shouldMonitor && !this._liveEditEnabled
+        // User Request: Remove the option to unlock code editng in live monitor mode.
+        // So we strictly lock when monitoring is active, ignoring liveEditEnabled for code editing.
+        const isLocked = shouldMonitor // && !this._liveEditEnabled
         if (this._edit_lock_state !== isLocked) {
              this._edit_lock_state = isLocked
              if (typeof editor.setEditLock === 'function') {

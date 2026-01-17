@@ -264,7 +264,7 @@ export class Popup {
             }
         }
         if (!cancel && this.options.verify) {
-            const ok = this.options.verify(null)
+            const ok = await this.options.verify(null)
             if (!ok) return
         }
         this.closed = true
