@@ -358,7 +358,7 @@ ul {
     background: #1e1e1e;
     overflow: visible;
     position: relative;
-    width: 60px; /* Allow space for labels */
+    width: 40px; /* Allow space for labels */
 }
 
 .plc-health-tooltip {
