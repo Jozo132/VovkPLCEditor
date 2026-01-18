@@ -339,39 +339,113 @@ ul {
     cursor: default;
 }
 
-.plc-device-health-body {
+.plc-device-health-body.plc-health-charts {
+    display: flex;
+    flex-direction: row;
+    gap: 1px;
+    padding: 2px;
+    height: 120px;
+    min-width: 220px;
+    max-width: 240px;
+    justify-content: space-evenly;
+}
+
+.plc-health-chart {
+     /* removed flex: 1 */
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 8px 10px;
-}
-
-.plc-device-health-row {
-    display: grid;
-    grid-template-columns: minmax(40px, 1fr) minmax(70px, 1fr) minmax(70px, 1fr);
     align-items: center;
-    column-gap: 8px;
-    padding: 1px 0; /* Narrower rows */
+    background: #1e1e1e;
+    overflow: visible;
+    position: relative;
+    width: 60px; /* Allow space for labels */
 }
 
-.plc-device-health-label {
-    color: #bbb;
-    justify-self: start;
-}
-
-.plc-device-health-col {
-    color: #cfcfcf;
-    justify-self: end;
-    text-align: right;
+.plc-health-tooltip {
+    position: absolute;
+    background: #252526;
+    color: #eee;
+    padding: 6px;
+    border: 1px solid #454545;
+    border-radius: 2px;
     font-size: 10px;
+    font-family: 'Consolas', monospace;
+    white-space: pre;
+    z-index: 10000;
+    pointer-events: none;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    min-width: 80px;
+    display: none;
 }
 
-.plc-device-health-value {
-    color: #fff;
-    font-weight: 600;
-    font-family: Consolas, "Courier New", monospace;
-    text-align: right;
-    justify-self: end;
+.health-label {
+    font-size: 9px;
+    color: #888;
+    margin-bottom: 2px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    margin-bottom: 16px; /* Space for Max value */
+}
+
+.health-bar-container {
+    flex: 1;
+    width: 20px;
+    position: relative;
+    background: #252526;
+    margin-bottom: 2px;
+}
+
+.health-bar-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: #007acc;
+    transition: height 0.2s ease;
+    min-height: 1px;
+    z-index: 2;
+}
+
+.health-range-indicator {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    background: #ff4444;
+    z-index: 1;
+    opacity: 0.9;
+}
+
+.health-value-min, .health-value-max {
+    position: absolute;
+    width: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    font-size: 9px;
+    font-family: 'Consolas', monospace;
+    color: #888;
+    pointer-events: none;
+}
+
+.health-value-max {
+    bottom: 100%;
+    margin-bottom: 2px;
+}
+
+.health-value-min {
+    top: 100%;
+    margin-top: 2px;
+    display: block;
+}
+
+.health-value {
+    font-size: 10px;
+    font-family: 'Consolas', monospace;
+    color: #ddd;
+    text-align: center;
+    flex-shrink: 0;
+    margin-top: 15px; /* Space for min value */
 }
 
 

@@ -248,6 +248,8 @@ export default class SerialConnection extends ConnectionBase {
             const hex = raw.replace(/[^0-9a-fA-F]/g, '')
             if (hex.length < 48) throw new Error("Invalid health response")
             const parseU32 = (offset) => parseInt(hex.slice(offset, offset + 8), 16) >>> 0
+            // Struct order from runtime-lib.h DeviceHealth:
+            // 0-2: cycle, 3-5: ram_free, 6: total_ram, 7-9: period, 10-12: jitter
             return {
                 last_cycle_time_us: parseU32(0),
                 min_cycle_time_us: parseU32(8),
@@ -255,6 +257,13 @@ export default class SerialConnection extends ConnectionBase {
                 ram_free: parseU32(24),
                 min_ram_free: parseU32(32),
                 max_ram_free: parseU32(40),
+                total_ram_size: parseU32(48),
+                last_period_us: parseU32(56),
+                min_period_us: parseU32(64),
+                max_period_us: parseU32(72),
+                last_jitter_us: parseU32(80),
+                min_jitter_us: parseU32(88),
+                max_jitter_us: parseU32(96),
             }
         }, { label: 'getHealth' });
     }

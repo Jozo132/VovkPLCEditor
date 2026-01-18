@@ -172,26 +172,46 @@ export default class WindowManager {
                                         <div style="flex:1"></div>
                                         <button class="plc-device-health-reset" title="Reset max values" style="background:none; border:none; color: #ccc; cursor: pointer;">Reset</button>
                                     </div>
-                                    <div class="plc-device-health-body">
-                                <div class="plc-device-health-row plc-device-health-row-head">
-                                    <span class="plc-device-health-label"></span>
-                                    <span class="plc-device-health-col">Cycle</span>
-                                    <span class="plc-device-health-col">RAM Free</span>
-                                </div>
-                                        <div class="plc-device-health-row">
-                                            <span class="plc-device-health-label">Last</span>
-                                            <span class="plc-device-health-value" data-field="cycle-last">-</span>
-                                            <span class="plc-device-health-value" data-field="ram-last">-</span>
+                                    <div class="plc-device-health-body plc-health-charts">
+                                        <div class="plc-health-chart" data-metric="cycle">
+                                            <div class="health-label">CYCLE</div>
+                                            <div class="health-bar-container">
+                                                <div class="health-value-max"></div>
+                                                <div class="health-bar-fill"></div>
+                                                <div class="health-range-indicator"></div>
+                                                <div class="health-value-min"></div>
+                                            </div>
+                                            <div class="health-value">-</div>
                                         </div>
-                                        <div class="plc-device-health-row">
-                                            <span class="plc-device-health-label">Min</span>
-                                            <span class="plc-device-health-value" data-field="cycle-min">-</span>
-                                            <span class="plc-device-health-value" data-field="ram-min">-</span>
+                                        <div class="plc-health-chart" data-metric="period">
+                                            <div class="health-label">PERIOD</div>
+                                            <div class="health-bar-container">
+                                                <div class="health-value-max"></div>
+                                                <div class="health-bar-fill"></div>
+                                                <div class="health-range-indicator"></div>
+                                                <div class="health-value-min"></div>
+                                            </div>
+                                            <div class="health-value">-</div>
                                         </div>
-                                        <div class="plc-device-health-row">
-                                            <span class="plc-device-health-label">Max</span>
-                                            <span class="plc-device-health-value" data-field="cycle-max">-</span>
-                                            <span class="plc-device-health-value" data-field="ram-max">-</span>
+                                        <div class="plc-health-chart" data-metric="jitter">
+                                            <div class="health-label">JITTER</div>
+                                            <div class="health-bar-container">
+                                                <div class="health-value-max"></div>
+                                                <div class="health-bar-fill"></div>
+                                                <div class="health-range-indicator"></div>
+                                                <div class="health-value-min"></div>
+                                            </div>
+                                            <div class="health-value">-</div>
+                                        </div>
+                                        <div class="plc-health-chart" data-metric="ram">
+                                            <div class="health-label">RAM</div>
+                                            <div class="health-bar-container">
+                                                <div class="health-value-max"></div>
+                                                <div class="health-bar-fill"></div>
+                                                <div class="health-range-indicator"></div>
+                                                <div class="health-value-min"></div>
+                                            </div>
+                                            <div class="health-value">-</div>
                                         </div>
                                     </div>
                                 </div>
@@ -1023,18 +1043,48 @@ export default class WindowManager {
         })
         */
 
-        this.device_health_values = {
-            cycleLast: device_health.querySelector('[data-field="cycle-last"]'),
-            cycleMin: device_health.querySelector('[data-field="cycle-min"]'),
-            cycleMax: device_health.querySelector('[data-field="cycle-max"]'),
-            ramLast: device_health.querySelector('[data-field="ram-last"]'),
-            ramMin: device_health.querySelector('[data-field="ram-min"]'),
-            ramMax: device_health.querySelector('[data-field="ram-max"]'),
+        this.device_health_charts = {}
+        const metrics = ['cycle', 'period', 'jitter', 'ram']
+        
+        // Create shared tooltip element
+        let tooltip = document.getElementById('plc-health-tooltip')
+        if (!tooltip) {
+            tooltip = document.createElement('div')
+            tooltip.id = 'plc-health-tooltip'
+            tooltip.className = 'plc-health-tooltip'
+            document.body.appendChild(tooltip)
         }
-        if (!this.device_health_values.cycleLast || !this.device_health_values.cycleMin || !this.device_health_values.cycleMax || 
-            !this.device_health_values.ramLast || !this.device_health_values.ramMin || !this.device_health_values.ramMax) {
-            throw new Error('Device health value elements not found')
+
+        for (const m of metrics) {
+             const el = device_health.querySelector(`[data-metric="${m}"]`)
+             if (el) {
+                 this.device_health_charts[m] = {
+                     container: el,
+                     fill: el.querySelector('.health-bar-fill'),
+                     range: el.querySelector('.health-range-indicator'),
+                     valMin: el.querySelector('.health-value-min'),
+                     valMax: el.querySelector('.health-value-max'),
+                     value: el.querySelector('.health-value')
+                 }
+                 
+                 // Tooltip events
+                 el.addEventListener('mouseenter', () => {
+                     const text = el.getAttribute('data-tooltip')
+                     if (text) {
+                         tooltip.textContent = text
+                         tooltip.style.display = 'block'
+                     }
+                 })
+                 el.addEventListener('mouseleave', () => {
+                     tooltip.style.display = 'none'
+                 })
+                 el.addEventListener('mousemove', (e) => {
+                     tooltip.style.left = (e.pageX + 10) + 'px'
+                     tooltip.style.top = (e.pageY + 10) + 'px'
+                 })
+             }
         }
+        
         const device_health_reset = device_health.querySelector('.plc-device-health-reset')
         if (!device_health_reset) throw new Error('Device health reset button not found')
         device_health_reset.addEventListener('click', () => this.#on_device_health_reset_click())
@@ -1813,49 +1863,154 @@ export default class WindowManager {
     }
 
     _renderDeviceHealth(health) {
-        if (!this.device_health_values) return
-        const vals = this.device_health_values
-        if (!vals.cycleLast) return
+        if (!this.device_health_charts) return
         
-        const withUnit = (value, unit) => {
-            const text = this._formatHealthNumber(value)
-            return text === null ? '-' : `${text} ${unit}`
-        }
-        const withMem = (value) => {
-            if (!Number.isFinite(value)) return '-'
-            if (value >= 1024 * 1024) return (value / (1024 * 1024)).toFixed(1) + ' MB'
-            if (value >= 1024) return (value / 1024).toFixed(1) + ' kB'
-            return Math.trunc(value) + ' B'
+        const updateChart = (metric, last, min, max, unit, isRam = false) => {
+             const chart = this.device_health_charts[metric]
+             if (!chart) return
+             
+             if (!health || last === undefined) {
+                 chart.value.textContent = '-'
+                 chart.valMin.textContent = ''
+                 chart.valMax.textContent = ''
+                 chart.fill.style.height = '0%'
+                 chart.range.style.bottom = '0%'
+                 chart.range.style.height = '0%'
+                 chart.container.removeAttribute('data-tooltip')
+                 chart.container.removeAttribute('title')
+                 return
+             }
+             
+             const fmt = (v) => {
+                 if (isRam) {
+                     if (v >= 1024 * 1024) return (v / (1024 * 1024)).toFixed(1) + 'MB'
+                     else if (v >= 1024) return (v / 1024).toFixed(1) + 'kB'
+                     else return Math.trunc(v) + 'B'
+                 } else {
+                     return Math.trunc(v) + unit
+                 }
+             }
+             
+             let displayLast = last
+             let displayMin = min
+             let displayMax = max
+             let scale = 1
+             let tooltip = ''
+
+             if (isRam) {
+                 const totalRam = health.total_ram_size || 0
+                 
+                 if (totalRam > 0) {
+                     // Standard RAM Usage Bar Logic
+                     scale = totalRam
+                     
+                     // Calculate Used values
+                     // Free is what comes in as last, min, max
+                     // Used = Total - Free
+                     
+                     const usedLast = totalRam - last
+                     const usedMax = totalRam - min // Min free = Max used
+                     const usedMin = totalRam - max // Max free = Min used
+                     
+                     displayLast = usedLast
+                     displayMin = usedMin
+                     displayMax = usedMax
+                     
+                     // Show total capacity on top
+                     chart.valMin.textContent = '' 
+                     chart.valMax.textContent = fmt(totalRam)
+                     
+                     // Show usage in % on bottom
+                     const percent = Math.round((usedLast / totalRam) * 100)
+                     chart.value.textContent = percent + '%'
+                     
+                     // Comprehensive Tooltip
+                     tooltip = `RAM USAGE\nUsed: ${fmt(usedLast)} / ${fmt(totalRam)} (${percent}%)\nFree: ${fmt(last)}\n\nHistory:\nMax Used: ${fmt(usedMax)}\nMin Used: ${fmt(usedMin)}`
+
+                 } else {
+                     // Fallback if total_ram_size is missing (older firmware logic)
+                     const bestCase = max // Max Free
+                     scale = bestCase || 1
+                     displayLast = bestCase - last
+                     displayMin = bestCase - max // 0
+                     displayMax = bestCase - min // Worst case used
+                     
+                     chart.valMin.textContent = 'Min:' + fmt(displayMin)
+                     chart.valMax.textContent = 'Max:' + fmt(displayMax)
+                     chart.value.textContent = fmt(displayLast)
+                     
+                     tooltip = `RAM (Relative)\nUsed Est: ${fmt(displayLast)}\nMin Used: ${fmt(displayMin)}\nMax Used: ${fmt(displayMax)}`
+                 }
+             } else {
+                 // Non-RAM metrics: Scale is 0 to max
+                 // Bottom label shows min, top shows max
+                 // The red range indicator shows the min-max variance range
+                 chart.valMin.textContent = fmt(min)
+                 chart.valMax.textContent = fmt(max)
+                 chart.value.textContent = fmt(last)
+                 
+                 scale = (max || 0)
+                 if (scale === 0) scale = 100
+                 
+                 tooltip = `${metric.toUpperCase()}\nLast: ${fmt(last)}\nMin: ${fmt(min)}\nMax: ${fmt(max)}`
+             }
+
+             chart.container.setAttribute('data-tooltip', tooltip)
+             chart.container.removeAttribute('title')
+             
+             // Remove title from children if present to prevent double tooltip
+             if (chart.fill && chart.fill.parentElement) {
+                 chart.fill.parentElement.removeAttribute('title')
+             }
+
+             const pLast = Math.min(100, Math.max(0, (displayLast / scale) * 100))
+             const pMin = Math.min(100, Math.max(0, (displayMin / scale) * 100))
+             const pMax = Math.min(100, Math.max(0, (displayMax / scale) * 100))
+             
+             if (isRam) {
+                 // RAM: bar fills from 0 to used amount
+                 chart.fill.style.bottom = '0%'
+                 chart.fill.style.height = `${pLast}%`
+             } else {
+                 // Timing metrics: bar fills from min to last (shows value above minimum)
+                 chart.fill.style.bottom = `${pMin}%`
+                 chart.fill.style.height = `${Math.max(1, pLast - pMin)}%`
+             }
+             chart.range.style.bottom = `${pMin}%`
+             chart.range.style.height = `${Math.max(0, pMax - pMin)}%`
+             
+             // Color warning for RAM if usage is high (>90%)
+             if (isRam && pLast > 90) {
+                 chart.fill.style.background = '#d63030' // Red warning
+             } else if (isRam) {
+                 chart.fill.style.background = '' // Default
+             }
         }
 
         if (!health) {
-            vals.cycleLast.textContent = '-'
-            vals.cycleMin.textContent = '-'
-            vals.cycleMax.textContent = '-'
-            vals.ramLast.textContent = '-'
-            vals.ramMin.textContent = '-'
-            vals.ramMax.textContent = '-'
+            updateChart('cycle')
+            updateChart('period')
+            updateChart('jitter')
+            updateChart('ram')
             return
         }
         
-        vals.cycleLast.textContent = withUnit(health.last_cycle_time_us, 'us')
-        vals.cycleMin.textContent = withUnit(health.min_cycle_time_us, 'us')
-        vals.cycleMax.textContent = withUnit(health.max_cycle_time_us, 'us')
-        vals.ramLast.textContent = withMem(health.ram_free)
-        vals.ramMin.textContent = withMem(health.min_ram_free)
-        vals.ramMax.textContent = withMem(health.max_ram_free)
+        updateChart('cycle', health.last_cycle_time_us, health.min_cycle_time_us, health.max_cycle_time_us, 'us')
+        updateChart('period', health.last_period_us, health.min_period_us, health.max_period_us, 'us')
+        updateChart('jitter', health.last_jitter_us, health.min_jitter_us, health.max_jitter_us, 'us')
+        updateChart('ram', health.ram_free, health.min_ram_free, health.max_ram_free, '', true)
 
         if (this._last_known_health_dimmed) {
-            Object.values(this.device_health_values).forEach(el => el.style.opacity = '0.5')
+             Object.values(this.device_health_charts).forEach(c => c.container.style.opacity = '0.5')
         } else {
-            Object.values(this.device_health_values).forEach(el => el.style.opacity = '1')
+             Object.values(this.device_health_charts).forEach(c => c.container.style.opacity = '1')
         }
     }
     
     setHealthDimmed(dimmed) {
         this._last_known_health_dimmed = dimmed
-        if (this.device_health_values) {
-              Object.values(this.device_health_values).forEach(el => el.style.opacity = dimmed ? '0.5' : '1')
+        if (this.device_health_charts) {
+              Object.values(this.device_health_charts).forEach(c => c.container.style.opacity = dimmed ? '0.5' : '1')
         }
     }
 
