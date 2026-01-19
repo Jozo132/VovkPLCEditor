@@ -901,12 +901,54 @@ export class VovkPLCEditor {
         const refs = []
         if (!code) return refs
 
+        // Create a masked version of code where comments and strings are replaced with spaces
+        // This ensures the regex doesn't match inside them, but indices remain correct
+        let masked = ''
+        let state = 'out' // out, string, char, comment
+        const limit = code.length
+
+        for (let i = 0; i < limit; i++) {
+            const char = code[i]
+
+            if (state === 'out') {
+                if (char === '/' && code[i + 1] === '/') {
+                    state = 'comment'
+                    masked += ' '
+                } else if (char === '"') {
+                    state = 'string'
+                    masked += ' '
+                } else if (char === "'") {
+                    state = 'char'
+                    masked += ' '
+                } else {
+                    masked += char
+                }
+            } else if (state === 'comment') {
+                if (char === '\n') {
+                    state = 'out'
+                    masked += '\n'
+                } else {
+                    masked += ' '
+                }
+            } else if (state === 'string') {
+                masked += ' '
+                if (char === '"' && code[i - 1] !== '\\') {
+                    state = 'out'
+                }
+            } else if (state === 'char') {
+                masked += ' '
+                if (char === "'" && code[i - 1] !== '\\') {
+                    state = 'out'
+                }
+            }
+        }
+
         // Match timer instructions: ton/tof/tp storage preset
         // Preset can be #123 (raw ms) or T#... (IEC style, e.g. T#5s, T#1h30m)
-        const timerRegex = /\b(?:u8\.)?(ton|tof|tp)\b\s+([A-Za-z_]\w*(?:\.\d+)?|[CXYMS]\d+(?:\.\d+)?)\s+((?:T#[A-Za-z0-9_]+|#\d+)|[A-Za-z_]\w*(?:\.\d+)?|[CXYMS]\d+(?:\.\d+)?)\b/gi
+        const timerRegex = /\b(?:u8\.)?(ton|tof|tp)\b\s+([A-Za-z_]\w*(?:\.\d+)?|[KCTXYMS]\d+(?:\.\d+)?)\s+((?:T#[A-Za-z0-9_]+|#\d+)|[A-Za-z_]\w*(?:\.\d+)?|[KCTXYMS]\d+(?:\.\d+)?)\b/gi
         
         let match = null
-        while ((match = timerRegex.exec(code))) {
+        while ((match = timerRegex.exec(masked))) {
             const instr = match[1].toLowerCase()
             const storageToken = match[2]
             const presetToken = match[3]
