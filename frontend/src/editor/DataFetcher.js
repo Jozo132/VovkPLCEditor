@@ -163,20 +163,24 @@ export default class DataFetcher {
                     const val = parseFloat(valStr)
                     
                     let key = 'marker'
-                    if (code === 'C') key = 'control'
+                    if (code === 'K') key = 'control'
+                    else if (code === 'C') key = 'counter'
+                    else if (code === 'T') key = 'timer'
                     else if (code === 'X') key = 'input'
                     else if (code === 'Y') key = 'output'
                     else if (code === 'S') key = 'system'
                     else if (code === 'M') key = 'marker'
                     
                     const base = getOffset(key)
+                    // Timer (T) uses 9 bytes per unit, Counter (C) uses 5 bytes per unit
+                    const structSize = (code === 'T') ? 9 : (code === 'C') ? 5 : 1
                     
                     if (valStr.includes('.')) {
                         const byte = Math.floor(val)
                         const bit = Math.round((val - byte) * 10)
-                        return { address: base + byte, size: 1, bit, type: 'bit' }
+                        return { address: base + (byte * structSize), size: 1, bit, type: 'bit' }
                     } else {
-                        return { address: base + val, size: 1, bit: null, type: 'byte' }
+                        return { address: base + (val * structSize), size: structSize, bit: null, type: 'byte' }
                     }
                 }
                 

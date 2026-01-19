@@ -36,9 +36,11 @@ const createDedupLogger = () => {
 }
 const dlog = createDedupLogger()
 
-const ADDRESS_REGEX = /^(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i
+const ADDRESS_REGEX = /^(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i
 const ADDRESS_LOCATION_MAP = {
-    C: 'control',
+    K: 'control',
+    C: 'counter',
+    T: 'timer',
     X: 'input',
     Y: 'output',
     M: 'marker',
@@ -50,6 +52,8 @@ const LOCATION_COLORS = {
     marker: '#c586c0',
     memory: '#c586c0',
     control: '#4fc1ff',
+    counter: '#dcdcaa',
+    timer: '#ce9178',
     system: '#a0a0a0',
 }
 const TYPE_COLORS = {
@@ -91,7 +95,7 @@ export const ladderRenderer = {
                         fullType = symbol.type
                         const addr = symbol.address
                         const loc = symbol.location || 'marker'
-                        const prefixMap = {input: 'X', output: 'Y', marker: 'M', system: 'S', control: 'C'}
+                        const prefixMap = {input: 'X', output: 'Y', marker: 'M', system: 'S', control: 'K', counter: 'C', timer: 'T'}
                         const prefix = prefixMap[loc] || 'M'
                         if (fullType === 'bit') {
                             const byte = Math.floor(addr)
@@ -332,7 +336,7 @@ export const ladderRenderer = {
                     bitStr = addrMatch[5] || null
                 }
 
-                const prefixLocationMap = {C: 'control', X: 'input', Y: 'output', M: 'marker', S: 'system'}
+                const prefixLocationMap = {K: 'control', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}
                 const location = prefixLocationMap[prefix] || 'marker'
                 const byteOffset = Number.parseInt(byteStr, 10)
                 const bitIndex = bitStr ? Number.parseInt(bitStr, 10) : null
@@ -340,7 +344,9 @@ export const ladderRenderer = {
 
                 const offsets = editor.project.offsets || {}
                 const region = offsets[location] || {offset: 0}
-                const absAddress = region.offset + byteOffset
+                // Timer (T) uses 9 bytes per unit, Counter (C) uses 5 bytes per unit
+                const structSize = (prefix === 'T') ? 9 : (prefix === 'C') ? 5 : 1
+                const absAddress = region.offset + (byteOffset * structSize)
 
                 try {
                     if (isBit && bitIndex !== null) {

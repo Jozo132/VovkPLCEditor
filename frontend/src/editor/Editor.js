@@ -624,6 +624,24 @@ export class VovkPLCEditor {
             }
         }
 
+        // Handle timer and counter separately (count * struct_size)
+        if (typeof dInfo.timer_offset === 'number' && typeof dInfo.timer_count === 'number' && typeof dInfo.timer_struct_size === 'number') {
+            const timerSize = dInfo.timer_count * dInfo.timer_struct_size
+            if (offsets.timer.offset !== dInfo.timer_offset || offsets.timer.size !== timerSize) {
+                offsets.timer.offset = dInfo.timer_offset
+                offsets.timer.size = timerSize
+                changed = true
+            }
+        }
+        if (typeof dInfo.counter_offset === 'number' && typeof dInfo.counter_count === 'number' && typeof dInfo.counter_struct_size === 'number') {
+            const counterSize = dInfo.counter_count * dInfo.counter_struct_size
+            if (offsets.counter.offset !== dInfo.counter_offset || offsets.counter.size !== counterSize) {
+                offsets.counter.offset = dInfo.counter_offset
+                offsets.counter.size = counterSize
+                changed = true
+            }
+        }
+
         if (changed) {
             // Re-normalize just in case
             this.project.offsets = ensureOffsets(this.project.offsets)
@@ -723,31 +741,33 @@ export class VovkPLCEditor {
             if (symbol.location && offsets[symbol.location]) {
                 baseOffset = offsets[symbol.location].offset || 0
             }
+            // Timer uses 9 bytes per unit, Counter uses 5 bytes per unit
+            const structSize = (symbol.location === 'timer') ? 9 : (symbol.location === 'counter') ? 5 : 1
 
             let addressStr = ''
             const rawVal = parseFloat(symbol.address) || 0
             if (symbol.type === 'bit') {
                 const byte = Math.floor(rawVal)
                 const bit = Math.round((rawVal - byte) * 10)
-                addressStr = `${baseOffset + byte}.${bit}`
+                addressStr = `${baseOffset + (byte * structSize)}.${bit}`
                 details.set(name, {
                     name,
                     type: symbol.type || 'bit',
                     location: symbol.location || '',
                     address: symbol.address,
                     addressLabel: addressStr,
-                    absoluteAddress: baseOffset + byte,
+                    absoluteAddress: baseOffset + (byte * structSize),
                     bit,
                 })
             } else {
-                addressStr = (baseOffset + Math.floor(rawVal)).toString()
+                addressStr = (baseOffset + (Math.floor(rawVal) * structSize)).toString()
                 details.set(name, {
                     name,
                     type: symbol.type || 'byte',
                     location: symbol.location || '',
                     address: symbol.address,
                     addressLabel: addressStr,
-                    absoluteAddress: baseOffset + Math.floor(rawVal),
+                    absoluteAddress: baseOffset + (Math.floor(rawVal) * structSize),
                     bit: null,
                 })
             }
@@ -808,14 +828,16 @@ export class VovkPLCEditor {
         }
 
         const locationMap = {
-            C: 'control',
+            K: 'control',
+            C: 'counter',
+            T: 'timer',
             X: 'input',
             Y: 'output',
             M: 'marker',
             S: 'system',
         }
         // Match: 1=Prefix, 2=Byte, 3=Bit (Optional) OR 4=Byte, 5=Bit
-        const regex = /\b(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))\b/gi
+        const regex = /\b(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))\b/gi
         let match = null
         while ((match = regex.exec(masked))) {
             let prefix = '',
@@ -841,10 +863,14 @@ export class VovkPLCEditor {
 
             let location = 'marker'
             let baseOffset = 0
+            let structSize = 1 // Default: 1 byte per address unit
 
             if (prefix) {
                 location = locationMap[prefix] || 'marker'
                 baseOffset = normalizedOffsets[location]?.offset || 0
+                // Timer (T) uses 9 bytes per unit, Counter (C) uses 5 bytes per unit
+                if (prefix === 'T') structSize = 9
+                else if (prefix === 'C') structSize = 5
             } else {
                 location = 'memory' // Treated as absolute
                 baseOffset = 0
@@ -852,7 +878,7 @@ export class VovkPLCEditor {
 
             const addressLabel = bit !== null ? `${byte}.${bit}` : `${byte}`
             const canonicalName = `${prefix}${byte}${bit !== null ? '.' + bit : ''}`
-            const absoluteAddress = baseOffset + byte
+            const absoluteAddress = baseOffset + (byte * structSize)
 
             refs.push({
                 name: canonicalName,
@@ -890,13 +916,15 @@ export class VovkPLCEditor {
             
             let storageAddr = -1
             
-            const addrMatch = /^(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(storageToken)
+            const addrMatch = /^(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(storageToken)
             if (addrMatch) {
                 let prefix = addrMatch[1] ? addrMatch[1].toUpperCase() : ''
                 let byte = parseInt(addrMatch[2] || addrMatch[4], 10)
-                let loc = prefix ? ({C:'control', X:'input', Y:'output', M:'marker', S:'system'}[prefix] || 'marker') : 'memory'
+                let loc = prefix ? ({K:'control', C:'counter', T:'timer', X:'input', Y:'output', M:'marker', S:'system'}[prefix] || 'marker') : 'memory'
                 let base = loc === 'memory' ? 0 : (normalizedOffsets[loc]?.offset || 0)
-                storageAddr = base + byte
+                // Timer (T) uses 9 bytes per unit, Counter (C) uses 5 bytes per unit
+                let structSize = (prefix === 'T') ? 9 : (prefix === 'C') ? 5 : 1
+                storageAddr = base + (byte * structSize)
             } else if (symbolDetails && symbolDetails.has(storageToken)) {
                 const sym = symbolDetails.get(storageToken)
                 storageAddr = sym.absoluteAddress
@@ -938,13 +966,15 @@ export class VovkPLCEditor {
             
             let presetAddr = -1
             if (!isConstant) {
-                 const pAddrMatch = /^(?:([CXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(presetToken)
+                 const pAddrMatch = /^(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(presetToken)
                  if (pAddrMatch) {
                     let prefix = pAddrMatch[1] ? pAddrMatch[1].toUpperCase() : ''
                     let byte = parseInt(pAddrMatch[2] || pAddrMatch[4], 10)
-                    let loc = prefix ? ({C:'control', X:'input', Y:'output', M:'marker', S:'system'}[prefix] || 'marker') : 'memory'
+                    let loc = prefix ? ({K:'control', C:'counter', T:'timer', X:'input', Y:'output', M:'marker', S:'system'}[prefix] || 'marker') : 'memory'
                     let base = loc === 'memory' ? 0 : (normalizedOffsets[loc]?.offset || 0)
-                    presetAddr = base + byte
+                    // Timer (T) uses 9 bytes per unit, Counter (C) uses 5 bytes per unit
+                    let structSize = (prefix === 'T') ? 9 : (prefix === 'C') ? 5 : 1
+                    presetAddr = base + (byte * structSize)
                  } else if (symbolDetails && symbolDetails.has(presetToken)) {
                     const sym = symbolDetails.get(presetToken)
                     presetAddr = sym.absoluteAddress

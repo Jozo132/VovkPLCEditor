@@ -17,6 +17,8 @@
 .symbol-cell-select.val-marker { color: #c586c0 !important; } /* Purple */
 .symbol-cell-select.val-memory { color: #c586c0 !important; } /* Purple */
 .symbol-cell-select.val-control { color: #4fc1ff !important; } /* Light Blue */
+.symbol-cell-select.val-counter { color: #dcdcaa !important; } /* Yellow */
+.symbol-cell-select.val-timer { color: #ce9178 !important; } /* Coral */
 .symbol-cell-select.val-system { color: #a0a0a0 !important; } /* Grey */
 
 /* Type Colors */

@@ -89,6 +89,8 @@ export default class SetupUI {
             control_size: '-', control_offset: '-',
             input_size: '-', input_offset: '-',
             output_size: '-', output_offset: '-',
+            timer_offset: '-', timer_count: '-', timer_struct_size: '-',
+            counter_offset: '-', counter_count: '-', counter_struct_size: '-',
             system_size: '-', system_offset: '-',
             marker_size: '-', marker_offset: '-'
         }
@@ -135,11 +137,13 @@ export default class SetupUI {
                             ${this.renderCompareRow('Firmware Ver', info.version || '-', dInfo.version, connected)}
                             ${this.renderCompareRow('Built Date', info.date || '-', dInfo.date, connected)}
                             ${this.renderCompareRow('Capacity', (info.capacity || 0) + ' bytes', dInfo.program !== '-' ? (parseInt(dInfo.program) || 0) + ' bytes' : '-', connected)}
-                            ${this.renderCompareRow('Controls', `${offsets.control.size}B @ ${offsets.control.offset}`, dInfo.control_size !== '-' ? `${dInfo.control_size}B @ ${dInfo.control_offset}` : '-', connected)}
-                            ${this.renderCompareRow('Inputs', `${offsets.input.size}B @ ${offsets.input.offset}`, dInfo.input_size !== '-' ? `${dInfo.input_size}B @ ${dInfo.input_offset}` : '-', connected)}
-                            ${this.renderCompareRow('Outputs', `${offsets.output.size}B @ ${offsets.output.offset}`, dInfo.output_size !== '-' ? `${dInfo.output_size}B @ ${dInfo.output_offset}` : '-', connected)}
-                            ${this.renderCompareRow('Systems', `${offsets.system.size}B @ ${offsets.system.offset}`, dInfo.system_size !== '-' ? `${dInfo.system_size}B @ ${dInfo.system_offset}` : '-', connected)}
-                            ${this.renderCompareRow('Markers', `${offsets.marker.size}B @ ${offsets.marker.offset}`, dInfo.marker_size !== '-' ? `${dInfo.marker_size}B @ ${dInfo.marker_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Controls (K)', `${offsets.control.size}B @ ${offsets.control.offset}`, dInfo.control_size !== '-' ? `${dInfo.control_size}B @ ${dInfo.control_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Inputs (X)', `${offsets.input.size}B @ ${offsets.input.offset}`, dInfo.input_size !== '-' ? `${dInfo.input_size}B @ ${dInfo.input_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Outputs (Y)', `${offsets.output.size}B @ ${offsets.output.offset}`, dInfo.output_size !== '-' ? `${dInfo.output_size}B @ ${dInfo.output_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Systems (S)', `${offsets.system.size}B @ ${offsets.system.offset}`, dInfo.system_size !== '-' ? `${dInfo.system_size}B @ ${dInfo.system_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Markers (M)', `${offsets.marker.size}B @ ${offsets.marker.offset}`, dInfo.marker_size !== '-' ? `${dInfo.marker_size}B @ ${dInfo.marker_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Timers (T)', `${offsets.timer.size}B @ ${offsets.timer.offset}`, dInfo.timer_count !== '-' ? `${dInfo.timer_count * dInfo.timer_struct_size}B @ ${dInfo.timer_offset}` : '-', connected)}
+                            ${this.renderCompareRow('Counters (C)', `${offsets.counter.size}B @ ${offsets.counter.offset}`, dInfo.counter_count !== '-' ? `${dInfo.counter_count * dInfo.counter_struct_size}B @ ${dInfo.counter_offset}` : '-', connected)}
                         </tbody>
                     </table>
 
@@ -177,11 +181,13 @@ export default class SetupUI {
                             </tr>
                         </thead>
                         <tbody>
-                            ${this.renderOffsetRow('Control (C)', 'control', offsets.control)}
-                            ${this.renderOffsetRow('Input (I)', 'input', offsets.input)}
-                            ${this.renderOffsetRow('Output (Q)', 'output', offsets.output)}
+                            ${this.renderOffsetRow('Control (K)', 'control', offsets.control)}
+                            ${this.renderOffsetRow('Input (X)', 'input', offsets.input)}
+                            ${this.renderOffsetRow('Output (Y)', 'output', offsets.output)}
                             ${this.renderOffsetRow('System (S)', 'system', offsets.system)}
                             ${this.renderOffsetRow('Marker (M)', 'marker', offsets.marker)}
+                            ${this.renderOffsetRow('Timer (T)', 'timer', offsets.timer)}
+                            ${this.renderOffsetRow('Counter (C)', 'counter', offsets.counter)}
                         </tbody>
                     </table>
                 </div>

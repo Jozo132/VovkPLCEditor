@@ -3,21 +3,25 @@ export const ensureOffsets = (offsets = {}) => {
     /** @type {{ [key in OffsetKey]: { offset: number, size: number } }} */// @ts-ignore
     const normalized = { ...offsets }
     
-    /** @typedef {'control' | 'input' | 'output' | 'system' | 'marker'} OffsetKey */
-    const keys = ['control', 'input', 'output', 'system', 'marker']
+    /** @typedef {'control' | 'counter' | 'timer' | 'input' | 'output' | 'system' | 'marker'} OffsetKey */
+    const keys = ['control', 'counter', 'timer', 'input', 'output', 'system', 'marker']
     
     // Default values matching PLCRuntime standard layout
-    // C: 0 (Size 64)
-    // X: 64 (Size 64)
-    // Y: 128 (Size 64)
-    // S: 192 (Size 256)
-    // M: 448 (Size 256)
+    // K: 0 (Size 64) - Control
+    // X: 64 (Size 64) - Input
+    // Y: 128 (Size 64) - Output
+    // S: 192 (Size 256) - System
+    // M: 448 (Size 256) - Marker
+    // T: 704 (Size 64) - Timer
+    // C: 768 (Size 64) - Counter
     const defaults = {
         control: { offset: 0, size: 64 },
         input: { offset: 64, size: 64 },
         output: { offset: 128, size: 64 },
         system: { offset: 192, size: 256 },
-        marker: { offset: 448, size: 256 }
+        marker: { offset: 448, size: 256 },
+        timer: { offset: 704, size: 64 },
+        counter: { offset: 768, size: 64 }
     }
 
     keys.forEach(key => {

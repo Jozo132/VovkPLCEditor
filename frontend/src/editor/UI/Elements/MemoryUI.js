@@ -249,7 +249,7 @@ export default class MemoryUI {
             size
         })
 
-        const order = ['control', 'input', 'output', 'system', 'marker']
+        const order = ['control', 'input', 'output', 'system', 'marker', 'timer', 'counter']
         order.forEach(key => {
             const cfg = offsets[key]
             if (!cfg) return

@@ -3422,14 +3422,16 @@ export default class WindowManager {
             const baseOffset = locationKey && offsets[locationKey] ? offsets[locationKey].offset || 0 : 0
             const addrVal = parseFloat(symbol?.address) || 0
             const explicitBit = typeof symbol?.bit === 'number' ? symbol.bit : null
+            // Timer uses 9 bytes per unit, Counter uses 5 bytes per unit
+            const structSize = (locationKey === 'timer') ? 9 : (locationKey === 'counter') ? 5 : 1
 
             if (symbol?.type === 'bit' || explicitBit !== null) {
                 const byte = Math.floor(addrVal)
                 const bit = explicitBit !== null ? explicitBit : Math.round((addrVal - byte) * 10)
-                return {absolute: baseOffset + byte, bit, size: 1}
+                return {absolute: baseOffset + (byte * structSize), bit, size: 1}
             }
             const size = typeSizes[symbol?.type] || 1
-            return {absolute: baseOffset + Math.floor(addrVal), bit: null, size}
+            return {absolute: baseOffset + (Math.floor(addrVal) * structSize), bit: null, size}
         }
 
         symbolEntries.forEach(symbol => {
