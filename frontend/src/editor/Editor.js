@@ -352,6 +352,14 @@ export class VovkPLCEditor {
         },
     }
 
+    /** @type {{ ladder_id: string | null, program_id: string | null, origin: { x: number, y: number }, selection: Array<{type: 'block' | 'area', x: number, y: number, width?: number, height?: number}> }} */
+    ladder_selection = {
+        ladder_id: null,
+        program_id: null,
+        origin: { x: 0, y: 0 },
+        selection: []
+    }
+
     /** @param {{ workspace?: HTMLElement | string | null, debug_css?: boolean, debug_context?: boolean, debug_hover?: boolean, initial_program?: string | Object }} options */
     constructor({workspace, debug_css, debug_context, debug_hover, initial_program}) {
         this.initial_program = initial_program || {

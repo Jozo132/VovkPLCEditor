@@ -3,7 +3,9 @@ import { PLC_Symbol } from "../../utils/types.js"
 import { RendererModule } from "../types.js"
 import { resolveBlockState } from "./evaluator.js"
 import { PLC_Ladder, PLC_LadderBlock } from "./language.js"
-
+import { getSymbolValue, setSymbolBit } from "../BlockLogic.js"
+import { ensureOffsets } from "../../utils/offsets.js"
+import { Popup } from "../../editor/UI/Elements/components/popup.js"
 
 
 /** @typedef */
@@ -70,6 +72,70 @@ const system_symbols = [
 ]
 
 
+/**
+ * Parse address string like X0.0, Y0.0, M10.5 into a synthetic symbol object
+ * @param {string} addressStr 
+ * @returns {PLC_Symbol | null}
+ */
+const parseAddressToSymbol = (addressStr) => {
+  if (!addressStr || typeof addressStr !== 'string') return null
+  
+  const trimmed = addressStr.trim()
+  
+  // Pattern: Letter + Number (e.g., X0.0, Y0, M100.2)
+  const match = trimmed.match(/^([kKcCtTxXyYsSmM])([0-9]+(?:\.[0-9]+)?)$/i)
+  if (!match) return null
+  
+  const code = match[1].toUpperCase()
+  const valStr = match[2]
+  const val = parseFloat(valStr)
+  
+  // Map letter to location
+  const locationMap = {
+    'K': 'control',
+    'C': 'counter', 
+    'T': 'timer',
+    'X': 'input',
+    'Y': 'output',
+    'S': 'system',
+    'M': 'marker'
+  }
+  
+  const location = locationMap[code] || 'marker'
+  const hasBit = valStr.includes('.')
+  const type = hasBit ? 'bit' : 'byte'
+  
+  return {
+    name: addressStr,
+    location,
+    type,
+    address: val,
+    initial_value: 0,
+    comment: `Direct address ${addressStr}`
+  }
+}
+
+/**
+ * Resolve block state with symbol lookup
+ * @param {VovkPLCEditor} editor
+ * @param {PLC_LadderBlock} block
+ * @returns {PLC_LadderBlock}
+ */
+const getBlockState = (editor, block) => {
+  if (!block.state) {
+    // First try to find symbol by name in system symbols or project symbols
+    let symbol = system_symbols.find(symbol => symbol.name === block.symbol)
+      || editor.project?.symbols?.find(symbol => symbol.name === block.symbol)
+    
+    // If not found, try to parse as direct address (e.g., X0.0, Y0.0, M10.5)
+    if (!symbol && block.symbol) {
+      symbol = parseAddressToSymbol(block.symbol)
+    }
+    
+    block.state = { active: false, powered: false, evaluated: false, symbol, terminated_input: false, terminated_output: false }
+  }
+  return block
+}
 
 
 /** @type {(editor: VovkPLCEditor, like: 'symbol' | 'highlight', ctx: CanvasRenderingContext2D , block: PLC_LadderBlock) => void} */
@@ -79,13 +145,11 @@ const draw_contact = (editor, like, ctx, block) => {
   // value: the inner state of the contact (green when true)
   const { ladder_block_width, ladder_block_height, style } = editor.properties
   const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color, font_error_color } = style
-  // block = getBlockState(editor, block) // TODO: Uncomment and fix
-  // if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
+  block = getBlockState(editor, block)
+  if (!block.state) return // Block state not found, skip
   const { x, y, type, inverted, trigger, state } = block
   const symbol = state?.symbol
-  // if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
-  // let value = symbol ? get_symbol_value(editor, symbol) : false // TODO: Uncomment and fix
-  let value = false
+  let value = symbol ? !!getSymbolValue(editor, symbol) : false
   if (inverted) value = !value
 
   const x0 = x * ladder_block_width
@@ -210,13 +274,11 @@ const draw_coil = (editor, like, ctx, block) => {
   // value: the inner state of the contact (green when true)
   const { ladder_block_width, ladder_block_height, style } = editor.properties
   const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color, font_error_color } = style
-  // block = getBlockState(editor, block) // TODO: Uncomment and fix
-  // if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
+  block = getBlockState(editor, block)
+  if (!block.state) return // Block state not found, skip
   const { x, y, type, inverted, trigger, state } = block
   const symbol = state?.symbol
-  // if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
-  // let value = symbol ? get_symbol_value(editor, symbol) : false
-  let value = false
+  let value = symbol ? !!getSymbolValue(editor, symbol) : false
   if (inverted) value = !value
 
   const x0 = x * ladder_block_width
@@ -374,15 +436,11 @@ const evaluate_ladder = (editor, ladder) => {
   // Reset the state of all blocks and connections
   const blockHasInputConnection = (block) => connections.some(connection => connection.to.id === block.id)
   blocks.forEach(block => {
-    // block = getBlockState(editor, block) // TODO: Uncomment and fix
-    // if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
+    block = getBlockState(editor, block)
     if (!block.state) return // Block state not found, skip
     const { state, inverted } = block
     const symbol = state.symbol
-    // if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
-    // let active = symbol ? !!get_symbol_value(editor, symbol) : false
-    // let active = symbol ? !!get_symbol_value(editor, symbol) : false // TODO: Uncomment and fix
-    let active = false
+    let active = symbol ? !!getSymbolValue(editor, symbol) : false
     if (inverted) active = !active
     state.active = active // The actual state of the block
     // All blocks that have no input are powered by the power rail
@@ -404,7 +462,6 @@ const evaluate_ladder = (editor, ladder) => {
   // const starting_blocks = blocks.filter(block => !blockHasInputConnection(block))
   const starting_blocks = blocks.filter(block => block.type === 'contact' && block.x === 0)
   starting_blocks.forEach(block => {
-    // if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
     if (!block.state) return // Block state not found, skip
     block.state.terminated_input = true
   })
@@ -459,28 +516,9 @@ export const ladderRenderer = {
     block.blocks = block.blocks || []
     block.connections = block.connections || []
     const { div, props, blocks, connections } = block
-    if (!props.ctx) {
-      if (!div) throw new Error('Block div not found')
-      const block_container = div.querySelector('.plc-program-block-code')
-      if (!block_container) throw new Error('Block code not found')
-      const canvas = document.createElement('canvas')
-      canvas.width = 600
-      canvas.height = 600
-
-      const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('Canvas context not found')
-      props.ctx = ctx
-      props.canvas = canvas
-      block_container.appendChild(canvas)
-    }
-    const { ctx, canvas } = props
-
-    if (!ctx) throw new Error('Canvas context not found')
+    const ladderId = block.id
 
     const scale = 1.4
-
-    // Update canvas size based on the max block coordinates
-
     const ladder_block_width = editor.properties.ladder_block_width || 120
     const ladder_block_height = editor.properties.ladder_block_height || 80
     const ladder_blocks_per_row = editor.properties.ladder_blocks_per_row || 7
@@ -501,55 +539,77 @@ export const ladderRenderer = {
       line_width: 3,
       highlight_width: 8,
     }
+
+    // Initialize canvas if not already present
+    if (!props.ctx) {
+      if (!div) throw new Error('Block div not found')
+      const block_container = div.querySelector('.plc-program-block-code')
+      if (!block_container) throw new Error('Block code not found')
+      const canvas = document.createElement('canvas')
+      canvas.width = 600
+      canvas.height = 600
+
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('Canvas context not found')
+      props.ctx = ctx
+      props.canvas = canvas
+      block_container.appendChild(canvas)
+
+      // Initialize event handlers (only once)
+      initializeEventHandlers(editor, block, canvas, style)
+
+      // Initialize live monitoring system
+      initializeLiveMonitoring(editor, block, canvas)
+    }
+
+    const { ctx, canvas } = props
+    if (!ctx) throw new Error('Canvas context not found')
+
     const {
-      background_color_alt,
       background_color_online,
       background_color_edit,
-      color,
-      highlight_color,
-      highlight_sim_color,
       grid_color,
-      select_highlight_color,
       select_color,
-      hover_color,
-      font,
-      font_color,
-      font_error_color,
-      line_width,
-      highlight_width,
+      select_highlight_color,
     } = style
+
+    const edit = !editor.device_manager.connected
+    const live = editor.device_manager.connected
+
+    // Check if this ladder has selection
+    const hasSelection = editor.ladder_selection?.ladder_id === ladderId
+    const selection = hasSelection ? (editor.ladder_selection?.selection || []) : []
 
     const minX = ladder_blocks_per_row
     const minY = 2
-    const max_x = Math.max(minX, ...blocks.map(b => b.x))
-    const max_y = Math.max(minY, ...blocks.map(b => b.y))
+    const max_x = Math.max(minX, ...blocks.map(b => b.x), ...(edit && hasSelection ? [1] : [0]))
+    const max_y = Math.max(minY, ...blocks.map(b => b.y), ...(edit && hasSelection ? [1] : [0]))
 
     const width = Math.max(max_x + 1, ladder_blocks_per_row) * ladder_block_width
     const height = (max_y + 1) * ladder_block_height
-    canvas.style.width = (width / scale) + 'px';
-    canvas.style.height = (height / scale) + 'px';
+    canvas.style.width = (width / scale) + 'px'
+    canvas.style.height = (height / scale) + 'px'
     canvas.width = width
     canvas.height = height
-
-    const live = editor.device_manager.connected
 
     // Canvas fill background
     ctx.fillStyle = live ? background_color_online : background_color_edit
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    // if (editor.program_block_selection.program_block === id) {
-    //     ctx.fillStyle = style.select_color
-    //     for (const selection of editor.program_block_selection.selection) {
-    //         if (selection.type === 'block') {
-    //             const { x, y } = selection
-    //             ctx.fillRect(x * ladder_block_width, y * ladder_block_height, ladder_block_width, ladder_block_height)
-    //         }
-    //         if (selection.type === 'area') {
-    //             const { x, y, width, height } = selection
-    //             ctx.fillRect(x * ladder_block_width, y * ladder_block_height, width * ladder_block_width, height * ladder_block_height)
-    //         }
-    //     }
-    // }
+    // Draw selection highlight
+    if (hasSelection) {
+      ctx.fillStyle = select_color
+      for (const sel of selection) {
+        if (sel.type === 'block') {
+          const { x, y } = sel
+          ctx.fillRect(x * ladder_block_width, y * ladder_block_height, ladder_block_width, ladder_block_height)
+        }
+        if (sel.type === 'area') {
+          const { x, y, width: w, height: h } = sel
+          ctx.fillRect(x * ladder_block_width, y * ladder_block_height, w * ladder_block_width, h * ladder_block_height)
+        }
+      }
+    }
 
     // Draw grid
     ctx.strokeStyle = grid_color
@@ -568,56 +628,844 @@ export const ladderRenderer = {
     ctx.stroke()
 
     // Check if this ladder has a selection and highlight the first selected block origin
-    // if (editor.program_block_selection.program_block === id) {
-    //     const first_block = editor.program_block_selection.selection.find(s => s.type === 'block' || s.type === 'area')
-    //     if (first_block) {
-    //         const { x, y } = first_block
-    //         ctx.strokeStyle = style.select_highlight_color
-    //         ctx.lineWidth = 3
-    //         ctx.beginPath()
-    //         ctx.strokeRect(x * ladder_block_width, y * ladder_block_height, ladder_block_width, ladder_block_height)
-    //         ctx.stroke()
-    //     }
-    // }
+    if (hasSelection && selection.length > 0) {
+      const first_block = selection.find(s => s.type === 'block' || s.type === 'area')
+      if (first_block) {
+        const { x, y } = first_block
+        ctx.strokeStyle = select_highlight_color
+        ctx.lineWidth = 3
+        ctx.setLineDash([])
+        ctx.beginPath()
+        ctx.strokeRect(x * ladder_block_width, y * ladder_block_height, ladder_block_width, ladder_block_height)
+        ctx.stroke()
+      }
+    }
 
     ctx.setLineDash([])
-
-    // manual_plc_cycle()
 
     // Draw the ladder blocks and connections
     evaluate_ladder(editor, block)
 
-    // Draw the ladder
-    blocks.forEach(block => {
+    // Draw the ladder highlights (for live values)
+    blocks.forEach(b => {
       if (live) {
-        if (block.type === 'contact') draw_contact(editor, 'highlight', ctx, block)
-        if (['coil', 'coil_set', 'coil_rset'].includes(block.type)) draw_coil(editor, 'highlight', ctx, block)
+        if (b.type === 'contact') draw_contact(editor, 'highlight', ctx, b)
+        if (['coil', 'coil_set', 'coil_rset'].includes(b.type)) draw_coil(editor, 'highlight', ctx, b)
       }
     })
+
     /** @type { LadderLink[] } */
     const links = []
     connections.forEach(con => {
       con.id = editor._generateID(con.id)
-      const from = blocks.find(block => block.id === con.from.id)
-      const to = blocks.find(block => block.id === con.to.id)
-      // if (!from || !to) throw new Error(`Connection block not found`)
+      const from = blocks.find(b => b.id === con.from.id)
+      const to = blocks.find(b => b.id === con.to.id)
       if (from && to) links.push({ from, to, powered: !!con.state?.powered })
     })
+
     links.forEach(link => {
       if (live) {
         draw_connection(editor, 'highlight', ctx, link)
       }
     })
 
-
-    blocks.forEach(block => {
-      if (block.type === 'contact') draw_contact(editor, 'symbol', ctx, block)
-      if (['coil', 'coil_set', 'coil_rset'].includes(block.type)) draw_coil(editor, 'symbol', ctx, block)
+    // Draw the ladder symbols
+    blocks.forEach(b => {
+      if (b.type === 'contact') draw_contact(editor, 'symbol', ctx, b)
+      if (['coil', 'coil_set', 'coil_rset'].includes(b.type)) draw_coil(editor, 'symbol', ctx, b)
     })
     links.forEach(link => {
       draw_connection(editor, 'symbol', ctx, link)
     })
   }
 }
+
+
+/**
+ * Initialize mouse and touch event handlers for ladder canvas
+ * @param {VovkPLCEditor} editor
+ * @param {any} ladder
+ * @param {HTMLCanvasElement} canvas
+ * @param {any} style
+ */
+function initializeEventHandlers(editor, ladder, canvas, style) {
+  const ladderId = ladder.id
+
+  // Helper to get current scale and block dimensions
+  const getScale = () => 1.4
+  const getBlockWidth = () => editor.properties.ladder_block_width || 120
+  const getBlockHeight = () => editor.properties.ladder_block_height || 80
+
+  // Initialize ladder_selection on editor if not present
+  if (!editor.ladder_selection) {
+    editor.ladder_selection = {
+      ladder_id: null,
+      program_id: null,
+      origin: { x: 0, y: 0 },
+      selection: []
+    }
+  }
+
+  let is_dragging = false
+  let is_moving = false
+  let moving_elements = []
+  let was_dragging = false
+  let start_x = 0
+  let start_y = 0
+  let end_x = 0
+  let end_y = 0
+  let temp_x = 0
+  let temp_y = 0
+
+  /** @type { PLC_Symbol | undefined } */
+  let selected_for_toggle = undefined
+
+  /** @param { MouseEvent } event */
+  const onMouseDown = (event) => {
+    const rect = canvas.getBoundingClientRect()
+
+    // Right click opens context menu, if no selection is chosen, select the block below the cursor
+    if (event.button === 2) {
+      const start_x = Math.floor(event.clientX - rect.left)
+      const start_y = Math.floor(event.clientY - rect.top)
+      const x_raw = start_x * getScale() / getBlockWidth()
+      const y_raw = start_y * getScale() / getBlockHeight()
+      const x = Math.floor(x_raw)
+      const y = Math.floor(y_raw)
+
+      const selected = editor.ladder_selection?.ladder_id === ladderId ? editor.ladder_selection.selection : []
+      const element_is_not_selected = !selected.find(sel => sel.type === 'block' && sel.x === x && sel.y === y)
+      if (selected.length === 0 || element_is_not_selected) {
+        const block = ladder.blocks.find(b => b.x === x && b.y === y)
+        if (block) {
+          editor.ladder_selection = {
+            ladder_id: ladderId,
+            program_id: ladder.program_id || '',
+            origin: { x, y },
+            selection: [{ type: 'block', x, y }]
+          }
+        }
+      }
+      return
+    }
+
+    if (event.button !== 0) return
+    event.preventDefault()
+    is_dragging = true
+    start_x = Math.floor(event.clientX - rect.left)
+    start_y = Math.floor(event.clientY - rect.top)
+    end_x = start_x
+    end_y = start_y
+
+    const x_raw = start_x * getScale() / getBlockWidth()
+    const y_raw = start_y * getScale() / getBlockHeight()
+    const x = Math.floor(x_raw)
+    const y = Math.floor(y_raw)
+
+    const distance_from_block_center_x = Math.abs(2 * (Math.abs(x_raw - x) - 0.5))
+    const distance_from_block_center_y = Math.abs(2 * (Math.abs(y_raw - y) - 0.5))
+    const distance_from_block_center = Math.sqrt(distance_from_block_center_x ** 2 + distance_from_block_center_y ** 2)
+    const near_center = distance_from_block_center <= 0.5
+
+    const ctrl = event.ctrlKey
+    const shift = event.shiftKey
+    const ctrl_or_shift = ctrl || shift
+
+    const selected = editor.ladder_selection?.ladder_id === ladderId ? editor.ladder_selection.selection : []
+    const exists = selected.find(sel =>
+      (sel.type === 'block' && sel.x === x && sel.y === y) ||
+      (sel.type === 'area' && x >= sel.x && x < sel.x + sel.width && y >= sel.y && y < sel.y + sel.height)
+    )
+
+    let click_move = false
+    if (!ctrl_or_shift && near_center && !exists) {
+      // Select current block and start moving it
+      const block = ladder.blocks.find(b => b.x === x && b.y === y)
+      if (block) {
+        editor.ladder_selection = {
+          ladder_id: ladderId,
+          program_id: ladder.program_id || '',
+          origin: { x, y },
+          selection: [{ type: 'block', x, y }]
+        }
+        click_move = true
+      }
+    }
+
+    if (exists || click_move) {
+      is_moving = true
+      const elements = [...new Set(editor.ladder_selection.selection.map(sel => {
+        if (sel.type === 'block') {
+          return ladder.blocks.find(b => b.x === sel.x && b.y === sel.y)
+        }
+        if (sel.type === 'area') {
+          return ladder.blocks.filter(b => b.x >= sel.x && b.x < sel.x + sel.width && b.y >= sel.y && b.y < sel.y + sel.height)
+        }
+        return null
+      }).flat().filter(Boolean))]
+      moving_elements = elements
+      temp_x = x
+      temp_y = y
+    }
+  }
+
+  /** @param { MouseEvent } event */
+  const onMove = (event) => {
+    event.preventDefault()
+    if (!is_dragging) return
+
+    const rect = canvas.getBoundingClientRect()
+    end_x = Math.floor(event.clientX - rect.left)
+    end_y = Math.floor(event.clientY - rect.top)
+
+    const distance_x = Math.abs(end_x - start_x)
+    const distance_y = Math.abs(end_y - start_y)
+    const distance = Math.sqrt(distance_x ** 2 + distance_y ** 2)
+    if (distance < 10) return // Don't start dragging until the distance is greater than 10
+
+    if (is_moving) {
+      // Move the selection
+      const end_x_block = Math.floor(end_x * getScale() / getBlockWidth())
+      const end_y_block = Math.floor(end_y * getScale() / getBlockHeight())
+      let dx = end_x_block - temp_x
+      let dy = end_y_block - temp_y
+      temp_x = end_x_block
+      temp_y = end_y_block
+      const x = editor.ladder_selection.origin.x
+      const y = editor.ladder_selection.origin.y
+      if (dx + x < 0) dx = 0
+      if (dy + y < 0) dy = 0
+
+      const selected = editor.ladder_selection?.ladder_id === ladderId ? editor.ladder_selection.selection : []
+      for (const sel of selected) {
+        if (sel.type === 'block') {
+          sel.x += dx
+          sel.y += dy
+        }
+        if (sel.type === 'area') {
+          sel.x += dx
+          sel.y += dy
+        }
+      }
+      editor.ladder_selection.origin.x += dx
+      editor.ladder_selection.origin.y += dy
+
+      moving_elements.forEach(b => {
+        if (!b) return
+        b.x += dx
+        b.y += dy
+      })
+      // Trigger redraw after moving elements
+      ladderRenderer.render(editor, ladder)
+      return
+    }
+
+    const x = Math.floor(start_x * getScale() / getBlockWidth())
+    const y = Math.floor(start_y * getScale() / getBlockHeight())
+    const width = Math.max(Math.round(1 + (end_x - start_x) * getScale() / getBlockWidth()), 1)
+    const height = Math.max(Math.round(1 + (end_y - start_y) * getScale() / getBlockHeight()), 1)
+
+    // Update selection area
+    const ctrl = event.ctrlKey
+    const shift = event.shiftKey
+    const ctrl_or_shift = ctrl || shift
+    if (ctrl_or_shift && editor.ladder_selection?.ladder_id === ladderId) {
+      const exists = editor.ladder_selection.selection.find(sel => sel.type === 'area' && sel.x === x && sel.y === y)
+      if (exists && exists.type === 'area') {
+        exists.width = width
+        exists.height = height
+      } else {
+        if (editor.ladder_selection.origin.x > x) editor.ladder_selection.origin.x = x
+        if (editor.ladder_selection.origin.y > y) editor.ladder_selection.origin.y = y
+        editor.ladder_selection.selection.push({ type: 'area', x, y, width, height })
+      }
+    } else {
+      editor.ladder_selection = {
+        ladder_id: ladderId,
+        program_id: ladder.program_id || '',
+        origin: { x, y },
+        selection: [{ type: 'area', x, y, width, height }]
+      }
+    }
+    // Trigger redraw to show selection area
+    ladderRenderer.render(editor, ladder)
+  }
+
+  const onRelease = () => {
+    is_dragging = false
+    was_dragging = true
+  }
+
+  /** @param { MouseEvent } event */
+  const onClick = (event) => {
+    if (is_moving) {
+      is_moving = false
+      // Could add connectTouchingBlocks here if that method exists
+    }
+    if (was_dragging) {
+      was_dragging = false
+      const distance_x = Math.abs(end_x - start_x)
+      const distance_y = Math.abs(end_y - start_y)
+      const distance = Math.sqrt(distance_x ** 2 + distance_y ** 2)
+      if (distance > 10) return // Prevent click event after dragging
+    }
+
+    const x = Math.floor(event.offsetX * getScale() / getBlockWidth())
+    const y = Math.floor(event.offsetY * getScale() / getBlockHeight())
+
+    const ctrl = event.ctrlKey
+    const shift = event.shiftKey
+    const ctrl_or_shift = ctrl || shift
+    if (ctrl_or_shift && editor.ladder_selection?.ladder_id === ladderId) {
+      const exists = editor.ladder_selection.selection.some(sel => sel.type === 'block' && sel.x === x && sel.y === y)
+      if (exists) {
+        if (ctrl) {
+          // Remove selected block
+          editor.ladder_selection.selection = editor.ladder_selection.selection.filter(sel => !(sel.type === 'block' && sel.x === x && sel.y === y))
+        }
+      } else {
+        if (editor.ladder_selection.origin.x > x) editor.ladder_selection.origin.x = x
+        if (editor.ladder_selection.origin.y > y) editor.ladder_selection.origin.y = y
+        editor.ladder_selection.selection.push({ type: 'block', x, y })
+      }
+    } else {
+      if (editor.ladder_selection?.selection?.[0]?.type === 'area') {
+        // Deselect the area selection first
+        editor.ladder_selection = {
+          ladder_id: ladderId,
+          program_id: ladder.program_id || '',
+          origin: { x, y },
+          selection: []
+        }
+      } else {
+        editor.ladder_selection = {
+          ladder_id: ladderId,
+          program_id: ladder.program_id || '',
+          origin: { x, y },
+          selection: [{ type: 'block', x, y }]
+        }
+      }
+    }
+    // Trigger redraw to show selection
+    ladderRenderer.render(editor, ladder)
+  }
+
+  // Mouse event listeners
+  canvas.addEventListener('mousedown', onMouseDown)
+  canvas.addEventListener('mousemove', onMove)
+  canvas.addEventListener('mouseup', onRelease)
+  canvas.addEventListener('click', onClick)
+
+  // Touch event handlers
+  let last_touched = {}
+
+  canvas.addEventListener('touchstart', event => {
+    const edit = !editor.device_manager.connected
+    if (!edit) return
+    const touch = event.touches[0]
+    last_touched = {
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    }
+    const mouse_event = new MouseEvent('mousedown', last_touched)
+    onMouseDown(mouse_event)
+  })
+
+  canvas.addEventListener('touchmove', event => {
+    const edit = !editor.device_manager.connected
+    if (!edit) return
+    if (!is_dragging) return
+    event.preventDefault()
+    const touch = event.touches[0]
+    last_touched = {
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    }
+    const mouse_event = new MouseEvent('mousemove', last_touched)
+    onMove(mouse_event)
+  })
+
+  canvas.addEventListener('touchend', event => {
+    const edit = !editor.device_manager.connected
+    if (!edit) return
+    event.preventDefault()
+    last_touched = {}
+    onRelease()
+    is_moving = false
+    was_dragging = false
+    moving_elements = []
+  })
+
+  // Context menu integration
+  if (editor.context_manager) {
+    let contextMenuX = 0
+    let contextMenuY = 0
+
+    // @ts-ignore - canvas type and menu return type are compatible at runtime
+    editor.context_manager.addListener({
+      // @ts-ignore
+      target: canvas,
+      // @ts-ignore
+      onOpen: (event) => {
+        const rect = canvas.getBoundingClientRect()
+        contextMenuX = Math.floor((event.clientX - rect.left) * getScale() / getBlockWidth())
+        contextMenuY = Math.floor((event.clientY - rect.top) * getScale() / getBlockHeight())
+
+        const selected = editor.ladder_selection?.ladder_id === ladderId ? editor.ladder_selection.selection : []
+        const live = editor.device_manager.connected
+        const edit = !live
+
+        // Check if there's already a block at this position
+        const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+        const has_element = blockAtPosition || ladder.blocks.find(b => selected.find(sel => sel.type === 'block' && sel.x === b.x && sel.y === b.y))
+          || ladder.blocks.find(b => selected.find(sel => sel.type === 'area' && sel.x <= b.x && sel.x + sel.width > b.x && sel.y <= b.y && sel.y + sel.height > b.y))
+
+        const state = has_element?.state
+        const symbol = state?.symbol
+        selected_for_toggle = symbol
+
+        // Build menu items
+        const menuItems = []
+
+        // Live mode toggle options (only if there's a symbol)
+        if (live && typeof symbol !== 'undefined') {
+          menuItems.push(
+            { type: 'item', name: 'toggle', label: 'Toggle' },
+            { type: 'item', name: 'set_on', label: 'Set ON' },
+            { type: 'item', name: 'set_off', label: 'Set OFF' },
+            { type: 'separator' }
+          )
+        }
+
+        // Edit mode: Insert submenu (only if no block at position)
+        if (edit && !blockAtPosition) {
+          menuItems.push(
+            {
+              type: 'submenu', name: 'insert', label: 'Insert', items: [
+                { type: 'item', name: 'insert_contact', label: 'Contact (NO)' },
+                { type: 'item', name: 'insert_contact_nc', label: 'Contact (NC)' },
+                { type: 'separator' },
+                { type: 'item', name: 'insert_coil', label: 'Coil' },
+                { type: 'item', name: 'insert_coil_set', label: 'Coil (Set)' },
+                { type: 'item', name: 'insert_coil_reset', label: 'Coil (Reset)' },
+              ]
+            },
+            { type: 'separator' }
+          )
+        }
+
+        // Edit mode: Modify existing block
+        if (edit && blockAtPosition) {
+          menuItems.push(
+            { type: 'item', name: 'edit_symbol', label: 'Edit Symbol...' },
+            { type: 'item', name: 'toggle_inverted', label: blockAtPosition.inverted ? 'Make Normal' : 'Make Inverted' },
+            {
+              type: 'submenu', name: 'change_trigger', label: 'Trigger Type', items: [
+                { type: 'item', name: 'trigger_normal', label: 'Normal', className: blockAtPosition.trigger === 'normal' ? 'selected' : '' },
+                { type: 'item', name: 'trigger_rising', label: 'Rising Edge', className: blockAtPosition.trigger === 'rising' ? 'selected' : '' },
+                { type: 'item', name: 'trigger_falling', label: 'Falling Edge', className: blockAtPosition.trigger === 'falling' ? 'selected' : '' },
+                { type: 'item', name: 'trigger_change', label: 'Any Change', className: blockAtPosition.trigger === 'change' ? 'selected' : '' },
+              ]
+            },
+            { type: 'separator' }
+          )
+        }
+
+        // Edit mode: Delete, Cut, Copy, Paste
+        if (edit && (selected.length > 0 || blockAtPosition)) {
+          menuItems.push(
+            { type: 'item', name: 'delete', label: 'Delete' },
+            { type: 'separator' },
+            { type: 'item', name: 'cut', label: 'Cut' },
+            { type: 'item', name: 'copy', label: 'Copy' }
+          )
+        }
+
+        if (edit) {
+          menuItems.push({ type: 'item', name: 'paste', label: 'Paste' })
+        }
+
+        menuItems.push(
+          { type: 'separator' },
+          { type: 'item', name: 'properties', label: 'Properties' }
+        )
+
+        return menuItems
+      },
+      onClose: (selected_action) => {
+        const modify = ['toggle', 'set_on', 'set_off'].includes(selected_action)
+        if (modify && typeof selected_for_toggle !== 'undefined') {
+          const value = !!getSymbolValue(editor, selected_for_toggle)
+          const new_value = selected_action === 'toggle' ? !value : selected_action === 'set_on' ? true : selected_action === 'set_off' ? false : value
+          setSymbolBit(editor, selected_for_toggle, new_value)
+        }
+
+        // Handle insert actions
+        if (selected_action?.startsWith('insert_')) {
+          /** @type {any} */
+          const newBlock = {
+            id: editor._generateID(),
+            x: contextMenuX,
+            y: contextMenuY,
+            type: 'contact',
+            inverted: false,
+            trigger: 'normal',
+            symbol: ''
+          }
+
+          if (selected_action === 'insert_contact') {
+            newBlock.type = 'contact'
+            newBlock.inverted = false
+          } else if (selected_action === 'insert_contact_nc') {
+            newBlock.type = 'contact'
+            newBlock.inverted = true
+          } else if (selected_action === 'insert_coil') {
+            newBlock.type = 'coil'
+          } else if (selected_action === 'insert_coil_set') {
+            newBlock.type = 'coil_set'
+          } else if (selected_action === 'insert_coil_reset') {
+            newBlock.type = 'coil_rset'
+          }
+
+          ladder.blocks.push(newBlock)
+
+          // Select the new block
+          editor.ladder_selection = {
+            ladder_id: ladderId,
+            program_id: ladder.program_id || '',
+            origin: { x: contextMenuX, y: contextMenuY },
+            selection: [{ type: 'block', x: contextMenuX, y: contextMenuY }]
+          }
+
+          // Prompt for symbol name
+          // @ts-ignore - newBlock type is correct at runtime
+          promptForSymbol(editor, newBlock, ladder)
+        }
+
+        // Handle trigger change
+        if (selected_action?.startsWith('trigger_')) {
+          const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+          if (blockAtPosition) {
+            const trigger = selected_action.replace('trigger_', '')
+            // @ts-ignore
+            blockAtPosition.trigger = trigger
+          }
+        }
+
+        // Handle toggle inverted
+        if (selected_action === 'toggle_inverted') {
+          const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+          if (blockAtPosition) {
+            blockAtPosition.inverted = !blockAtPosition.inverted
+          }
+        }
+
+        // Handle edit symbol
+        if (selected_action === 'edit_symbol') {
+          const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+          if (blockAtPosition) {
+            promptForSymbol(editor, blockAtPosition, ladder)
+          }
+        }
+
+        // Handle delete action
+        if (selected_action === 'delete') {
+          // First check if there's a block at the context menu position
+          const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+          if (blockAtPosition) {
+            const idx = ladder.blocks.indexOf(blockAtPosition)
+            if (idx >= 0) ladder.blocks.splice(idx, 1)
+          }
+
+          // Also delete selected blocks
+          const sel = editor.ladder_selection?.selection || []
+          sel.forEach(s => {
+            if (s.type === 'block') {
+              const idx = ladder.blocks.findIndex(b => b.x === s.x && b.y === s.y)
+              if (idx >= 0) ladder.blocks.splice(idx, 1)
+            }
+            if (s.type === 'area') {
+              ladder.blocks = ladder.blocks.filter(b => !(b.x >= s.x && b.x < s.x + s.width && b.y >= s.y && b.y < s.y + s.height))
+            }
+          })
+          if (editor.ladder_selection) {
+            editor.ladder_selection.selection = []
+          }
+        }
+
+        // Trigger redraw after any context menu action
+        ladderRenderer.render(editor, ladder)
+      }
+    })
+  }
+}
+
+
+/**
+ * Initialize live monitoring for ladder canvas - handles memory listeners and visibility
+ * @param {VovkPLCEditor} editor
+ * @param {any} ladder
+ * @param {HTMLCanvasElement} canvas
+ */
+function initializeLiveMonitoring(editor, ladder, canvas) {
+  const ladderId = ladder.id
+  const props = ladder.props
+
+  // Store monitoring state in props
+  props._liveMonitor = {
+    isVisible: true,
+    wasConnected: false,
+    registeredAddresses: new Map(), // Map<address, { size, callback }>
+    updateTimer: null,
+    lastSymbolsHash: null
+  }
+
+  const monitor = props._liveMonitor
+
+  /**
+   * Get all symbols used by ladder blocks and their memory addresses
+   */
+  const collectSymbolAddresses = () => {
+    const addresses = new Map() // Map<baseAddress, { size, symbols: Set<symbol> }>
+    const offsets = ensureOffsets(editor.project?.offsets || {})
+
+    const blocks = ladder.blocks || []
+    for (const block of blocks) {
+      if (!block.symbol) continue
+
+      // Find symbol from project or system symbols, or parse as direct address
+      let symbol = system_symbols.find(s => s.name === block.symbol)
+        || editor.project?.symbols?.find(s => s.name === block.symbol)
+      
+      // If not found, try to parse as direct address (e.g., X0.0, Y0.0)
+      if (!symbol) {
+        symbol = parseAddressToSymbol(block.symbol)
+      }
+
+      if (!symbol) continue
+
+      // Calculate absolute address
+      const locationKey = symbol.location === 'memory' ? 'marker' : symbol.location
+      const baseOffset = offsets[locationKey]?.offset || 0
+      const addrVal = parseFloat(String(symbol.address)) || 0
+      const byteAddr = Math.floor(addrVal)
+      const absoluteAddr = baseOffset + byteAddr
+
+      // Determine size based on type
+      const typeSizes = {
+        bit: 1, bool: 1, byte: 1, u8: 1, i8: 1,
+        int: 2, u16: 2, i16: 2, word: 2,
+        dint: 4, u32: 4, i32: 4, real: 4, float: 4, dword: 4,
+        u64: 8, i64: 8, f64: 8, lword: 8
+      }
+      const size = typeSizes[symbol.type || 'bit'] || 1
+
+      // Group nearby addresses for efficient fetching
+      if (!addresses.has(absoluteAddr)) {
+        addresses.set(absoluteAddr, { size, symbols: new Set() })
+      }
+      const entry = addresses.get(absoluteAddr)
+      entry.size = Math.max(entry.size, size)
+      entry.symbols.add(symbol.name)
+    }
+
+    return addresses
+  }
+
+  /**
+   * Create a hash of current symbols for change detection
+   */
+  const getSymbolsHash = () => {
+    const blocks = ladder.blocks || []
+    return blocks.map(b => b.symbol || '').sort().join('|')
+  }
+
+  /**
+   * Register memory listeners with DataFetcher
+   */
+  const registerMemoryListeners = () => {
+    // @ts-ignore - data_fetcher exists at runtime
+    if (!editor.data_fetcher) return
+    if (!monitor.isVisible) return
+
+    // Unregister old listeners first
+    unregisterMemoryListeners()
+
+    const addresses = collectSymbolAddresses()
+    if (addresses.size === 0) return
+
+    // Register each address range with a callback that updates editor.memory
+    for (const [addr, entry] of addresses) {
+      const listenerId = `ladder-${ladderId}-${addr}`
+      
+      // Create callback that updates editor.memory and triggers re-render
+      const onMemoryChange = (data) => {
+        // Only process if visible and connected
+        if (!monitor.isVisible) return
+        if (!editor.device_manager?.connected) return
+        if (!editor.window_manager?.isMonitoringActive?.()) return
+
+        // Update editor.memory with the fetched data
+        if (data && editor.memory) {
+          const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
+          for (let i = 0; i < bytes.length && (addr + i) < editor.memory.length; i++) {
+            editor.memory[addr + i] = bytes[i]
+          }
+        }
+
+        // Clear block state caches so values are re-read
+        const blocks = ladder.blocks || []
+        for (const block of blocks) {
+          if (block.state) {
+            block.state = undefined
+          }
+        }
+
+        // Request re-render
+        ladderRenderer.render(editor, ladder)
+      }
+      
+      // @ts-ignore - data_fetcher exists at runtime
+      editor.data_fetcher.register(listenerId, addr, entry.size, onMemoryChange)
+      monitor.registeredAddresses.set(addr, { size: entry.size, callback: onMemoryChange, listenerId })
+    }
+
+    monitor.lastSymbolsHash = getSymbolsHash()
+  }
+
+  /**
+   * Unregister all memory listeners
+   */
+  const unregisterMemoryListeners = () => {
+    // @ts-ignore - data_fetcher exists at runtime
+    if (!editor.data_fetcher) return
+
+    for (const [addr, entry] of monitor.registeredAddresses) {
+      // @ts-ignore - data_fetcher exists at runtime
+      editor.data_fetcher.unregister(entry.listenerId, addr, entry.size, entry.callback)
+    }
+    monitor.registeredAddresses.clear()
+  }
+
+  /**
+   * Update monitoring state based on connection and visibility
+   */
+  const updateMonitoringState = () => {
+    const isConnected = !!editor.device_manager?.connected
+    const isMonitoring = !!editor.window_manager?.isMonitoringActive?.()
+    const shouldMonitor = isConnected && isMonitoring && monitor.isVisible
+
+    // Check if symbols changed
+    const currentHash = getSymbolsHash()
+    const symbolsChanged = currentHash !== monitor.lastSymbolsHash
+
+    if (shouldMonitor) {
+      // Re-register if connection state changed or symbols changed
+      if (!monitor.wasConnected || symbolsChanged) {
+        registerMemoryListeners()
+        // Trigger initial render when going online
+        ladderRenderer.render(editor, ladder)
+      }
+    } else {
+      // Unregister when not monitoring
+      if (monitor.wasConnected || monitor.registeredAddresses.size > 0) {
+        unregisterMemoryListeners()
+        // Re-render to show offline state
+        if (monitor.isVisible) {
+          ladderRenderer.render(editor, ladder)
+        }
+      }
+    }
+
+    monitor.wasConnected = shouldMonitor
+  }
+
+  // Set up IntersectionObserver to detect visibility
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const wasVisible = monitor.isVisible
+      monitor.isVisible = entry.isIntersecting
+
+      if (monitor.isVisible && !wasVisible) {
+        // Became visible - restart monitoring
+        updateMonitoringState()
+      } else if (!monitor.isVisible && wasVisible) {
+        // Became hidden - stop monitoring
+        unregisterMemoryListeners()
+      }
+    }
+  }, { threshold: 0.1 })
+
+  // @ts-ignore - canvas is valid for IntersectionObserver
+  observer.observe(canvas)
+
+  // Set up periodic check for connection/monitoring state changes
+  monitor.updateTimer = setInterval(() => {
+    if (monitor.isVisible) {
+      updateMonitoringState()
+    }
+  }, 500)
+
+  // Store cleanup function in props
+  props._cleanupLiveMonitor = () => {
+    observer.disconnect()
+    if (monitor.updateTimer) {
+      clearInterval(monitor.updateTimer)
+      monitor.updateTimer = null
+    }
+    unregisterMemoryListeners()
+  }
+
+  // Initial state update
+  updateMonitoringState()
+}
+
+
+/**
+ * Prompt user to enter a symbol name for a ladder block
+ * @param {VovkPLCEditor} editor
+ * @param {PLC_LadderBlock} block
+ * @param {any} ladder - The ladder block to re-render after symbol change
+ */
+async function promptForSymbol(editor, block, ladder) {
+  const symbols = editor.project?.symbols || []
+  const blockTypeLabels = {
+    'contact': 'Contact',
+    'coil': 'Coil',
+    'coil_set': 'Coil (Set)',
+    'coil_rset': 'Coil (Reset)'
+  }
+  const blockTypeLabel = blockTypeLabels[block.type] || block.type
+  const currentSymbol = block.symbol || ''
+
+  const result = await Popup.form({
+    title: `Edit ${blockTypeLabel}`,
+    description: 'Enter symbol name or direct address (e.g. X0.0, Y0.0, M10.5)',
+    inputs: [
+      { 
+        name: 'symbol', 
+        label: 'Symbol / Address', 
+        type: 'text', 
+        value: currentSymbol,
+        placeholder: 'e.g. Start_Button or X0.0'
+      }
+    ],
+    buttons: [
+      { text: 'OK', value: 'ok' },
+      { text: 'Cancel', value: 'cancel' }
+    ]
+  })
+
+  if (result && result.symbol !== undefined) {
+    block.symbol = result.symbol.trim()
+    // Clear cached state so it gets re-resolved
+    block.state = undefined
+    // Re-render the ladder
+    if (ladder) {
+      ladderRenderer.render(editor, ladder)
+    }
+  }
+}
+
 
 export default ladderRenderer
