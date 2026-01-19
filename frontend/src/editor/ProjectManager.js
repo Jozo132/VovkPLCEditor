@@ -310,6 +310,10 @@ end:                      // Label to jump to
     // Hook up console locally to capture WASM output
     const runtime = this.#editor.runtime
     if (!runtime) throw new Error('Runtime not initialized')
+    
+    // Transpile any STL blocks to PLCASM before compilation
+    asm = await this.transpileSTLBlocks(asm, runtime)
+    
     const offsets = this.#editor.project?.offsets
     if (offsets && typeof runtime.setRuntimeOffsets === 'function') {        
         /*
@@ -344,6 +348,77 @@ end:                      // Label to jump to
         cleanup()
         throw e
     }
+  }
+
+  /**
+   * Transpiles STL code blocks to PLCASM assembly.
+   * Looks for markers: // stl_block_start ... // stl_block_end
+   * @param {string} asm - Assembly code with potential STL blocks
+   * @param {object} runtime - VovkPLC runtime instance
+   * @returns {Promise<string>} - Assembly code with STL transpiled to PLCASM
+   */
+  async transpileSTLBlocks(asm, runtime) {
+    // Check if runtime has compile method (which supports STL via language option)
+    const hasSTLCompiler = runtime && typeof runtime.compile === 'function'
+    
+    // Find all STL blocks
+    const stlBlockRegex = /\/\/ stl_block_start\n([\s\S]*?)\/\/ stl_block_end\n/g
+    let match
+    const replacements = []
+    
+    while ((match = stlBlockRegex.exec(asm)) !== null) {
+        const stlCode = match[1]
+        const fullMatch = match[0]
+        const startIndex = match.index
+        
+        if (!hasSTLCompiler) {
+            // No STL compiler - emit warning comment
+            this.#editor.window_manager.logToConsole('STL compiler not available in runtime. STL blocks will be skipped.', 'warning')
+            replacements.push({
+                start: startIndex,
+                end: startIndex + fullMatch.length,
+                replacement: `// STL block skipped - compiler not available\n// Original STL code:\n${stlCode.split('\n').map(l => '// ' + l).join('\n')}\n`
+            })
+            continue
+        }
+        
+        try {
+            // Transpile STL to PLCASM using runtime's compile method with language: 'stl'
+            // This returns { type: 'plcasm', size: number, output: string }
+            const result = await runtime.compile(stlCode, { language: 'stl' })
+            
+            if (result && result.output) {
+                // Successfully transpiled
+                const plcasm = result.output
+                replacements.push({
+                    start: startIndex,
+                    end: startIndex + fullMatch.length,
+                    replacement: `// STL transpiled to PLCASM\n${plcasm}\n`
+                })
+            } else {
+                throw new Error('STL compilation returned no output')
+            }
+        } catch (e) {
+            // Transpilation failed - emit error
+            const errorMsg = e.message || 'Unknown error'
+            this.#editor.window_manager.logToConsole(`STL transpilation failed: ${errorMsg}`, 'error')
+            replacements.push({
+                start: startIndex,
+                end: startIndex + fullMatch.length,
+                replacement: `// STL transpilation error: ${errorMsg}\n// Original STL code:\n${stlCode.split('\n').map(l => '// ' + l).join('\n')}\n`
+            })
+        }
+    }
+    
+    // Apply replacements in reverse order to maintain indices
+    if (replacements.length > 0) {
+        replacements.sort((a, b) => b.start - a.start)
+        for (const r of replacements) {
+            asm = asm.substring(0, r.start) + r.replacement + asm.substring(r.end)
+        }
+    }
+    
+    return asm
   }
 
   /** Create a new empty project structure */

@@ -1331,17 +1331,29 @@ export class VovkPLCEditor {
         programs.forEach(file => {
             if (!file.blocks) return
             file.blocks.forEach(block => {
-                if (block.type !== 'asm') {
+                // Handle both ASM and STL block types
+                if (block.type !== 'asm' && block.type !== 'stl') {
                     if (onUnsupported) onUnsupported(file, block)
                     return
                 }
                 if (!block.id) block.id = this._generateID(block.id)
 
-                const cached = this._ensureAsmCache(block, signature, map, details)
+                let code = ''
+                
+                if (block.type === 'stl') {
+                    // STL blocks need to be transpiled to PLCASM
+                    // The transpilation will be done during compilation in ProjectManager
+                    // For now, mark it with a special header so the compiler knows to transpile it
+                    const stlCode = block.code || ''
+                    code = `// stl_block_start\n${stlCode}\n// stl_block_end\n`
+                } else {
+                    // ASM blocks use the cache
+                    code = this._ensureAsmCache(block, signature, map, details) || ''
+                }
+                
                 const header = includeHeaders ? `// block:${block.id}\n` : ''
                 assembly += header
                 const codeStart = assembly.length
-                const code = cached || ''
                 assembly += code
                 const codeEnd = assembly.length
                 if (!assembly.endsWith('\n')) assembly += '\n'
@@ -1354,6 +1366,48 @@ export class VovkPLCEditor {
 
     _buildLintAssembly() {
         return this._buildAsmAssembly({includeHeaders: true})
+    }
+
+    async _transpileSTLForLinting(assembly) {
+        // Transpile STL blocks to PLCASM before linting
+        const stlBlockRegex = /\/\/ stl_block_start\n([\s\S]*?)\/\/ stl_block_end\n/g
+        let result = assembly
+        let match
+        const replacements = []
+
+        while ((match = stlBlockRegex.exec(assembly)) !== null) {
+            const stlCode = match[1]
+            const fullMatch = match[0]
+            const startIndex = match.index
+
+            try {
+                // Use runtime.compile with language: 'stl' to transpile STL to PLCASM
+                const compileResult = await this.runtime.compile(stlCode, { language: 'stl' })
+                if (compileResult && compileResult.output) {
+                    replacements.push({
+                        start: startIndex,
+                        end: startIndex + fullMatch.length,
+                        replacement: compileResult.output + '\n'
+                    })
+                }
+            } catch (e) {
+                // If transpilation fails, replace with empty comment
+                // STL errors are already caught by lintSTL, no need to log
+                replacements.push({
+                    start: startIndex,
+                    end: startIndex + fullMatch.length,
+                    replacement: '// STL block with errors\n'
+                })
+            }
+        }
+
+        // Apply replacements in reverse order to preserve indices
+        replacements.sort((a, b) => b.start - a.start)
+        for (const r of replacements) {
+            result = result.slice(0, r.start) + r.replacement + result.slice(r.end)
+        }
+
+        return result
     }
 
     _applyLintDiagnostics(blocks, diagnosticsByBlock) {
@@ -1406,6 +1460,11 @@ export class VovkPLCEditor {
 
         const promise = (async () => {
             let problems = []
+            let lintAssembly = assembly
+            const diagnosticsByBlock = new Map()
+            const problemsList = []
+            blocks.forEach(({block}) => diagnosticsByBlock.set(block.id, []))
+
             try {
                 const offsets = this.project?.offsets
                 if (offsets && typeof this.runtime.setRuntimeOffsets === 'function') {
@@ -1426,19 +1485,81 @@ export class VovkPLCEditor {
                     const M = normalized?.marker?.offset || 0
                     await this.runtime.setRuntimeOffsets(C, X, Y, S, M)
                 }
-                problems = await this.runtime.lint(assembly)
+
+                // First, lint STL blocks separately using lintSTL
+                if (typeof this.runtime.lintSTL === 'function') {
+                    for (const info of blocks) {
+                        if (info.block.type === 'stl') {
+                            const stlCode = info.block.code || ''
+                            if (!stlCode.trim()) continue
+
+                            try {
+                                const stlResult = await this.runtime.lintSTL(stlCode)
+                                if (stlResult?.problems?.length) {
+                                    const stlLines = stlCode.split('\n')
+                                    const stlLineStarts = [0]
+                                    for (let i = 0; i < stlLines.length; i++) {
+                                        stlLineStarts.push(stlLineStarts[i] + stlLines[i].length + 1)
+                                    }
+
+                                    const list = diagnosticsByBlock.get(info.block.id) || []
+                                    stlResult.problems.forEach(p => {
+                                        const lineIndex = Math.max(0, (p.line || 1) - 1)
+                                        const colIndex = Math.max(0, (p.column || 1) - 1)
+                                        const lineStart = stlLineStarts[lineIndex] ?? 0
+                                        const start = lineStart + colIndex
+                                        const length = p.length || 1
+                                        const end = start + length
+
+                                        list.push({
+                                            type: p.type || 'error',
+                                            start,
+                                            end,
+                                            message: p.message || 'STL lint error',
+                                        })
+
+                                        problemsList.push({
+                                            type: p.type || 'error',
+                                            message: p.message || 'STL lint error',
+                                            token: p.token_text || '',
+                                            line: p.line || 1,
+                                            column: p.column || 1,
+                                            start,
+                                            end,
+                                            blockId: info.block.id,
+                                            blockName: info.block.name || '',
+                                            blockType: 'stl',
+                                            language: 'stl',
+                                            languageStack: ['stl'],
+                                            programName: info.program?.name || '',
+                                            programPath: info.program?.full_path || info.program?.path || '',
+                                            programId: info.program?.id || '',
+                                        })
+                                    })
+                                    diagnosticsByBlock.set(info.block.id, list)
+                                }
+                            } catch (e) {
+                                console.warn('STL lint failed for block', info.block.id, e)
+                            }
+                        }
+                    }
+                }
+
+                // Transpile STL blocks to PLCASM before linting the full assembly
+                if (typeof this.runtime.compile === 'function') {
+                    lintAssembly = await this._transpileSTLForLinting(assembly)
+                }
+
+                problems = await this.runtime.lint(lintAssembly)
             } catch (e) {
                 console.error('Lint failed', e)
             }
 
-            const diagnosticsByBlock = new Map()
-            const problemsList = []
-            blocks.forEach(({block}) => diagnosticsByBlock.set(block.id, []))
-
             if (problems && problems.length) {
+                // Use the transpiled assembly for line offset calculation since that's what was linted
                 const lineStarts = [0]
-                for (let i = 0; i < assembly.length; i++) {
-                    if (assembly[i] === '\n') lineStarts.push(i + 1)
+                for (let i = 0; i < lintAssembly.length; i++) {
+                    if (lintAssembly[i] === '\n') lineStarts.push(i + 1)
                 }
 
                 const toOffset = (line, column) => {
@@ -1455,6 +1576,8 @@ export class VovkPLCEditor {
 
                     let target = null
                     for (const info of blocks) {
+                        // Skip STL blocks - they're handled separately by lintSTL
+                        if (info.block.type === 'stl') continue
                         if (start >= info.codeStart && start <= info.codeEnd) {
                             target = info
                             break
@@ -1487,7 +1610,7 @@ export class VovkPLCEditor {
                     const localLine = before.split('\n').length
                     const lastNl = before.lastIndexOf('\n')
                     const localColumn = mappedStart - (lastNl === -1 ? -1 : lastNl)
-                    const language = target.block.language || (target.block.type === 'asm' ? 'plcasm' : target.block.type || '')
+                    const language = target.block.language || (target.block.type === 'asm' ? 'plcasm' : target.block.type === 'stl' ? 'stl' : target.block.type || '')
                     const stackSource = target.block.language_stack || target.block.languageStack || null
                     const languageStack = Array.isArray(stackSource) ? stackSource.filter(Boolean) : language ? [language] : []
                     problemsList.push({
@@ -1531,6 +1654,48 @@ export class VovkPLCEditor {
     async lintBlock(blockId) {
         const state = await this.lintProject()
         return state.diagnosticsByBlock?.get(blockId) || []
+    }
+
+    async lintSTLBlock(blockId, code) {
+        if (!this.runtime_ready || !this.runtime || typeof this.runtime.lintSTL !== 'function') {
+            return []
+        }
+        if (!code || !code.trim()) {
+            return []
+        }
+        try {
+            const result = await this.runtime.lintSTL(code)
+            if (!result || !result.problems || !result.problems.length) {
+                return []
+            }
+
+            // Build line start offsets for converting line/column to character offsets
+            const lines = code.split('\n')
+            const lineStarts = [0]
+            for (let i = 0; i < lines.length; i++) {
+                lineStarts.push(lineStarts[i] + lines[i].length + 1) // +1 for newline
+            }
+
+            return result.problems.map(p => {
+                // Convert 1-based line/column to 0-based character offset
+                const lineIndex = Math.max(0, (p.line || 1) - 1)
+                const colIndex = Math.max(0, (p.column || 1) - 1)
+                const lineStart = lineStarts[lineIndex] ?? 0
+                const start = lineStart + colIndex
+                const length = p.length || 1
+                const end = start + length
+
+                return {
+                    type: p.type || 'error',
+                    start,
+                    end,
+                    message: p.message || 'STL lint error',
+                }
+            })
+        } catch (e) {
+            console.error('STL lint failed', e)
+            return []
+        }
     }
 
     _generateID(id = '') {

@@ -2192,4 +2192,87 @@ MiniCodeEditor.registerLanguage('asm', {
     typeKeywords: asmTypes,
 })
 
+/* Siemens STL (Statement List) */
+MiniCodeEditor.registerLanguage('stl', {
+    definitions: {},
+    rules: [
+        // Comments
+        {regex: /\/\/.*$/gm, className: 'cmt'},
+        {regex: /\(\*[\s\S]*?\*\)/g, className: 'cmt'},
+        // Labels (identifier followed by colon, not :=)
+        {regex: /^\s*([A-Za-z_]\w*)(?=\s*:(?!=))/gm, className: 'function'},
+        // IEC Time literals T#...
+        {regex: /T#[A-Za-z0-9_]+/gi, className: 'num'},
+        // Immediate values #123
+        {regex: /#-?\d+/g, className: 'num'},
+        // STL Instructions - Bit Logic
+        {regex: /\b(A|AN|O|ON|NOT|SET|CLR|CLEAR)\b(?![:\(])/gi, className: 'kw'},
+        // XOR - separate to avoid matching X address prefix
+        {regex: /\b(XN?)\b(?=\s+[A-Za-z])/gi, className: 'kw'},
+        // Assign instruction (= at start of line or after whitespace)
+        {regex: /(?<=^\s*|[\s])=(?=\s+[A-Za-z])/gm, className: 'kw'},
+        // Set/Reset (S/R before an operand)
+        {regex: /\b(S|R)\b(?=\s+[A-Za-z])/gi, className: 'kw'},
+        // Edge Detection
+        {regex: /\b(FP|FN)\b/gi, className: 'kw'},
+        // Timers (special highlighting)
+        {regex: /\b(TON|TOF|TP)\b/gi, className: 'type-keyword'},
+        // Counters (special highlighting)
+        {regex: /\b(CTU|CTD|CTUD)\b/gi, className: 'type-keyword'},
+        // Load/Transfer/Store
+        {regex: /\b(LD|LDN|ST)\b/gi, className: 'kw'},
+        // L and T as standalone instructions (not address prefix)
+        {regex: /(?<=^\s*)(L|T)\b(?=\s)/gim, className: 'kw'},
+        // Math operators
+        {regex: /[+\-*\/]I\b/gi, className: 'kw'},
+        {regex: /\b(MOD|NEG|ABS)\b/gi, className: 'kw'},
+        // Compare operators
+        {regex: /[=<>]+I\b/gi, className: 'kw'},
+        // Jumps
+        {regex: /\b(JU|JC|JCN|JMP|JMPC|JMPCN)\b/gi, className: 'kw'},
+        // Call/Return
+        {regex: /\b(CALL|BE|BEC|BEU|RET)\b/gi, className: 'kw'},
+        // IEC IL aliases
+        {regex: /\b(AND|ANDN|OR|ORN|XOR|XORN)\b/gi, className: 'kw'},
+        // Network marker
+        {regex: /\b(NETWORK)\b/gi, className: 'function'},
+        // NOP
+        {regex: /\b(NOP)\b/gi, className: 'kw'},
+        // Addresses - Siemens style I, Q, M, T, C and PLCASM style X, Y, K
+        {regex: /\b[IQMTCSXYK]\d+(?:\.\d+)?\b/gi, className: 'addr'},
+        // Numeric bit addresses (0.0 style)
+        {regex: /\b\d+\.\d+\b/g, className: 'addr'},
+        // Plain numbers
+        {regex: /\b\d+\b/g, className: 'num'},
+        // Parentheses for nesting
+        {regex: /[()]/g, className: 'dot'},
+        // Fallback for symbols/identifiers
+        {regex: /[A-Za-z_]\w*/g, className: 'variable'},
+    ],
+    words: [
+        // Bit Logic
+        'A', 'AN', 'O', 'ON', 'X', 'XN', 'NOT', 'SET', 'CLR', 'CLEAR',
+        // Assign/Set/Reset
+        'S', 'R',
+        // Edge Detection
+        'FP', 'FN',
+        // Timers
+        'TON', 'TOF', 'TP',
+        // Counters
+        'CTU', 'CTD', 'CTUD',
+        // Load/Transfer
+        'L', 'T', 'LD', 'LDN', 'ST',
+        // Math
+        'MOD', 'NEG', 'ABS',
+        // Jumps
+        'JU', 'JC', 'JCN', 'JMP', 'JMPC', 'JMPCN',
+        // Call/Return
+        'CALL', 'BE', 'BEC', 'BEU', 'RET',
+        // IEC aliases
+        'AND', 'ANDN', 'OR', 'ORN', 'XOR', 'XORN',
+        // Other
+        'NETWORK', 'NOP',
+    ],
+})
+
 export default MiniCodeEditor

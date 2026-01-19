@@ -557,12 +557,14 @@ export default class EditorUI {
             
             const btnLadder = createTypeBtn('ladder', 'Ladder Diagram (LAD)')
             const btnAsm = createTypeBtn('asm', 'Assembly (ASM)')
+            const btnStl = createTypeBtn('stl', 'Siemens STL')
             
-            typeButtons.push(btnLadder, btnAsm)
+            typeButtons.push(btnLadder, btnAsm, btnStl)
             updateButtonVisuals() // Initial state
             
             buttonGroup.appendChild(btnLadder)
             buttonGroup.appendChild(btnAsm)
+            buttonGroup.appendChild(btnStl)
             typeContainer.appendChild(buttonGroup)
 
             /*
