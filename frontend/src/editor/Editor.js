@@ -1129,9 +1129,52 @@ export class VovkPLCEditor {
     _buildSymbolRefs(code, symbolDetails) {
         const refs = []
         if (!code || !symbolDetails || symbolDetails.size === 0) return refs
+
+        // Create a masked version of code where comments and strings are replaced with spaces
+        // This ensures the regex doesn't match inside them, but indices remain correct
+        let masked = ''
+        let state = 'out' // out, string, char, comment
+        const limit = code.length
+
+        for (let i = 0; i < limit; i++) {
+            const char = code[i]
+
+            if (state === 'out') {
+                if (char === '/' && code[i + 1] === '/') {
+                    state = 'comment'
+                    masked += ' '
+                } else if (char === '"') {
+                    state = 'string'
+                    masked += ' '
+                } else if (char === "'") {
+                    state = 'char'
+                    masked += ' '
+                } else {
+                    masked += char
+                }
+            } else if (state === 'comment') {
+                if (char === '\n') {
+                    state = 'out'
+                    masked += '\n'
+                } else {
+                    masked += ' '
+                }
+            } else if (state === 'string') {
+                masked += ' '
+                if (char === '"' && code[i - 1] !== '\\') {
+                    state = 'out'
+                }
+            } else if (state === 'char') {
+                masked += ' '
+                if (char === "'" && code[i - 1] !== '\\') {
+                    state = 'out'
+                }
+            }
+        }
+
         const re = /\b[A-Za-z_]\w*\b/g
         let match = null
-        while ((match = re.exec(code))) {
+        while ((match = re.exec(masked))) {
             const name = match[0]
             const detail = symbolDetails.get(name)
             if (!detail) continue
