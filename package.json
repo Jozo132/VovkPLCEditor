@@ -4,6 +4,7 @@
   "scripts": {
     "init": "git pull && git submodule update --init --recursive",
     "update": "git pull && git submodule update --remote --recursive",
+    "explain": "node --no-warnings lib/VovkPLCRuntime/wasm/node-test/explain.js",
     "start": "node --experimental-strip-types ./backend/main.ts",
     "build": "node ./build.js"
   },
