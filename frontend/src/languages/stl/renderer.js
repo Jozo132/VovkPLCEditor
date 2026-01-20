@@ -721,13 +721,30 @@ export const stlRenderer = {
                             if (matchAddr) {
                                 const typeChar = (matchAddr[1] || '').toUpperCase()
                                 const loc = ADDRESS_LOCATION_MAP[typeChar] || 'marker'
+                                const byteNum = parseInt(matchAddr[2] || matchAddr[4], 10)
                                 
                                 // Address with dot implies bit (X0.0) -> group 3 or 5 is present
                                 const isExplicitBit = !!(matchAddr[3] || matchAddr[5])
-                                const type = (isExplicitBit || inferredType === 'bit') ? 'bit' : 'address'
-
+                                
                                 // Is this our TON Timer instance?
                                 const isTonInstance = (tonTimerName === word)
+                                
+                                // Determine type: timers used as TON instance are u32 (elapsed time)
+                                let type = 'address'
+                                if (isExplicitBit || inferredType === 'bit') {
+                                    type = 'bit'
+                                } else if (loc === 'timer' && isTonInstance) {
+                                    type = 'u32' // Timer elapsed time is 32-bit
+                                }
+                                
+                                // Calculate absolute address for timers/counters
+                                let absoluteAddress = undefined
+                                if (loc === 'timer' || loc === 'counter') {
+                                    const offsets = editor.project?.offsets || {}
+                                    const baseOffset = offsets[loc]?.offset || 0
+                                    const structSize = (loc === 'timer') ? 9 : 5
+                                    absoluteAddress = baseOffset + (byteNum * structSize)
+                                }
 
                                 entries.push({
                                     start: currentOffset + column,
@@ -737,7 +754,8 @@ export const stlRenderer = {
                                     type: type,
                                     location: loc,
                                     isTonInstance: isTonInstance,
-                                    presetValue: isTonInstance ? tonPresetValue : undefined
+                                    presetValue: isTonInstance ? tonPresetValue : undefined,
+                                    absoluteAddress: absoluteAddress
                                 })
                             }
                         }
@@ -780,7 +798,22 @@ export const stlRenderer = {
                         return null
                     }
 
-                    const liveEntry = editor.live_symbol_values?.get(entry.name)
+                    // Look up live value - first by name, then by absoluteAddress for timers
+                    let liveEntry = editor.live_symbol_values?.get(entry.name)
+                    
+                    // For timer instances, we need the u32 elapsed time value, not the byte-sized address ref
+                    // The address refs (e.g., 'T6') are stored with type 'byte', but timer storage refs 
+                    // (e.g., 'tim_storage_M192') are stored with type 'u32'. We need the u32 one.
+                    if (entry.absoluteAddress !== undefined && entry.location === 'timer' && entry.isTonInstance) {
+                        // Always look up by absoluteAddress and type u32/dint for timer elapsed time
+                        const timerLiveEntry = [...editor.live_symbol_values.values()].find(
+                            l => l.absoluteAddress === entry.absoluteAddress && (l.type === 'u32' || l.type === 'dint')
+                        )
+                        if (timerLiveEntry) {
+                            liveEntry = timerLiveEntry
+                        }
+                    }
+                    
                     if (!liveEntry) return null
 
                     let previewText = typeof liveEntry.text === 'string' ? liveEntry.text : 
@@ -800,9 +833,10 @@ export const stlRenderer = {
                              previewText = isOn ? 'ON' : 'OFF'
                              className = `${isOn ? 'on' : 'off'} bit`
                          } else if (entry.isTonInstance) {
-                             // TON Instance (T0): Show Elapsed Time (ET)
-                             // Showing remaining time (PT-ET) caused confusion where 0ms meant Done.
-                             previewText = formatTime(et)
+                             // TON Instance (T0): Show Remaining Time until ON
+                             // Remaining = PT - ET (how much longer until timer fires)
+                             const remaining = Math.max(0, pt - et)
+                             previewText = formatTime(remaining)
                              className = 'u32 timer' // force timer style
                          } else if (typeof liveEntry.value === 'number') {
                              // Just a timer usage (e.g. L T0)
