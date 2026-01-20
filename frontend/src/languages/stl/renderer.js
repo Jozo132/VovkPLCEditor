@@ -122,6 +122,65 @@ export const stlRenderer = {
         const block_container = div.querySelector('.plc-program-block-code')
         if (!block_container) throw new Error('Block code not found')
 
+        // Add Context Menu to Header for viewing compiled code
+        const block_header = div.querySelector('.plc-program-block-header')
+        if (block_header) {
+            block_header.oncontextmenu = (e) => {
+                e.preventDefault()
+                const items = [{
+                    label: 'View Compiled PLCASM',
+                    name: 'view_asm',
+                    icon: 'code',
+                    type: 'item'
+                }]
+                if (editor.context_manager) {
+                    editor.context_manager.show(e, items, async () => {
+                        try {
+                            if (!editor.runtime || !editor.runtime.compile) {
+                                throw new Error("Runtime compiler not available")
+                            }
+                            const result = await editor.runtime.compile(block.code, {
+                                language: 'stl'
+                            })
+                            
+                            if (result && typeof result.output === 'string') {
+                                const pre = document.createElement('pre')
+                                pre.style.margin = '0'
+                                pre.style.padding = '10px'
+                                pre.style.background = '#1e1e1e'
+                                pre.style.color = '#d4d4d4'
+                                pre.style.overflow = 'auto'
+                                pre.style.maxHeight = '600px'
+                                pre.style.whiteSpace = 'pre-wrap'
+                                pre.style.fontFamily = 'Consolas, monospace'
+                                pre.style.fontSize = '12px'
+                                pre.textContent = result.output
+
+                                new Popup({
+                                    title: `Compiled PLCASM (${block.name})`,
+                                    width: '600px',
+                                    content: pre,
+                                    buttons: [{
+                                        text: 'Close',
+                                        value: 'close'
+                                    }]
+                                })
+                            }
+                        } catch (err) {
+                            new Popup({
+                                title: 'Compilation Failed',
+                                description: err.message,
+                                buttons: [{
+                                    text: 'OK',
+                                    value: 'ok'
+                                }]
+                            })
+                        }
+                    })
+                }
+            }
+        }
+
         // If loaded from JSON, props.text_editor might be a plain object
         if (props.text_editor && !(props.text_editor instanceof MiniCodeEditor)) {
             props.text_editor = null
@@ -170,77 +229,619 @@ export const stlRenderer = {
                 block_container.style.height = calculatedHeight + 'px'
             }
 
+            const handlePreviewAction = async (entry, actionName) => {
+                // ============================================================
+                // LIVE PATCHING: Timer presets and embedded constants
+                // ============================================================
+                if (entry?.isTimerPT && entry?.bytecode_offset !== undefined && typeof entry.presetValue === 'number') {
+                    if (actionName !== 'edit') return
+
+                    if (!editor.device_manager?.connected) {
+                        new Popup({
+                            title: 'Connection Required',
+                            description: 'Device must be connected to edit timer presets',
+                            buttons: [{text: 'OK', value: 'ok', background: '#dc3545', color: 'white'}],
+                        })
+                        return
+                    }
+
+                    try {
+                        const patcher = editor.program_patcher
+                        if (!patcher) {
+                            new Popup({
+                                title: 'Error',
+                                description: 'Live patcher not available',
+                                buttons: [{text: 'OK', value: 'ok', background: '#dc3545', color: 'white'}],
+                            })
+                            return
+                        }
+
+                        // Detect if using IEC time format (T#...) or raw format (#...)
+                        const isIecFormat = entry.originalName && entry.originalName.toUpperCase().startsWith('T#')
+                        let currentInput = isIecFormat ? entry.originalName : entry.presetValue
+
+                        await Popup.form({
+                            title: isIecFormat ? `Edit ${entry.originalName}` : `Edit #${entry.presetValue}`,
+                            description: isIecFormat ? 'Enter new timer preset (e.g. T#5s, T#500ms)' : `Enter new timer preset (milliseconds)`,
+                            inputs: [{
+                                    type: isIecFormat ? 'text' : 'number',
+                                    name: 'value',
+                                    label: isIecFormat ? 'Preset' : 'Preset (ms)',
+                                    value: currentInput,
+                                },
+                                {
+                                    type: 'text',
+                                    name: 'error',
+                                    label: ' ',
+                                    readonly: true,
+                                    value: '',
+                                    margin: '0',
+                                }
+                            ],
+                            buttons: [{text: 'Write', value: 'confirm'}, {text: 'Cancel', value: 'cancel'}],
+                            verify: async (states) => {
+                                states.error.value = ''
+                                states.value.clearError()
+
+                                let newValue = 0
+                                let newToken = ''
+                                const inputValue = states.value.value
+
+                                try {
+                                    const strVal = String(inputValue).trim()
+                                    if (!strVal) throw new Error("Value cannot be empty")
+
+                                    if (isIecFormat) {
+                                        if (strVal.toUpperCase().startsWith('T#')) {
+                                            if (!/^T#(\d+(?:ms|s|m|h|d))+$/i.test(strVal)) throw new Error("Invalid format.")
+                                            const content = strVal.substring(2)
+                                            const partRegex = /(\d+)(ms|s|m|h|d)/gi
+                                            let totalMs = 0
+                                            let pMatch
+                                            while ((pMatch = partRegex.exec(content))) {
+                                                const val = parseInt(pMatch[1], 10)
+                                                const unit = pMatch[2].toLowerCase()
+                                                if (unit === 's') totalMs += val * 1000
+                                                else if (unit === 'm') totalMs += val * 60000
+                                                else if (unit === 'h') totalMs += val * 3600000
+                                                else if (unit === 'd') totalMs += val * 86400000
+                                                else totalMs += val
+                                            }
+                                            newValue = totalMs
+                                            newToken = strVal
+                                        } else {
+                                            const simple = parseInt(strVal, 10)
+                                            if (isNaN(simple)) throw new Error("Invalid format")
+                                            newValue = simple
+                                            newToken = `#${newValue}`
+                                        }
+                                    } else {
+                                        newValue = parseInt(strVal, 10)
+                                        newToken = `#${newValue}`
+                                    }
+
+                                    if (isNaN(newValue) || newValue < 0 || newValue > 4294967295) throw new Error("Value out of valid range")
+
+                                    const patchResult = await patcher.patchConstant(entry.bytecode_offset, newValue)
+
+                                    if (patchResult.success) {
+                                        // Update source code localized
+                                        if (entry.start !== undefined && entry.end !== undefined) {
+                                            block.code = block.code.substring(0, entry.start) + newToken + block.code.substring(entry.end)
+                                        }
+                                        
+                                        // Force UI refresh
+                                        const textEditor = block.props?.text_editor
+                                        if (textEditor?.setValue) {
+                                            block.cached_checksum = null // Invalidate cache
+                                            block.cached_timer_refs = null
+                                            textEditor.setValue(block.code)
+                                        }
+                                        
+                                        if (editor.project_manager?.checkAndSave) editor.project_manager.checkAndSave()
+                                        
+                                        // Trigger recompile to update maps
+                                        setTimeout(async () => {
+                                            if (editor.window_manager?.handleCompile) await editor.window_manager.handleCompile({silent: true})
+                                        }, 100)
+                                        return true
+                                    } else {
+                                        throw new Error(`Write Failed: ${patchResult.message}`)
+                                    }
+                                } catch (e) {
+                                    states.error.value = e.message
+                                    states.value.setError()
+                                    return false
+                                }
+                            }
+                        })
+                    } catch (err) {
+                        new Popup({title: 'Error', description: err.message, buttons: [{text: 'OK', value: 'ok'}]})
+                    }
+                    return
+                }
+
+                // ============================================================
+                // MEMORY WRITES: Runtime variables (I/O, markers, timers)
+                // ============================================================
+                if (!editor.window_manager?.isMonitoringActive?.()) return
+                const connection = editor.device_manager?.connection
+                if (!connection) return
+
+                const {addressStr, fullType} = resolveEntryInfo(entry) // Uses local helper
+                const addrMatch = ADDRESS_REGEX.exec(addressStr)
+                if (!addrMatch) return
+
+                let prefix = '', byteStr = '', bitStr = ''
+                if (addrMatch[1]) {
+                    prefix = addrMatch[1].toUpperCase()
+                    byteStr = addrMatch[2]
+                    bitStr = addrMatch[3] // Group 3 is bit
+                } else {
+                    byteStr = addrMatch[4]
+                    bitStr = addrMatch[5] // Group 5 is bit
+                }
+                
+                // Important: handle bitStr correctly. null if undefined.
+                const bitIndex = bitStr ? Number.parseInt(bitStr, 10) : null
+                const byteOffset = Number.parseInt(byteStr, 10)
+                
+                const prefixLocationMap = {K: 'control', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system', I: 'input', Q: 'output'}
+                const location = prefixLocationMap[prefix] || 'marker'
+                
+                const offsets = editor.project.offsets || {}
+                const region = offsets[location] || {offset: 0}
+                const structSize = (prefix === 'T') ? 9 : (prefix === 'C') ? 5 : 1
+                const absAddress = region.offset + (byteOffset * structSize)
+
+                // For bits in STL, we need to be careful. 'bitIndex' comes from address (M0.1).
+                // Or if fullType is bit but no dot in address (e.g. named bool symbol), we might need symbol address info.
+                // The resolveEntryInfo handles symbol.address -> byte.bit string. So addrMatch should have it.
+                
+                const isBit = bitIndex !== null || fullType === 'bit'
+
+                try {
+                    if (isBit && bitIndex !== null) {
+                        const mask = 1 << bitIndex
+                        let val = 0
+                        if (actionName === 'set') val = mask
+                        else if (actionName === 'reset') val = 0
+                        else if (actionName === 'toggle') {
+                            const live = editor.live_symbol_values?.get(entry.name) || editor.live_symbol_values?.get(addressStr)
+                            // entry.name might be M0.1, or MySymbol. addressStr is M0.1
+                            let currentOn = false
+                            if (live) {
+                                currentOn = (live.value === true || live.value === 1 || live.text === 'ON' || live.value === mask)
+                                // If live.value is the whole byte, check bit
+                                if (typeof live.value === 'number' && live.value > 1) {
+                                    currentOn = ((live.value & mask) !== 0)
+                                }
+                            }
+                            val = currentOn ? 0 : mask
+                        }
+                        await connection.writeMemoryAreaMasked(absAddress, [val], [mask])
+                    } else if (actionName === 'edit') {
+                        let currentVal = 0
+                        const liveEntry = editor.live_symbol_values?.get(entry.name) || editor.live_symbol_values?.get(addressStr)
+                        if (liveEntry && typeof liveEntry.value !== 'undefined') currentVal = liveEntry.value
+
+                        const formResult = await Popup.form({
+                            title: `Edit ${addressStr}`,
+                            description: `Enter new value for ${addressStr} (${fullType})`,
+                            inputs: [{type: 'text', name: 'value', label: 'Value', value: String(currentVal)}],
+                            buttons: [{text: 'Write', value: 'confirm'}, {text: 'Cancel', value: 'cancel'}],
+                        })
+
+                        if (formResult && typeof formResult.value !== 'undefined') {
+                            const num = Number(formResult.value)
+                            if (!isNaN(num)) {
+                                let size = 1
+                                if (['u16', 'i16', 'int', 'word'].includes(fullType)) size = 2
+                                if (['u32', 'i32', 'dint', 'real', 'float', 'dword'].includes(fullType)) size = 4
+                                const data = []
+                                let val = BigInt(Math.floor(num))
+                                for (let i = 0; i < size; i++) {
+                                    data.push(Number(val & 0xffn))
+                                    val >>= 8n
+                                }
+                                await connection.writeMemoryArea(absAddress, data)
+                            }
+                        }
+                    }
+                    if (editor.window_manager.updateLiveMonitorState) editor.window_manager.updateLiveMonitorState()
+                } catch (e) {
+                    console.error('Failed to write memory:', e)
+                    new Popup({title: 'Error', description: 'Failed to write: ' + e.message, buttons: [{text: 'OK', value: 'ok'}]})
+                }
+            }
+
+
             const text_editor = new MiniCodeEditor(block_container, {
                 value: block.code,
                 language: 'stl',  // Uses registered STL language from MiniCodeEditor
                 readOnly: !!editor.edit_locked,
-                previewProvider: (entries) => {
-                    if (!entries || entries.length === 0) return []
-                    
-                    return entries.map(entry => {
-                        if (!entry) return null
-                        
-                        // Handle timer entries (from _extractAsmTimerRefsFromCode)
-                        if (entry.isTimerPT || entry.isTimerStorage) {
-                            const {addressStr, fullType} = resolveEntryInfo(entry)
-                            let previewText = ''
-                            let valueColor = '#b5cea8'
-                            let backgroundColor = 'rgba(206, 145, 120, 0.15)'
+                onPreviewAction: (entry, action) => handlePreviewAction(entry, action),
+                onPreviewContextMenu: (entry, event) => {
+                    if (entry?.isTimerStorage) {
+                        return // No menu for timer internal storage
+                    }
 
-                            if (entry.isTimerPT) {
-                                const liveEntry = editor.live_symbol_values?.get(entry.name)
-                                previewText = liveEntry?.text ?? (typeof entry.presetValue === 'number' ? `${entry.presetValue}ms` : '-')
-                                backgroundColor = 'rgba(206, 145, 120, 0.2)'
-                            } else if (entry.isTimerStorage) {
-                                const timerAddr = entry.name
-                                const liveEntry = editor.live_symbol_values?.get(timerAddr)
-                                if (liveEntry) {
-                                    previewText = liveEntry.text ?? '-'
-                                    valueColor = liveEntry.text === 'ON' ? '#1fba5f' : 'rgba(200, 200, 200, 0.6)'
-                                } else {
-                                    previewText = '-'
+                    // Handle timer constant presets (T#...)
+                    if (entry?.type === 'time_const' || (entry?.isTimerPT && typeof entry.presetValue === 'number')) {
+                        if (entry.bytecode_offset === undefined) return // Cannot edit if not linked to bytecode
+                        if (!editor.device_manager?.connected) return
+
+                        const items = [{label: 'Edit Preset...', name: 'edit', icon: 'edit', type: 'item'}]
+                        const contextMenu = editor.context_manager
+                        if (contextMenu && typeof contextMenu.show === 'function') {
+                            contextMenu.show(event, items, async actionName => {
+                                await handlePreviewAction(entry, actionName)
+                            })
+                        }
+                        return
+                    }
+
+                     // Handle TON instruction pill (which represents Timer Output Bit)
+                     // or normal memory variables
+                    if (!editor.window_manager?.isMonitoringActive?.()) return
+                    
+                    const {addressStr, fullType} = resolveEntryInfo(entry)
+                    const addrMatch = ADDRESS_REGEX.exec(addressStr)
+                    if (!addrMatch) return // Should fit regex
+
+                    // Parse bit info
+                    let bitIndex = null
+                    if (addrMatch[1]) {
+                        if (addrMatch[3]) bitIndex = parseInt(addrMatch[3], 10)
+                    } else {
+                        if (addrMatch[5]) bitIndex = parseInt(addrMatch[5], 10)
+                    }
+                    const isBit = bitIndex !== null || fullType === 'bit' || entry.isTimerOutput
+
+                    const items = []
+                    const connection = editor.device_manager?.connection
+                    if (!connection) return
+
+                    if (isBit) {
+                        items.push({label: 'Set (1)', name: 'set', icon: 'check', type: 'item'})
+                        items.push({label: 'Reset (0)', name: 'reset', icon: 'close', type: 'item'})
+                        items.push({label: 'Toggle', name: 'toggle', icon: 'symbol-event', type: 'item'})
+                    } else {
+                        items.push({label: 'Edit Value...', name: 'edit', icon: 'edit', type: 'item'})
+                    }
+
+                    const contextMenu = editor.context_manager
+                    if (contextMenu && typeof contextMenu.show === 'function') {
+                        contextMenu.show(event, items, async action => {
+                            await handlePreviewAction(entry, action)
+                        })
+                    }
+                },
+                previewEntriesProvider: (currentCode) => {
+                    // Only show pills when monitoring is active AND device is connected
+                    const isMonitoring = editor.window_manager?.isMonitoringActive?.()
+                    const isConnected = editor.device_manager?.connected
+                    if (!isMonitoring || !isConnected) {
+                        return []
+                    }
+
+                    // Ensure Asm Cache which contains Timer Refs with bytecode offsets
+                    if (typeof editor._ensureAsmCache === 'function') {
+                         const cache = editor._buildSymbolCache ? editor._buildSymbolCache() : {signature: '', map: null, details: null}
+                         editor._ensureAsmCache(block, cache.signature, cache.map, cache.details)
+                    }
+                    const cachedTimerRefs = block.cached_timer_refs || []
+                    
+                    // Helper to find cached ref overlapping this range
+                    const findCachedRef = (start, end) => {
+                         // Simple strict overlap check
+                         return cachedTimerRefs.find(r => r.start <= end && r.end >= start)
+                    }
+
+                    // Match timer constant presets with patchable constants from LivePatcher
+                    if (editor.program_patcher?.patchableConstants && cachedTimerRefs.length > 0) {
+                        const patchableMap = new Map()
+                        for (const [offset, constant] of editor.program_patcher.patchableConstants) {
+                            if (constant.flags & 0x10 && constant.timer_address !== undefined) {
+                                patchableMap.set(constant.timer_address, constant)
+                            }
+                        }
+                        for (const timerRef of cachedTimerRefs) {
+                            if (timerRef.isTimerPT && !timerRef.isPresetAddress && typeof timerRef.presetValue === 'number') {
+                                if (timerRef.storageAddress !== -1) {
+                                    const patchable = patchableMap.get(timerRef.storageAddress)
+                                    if (patchable && patchable.current_value === timerRef.presetValue) {
+                                        timerRef.bytecode_offset = patchable.bytecode_offset
+                                        timerRef.patchable_type = patchable.operand_type
+                                        timerRef.timer_address = patchable.timer_address
+                                    }
                                 }
                             }
+                        }
+                    }
 
-                            return {
-                                text: previewText,
-                                color: valueColor,
-                                background: backgroundColor,
-                                tooltip: entry.isTimerPT ? `Preset: ${previewText}` : `Timer ${entry.name}: ${previewText}`,
-                                actions: entry.isTimerPT ? ['edit'] : undefined,
-                            }
+                    const entries = []
+                    const codeToScan = currentCode || block.code || ''
+                    const lines = codeToScan.split('\n')
+                    let currentOffset = 0
+
+                    lines.forEach(line => {
+                        // Handle comments: strip everything after //
+                        const commentIndex = line.indexOf('//')
+                        let contentToScan = line
+                        if (commentIndex !== -1) {
+                            contentToScan = line.substring(0, commentIndex)
                         }
 
-                        // Handle address entries
-                        const {addressStr, fullType} = resolveEntryInfo(entry)
-                        const liveEntry = editor.live_symbol_values?.get(entry.name)
+                        // 1. Special Handling for TON instructions to capture Presets and Bit Status
+                        // Pattern: TON <Instance>, <Preset>
+                        // Example: TON T0, T#250ms
+                        const tonRegex = /^\s*(TON)\s+([A-Za-z0-9_]+)\s*(?:,|\s)\s*([A-Za-z0-9_#]+)/i
+                        const tonMatch = tonRegex.exec(contentToScan)
+                        
+                        let tonTimerName = null
+                        let tonPresetValue = null
 
-                        let previewText = '-'
-                        let valueColor = '#b5cea8'
-                        let backgroundColor = 'transparent'
+                        if (tonMatch) {
+                            const instr = tonMatch[1] // "TON"
+                            const timerName = tonMatch[2]
+                            const presetToken = tonMatch[3]
+                            const colInstr = line.indexOf(instr)
+                            tonTimerName = timerName
 
-                        if (liveEntry) {
-                            previewText = typeof liveEntry.text === 'string' ? liveEntry.text : 
-                                         typeof liveEntry.value !== 'undefined' ? String(liveEntry.value) : '-'
+                            // Parse Preset if it is a constant
+                            if (presetToken.toUpperCase().startsWith('T#')) {
+                                try {
+                                    const content = presetToken.substring(2)
+                                    const partRegex = /(\d+)(ms|s|m|h|d)/gi
+                                    let totalMs = 0
+                                    let pMatch
+                                    while ((pMatch = partRegex.exec(content))) {
+                                        const val = parseInt(pMatch[1], 10)
+                                        const unit = pMatch[2].toLowerCase()
+                                        if (unit === 's') totalMs += val * 1000
+                                        else if (unit === 'm') totalMs += val * 60000
+                                        else if (unit === 'h') totalMs += val * 3600000
+                                        else if (unit === 'd') totalMs += val * 86400000
+                                        else totalMs += val
+                                    }
+                                    if (totalMs > 0) {
+                                       tonPresetValue = totalMs
+                                    }
+                                } catch (e) {}
+                            }
                             
-                            if (fullType === 'bit' && (previewText === 'ON' || previewText === 'OFF')) {
-                                valueColor = previewText === 'ON' ? '#1fba5f' : 'rgba(200, 200, 200, 0.5)'
+                            // Add a pill for the TON instruction itself (Timer Output Bit)
+                            if (colInstr !== -1) {
+                                entries.push({
+                                    start: currentOffset + colInstr,
+                                    end: currentOffset + colInstr + instr.length,
+                                    name: timerName, // Use timer name to lookup value
+                                    originalName: instr,
+                                    type: 'bit',
+                                    location: 'timer', // It is a timer
+                                    isTimerOutput: true, // Mark as output bit
+                                    presetValue: tonPresetValue
+                                })
                             }
                         }
 
-                        const locColor = LOCATION_COLORS[entry.location] || '#cccccc'
-                        backgroundColor = locColor.replace(')', ', 0.15)').replace('rgb', 'rgba')
-                        if (!backgroundColor.includes('rgba')) {
-                            backgroundColor = `${locColor}26`
+                        // 2. Generic Token Scan
+                        const tokenRegex = /(?:T#[\w\d]+|[%A-Za-z0-9_][A-Za-z0-9_.]*)/g
+                        let match
+                        
+                        while ((match = tokenRegex.exec(contentToScan)) !== null) {
+                            const word = match[0]
+                            const column = match.index
+                            
+                            // Check for T# time literal
+                            if (word.toUpperCase().startsWith('T#')) {
+                                // Already handled in loop logic or standalone
+                                // Parse time value for pill
+                                let totalMs = 0
+                                try {
+                                    const content = word.substring(2)
+                                    const partRegex = /(\d+)(ms|s|m|h|d)/gi
+                                    let pMatch
+                                    while ((pMatch = partRegex.exec(content))) {
+                                        const val = parseInt(pMatch[1], 10)
+                                        const unit = pMatch[2].toLowerCase()
+                                        if (unit === 's') totalMs += val * 1000
+                                        else if (unit === 'm') totalMs += val * 60000
+                                        else if (unit === 'h') totalMs += val * 3600000
+                                        else if (unit === 'd') totalMs += val * 86400000
+                                        else totalMs += val // ms
+                                    }
+                                } catch (e) {}
+
+                                if (totalMs > 0) {
+                                    const absStart = currentOffset + column
+                                    const absEnd = absStart + word.length
+                                    const cached = findCachedRef(absStart, absEnd)
+
+                                    entries.push({
+                                        start: absStart,
+                                        end: absEnd,
+                                        name: word,
+                                        type: 'time_const',
+                                        value: totalMs,
+                                        originalName: word,
+                                        isTimerPT: true,
+                                        presetValue: totalMs,
+                                        bytecode_offset: cached?.bytecode_offset, 
+                                        timer_address: cached?.timer_address,
+                                        patchable_type: cached?.patchable_type
+                                    })
+                                }
+                                continue
+                            }
+
+                            // Check if it is a keyword -> Ignore
+                            if (ALL_STL_KEYWORDS.has(word.toUpperCase())) {
+                                continue
+                            }
+                            
+                            // Filter out plain numbers that are not addresses
+                            if (/^\d+$/.test(word)) continue
+
+                            // Infer Context (Bit vs Word)
+                            // Look at the strict preceding token (word) in the line
+                            const preStr = contentToScan.substring(0, column).trimEnd()
+                            const lastSpace = preStr.lastIndexOf(' ')
+                            const prevWord = lastSpace === -1 ? preStr : preStr.substring(lastSpace + 1)
+                            
+                            // Boolean opcodes imply BIT usage
+                            const BIT_OPCODES = new Set(['A', 'AN', 'O', 'ON', 'X', 'XN', '=', 'S', 'R', 'NOT'])
+                            let inferredType = 'unknown'
+                            if (BIT_OPCODES.has(prevWord.toUpperCase())) {
+                                inferredType = 'bit'
+                            }
+
+                            // Check if symbol
+                            const symbol = editor.project?.symbols?.find(s => s.name === word)
+                            if (symbol) {
+                                // Is this our TON Timer instance?
+                                const isTonInstance = (tonTimerName === word)
+                                
+                                entries.push({
+                                    start: currentOffset + column,
+                                    end: currentOffset + column + word.length,
+                                    name: symbol.name,
+                                    originalName: word,
+                                    type: inferredType === 'bit' ? 'bit' : symbol.type,
+                                    location: symbol.location || 'marker',
+                                    isTonInstance: isTonInstance,
+                                    presetValue: isTonInstance ? tonPresetValue : undefined
+                                })
+                                continue
+                            }
+
+                            // Check if address
+                            const matchAddr = ADDRESS_REGEX.exec(word)
+                            if (matchAddr) {
+                                const typeChar = (matchAddr[1] || '').toUpperCase()
+                                const loc = ADDRESS_LOCATION_MAP[typeChar] || 'marker'
+                                
+                                // Address with dot implies bit (X0.0) -> group 3 or 5 is present
+                                const isExplicitBit = !!(matchAddr[3] || matchAddr[5])
+                                const type = (isExplicitBit || inferredType === 'bit') ? 'bit' : 'address'
+
+                                // Is this our TON Timer instance?
+                                const isTonInstance = (tonTimerName === word)
+
+                                entries.push({
+                                    start: currentOffset + column,
+                                    end: currentOffset + column + word.length,
+                                    name: word.toUpperCase(),
+                                    originalName: word,
+                                    type: type,
+                                    location: loc,
+                                    isTonInstance: isTonInstance,
+                                    presetValue: isTonInstance ? tonPresetValue : undefined
+                                })
+                            }
+                        }
+                        currentOffset += line.length + 1 // +1 for newline
+                    })
+                    
+                    return entries
+                },
+                previewValueProvider: (entry) => {
+                    // Helper to format time with auto-scaling units
+                    const formatTime = ms => {
+                        const totalSec = Math.floor(ms / 1000)
+                        const d = Math.floor(totalSec / 86400)
+                        const h = Math.floor((totalSec % 86400) / 3600)
+                        const m = Math.floor((totalSec % 3600) / 60)
+                        const s = totalSec % 60
+                        const mil = ms % 1000
+
+                        const milStr = mil.toString().padStart(3, '0')
+                        const sStr = s.toString().padStart(2, '0')
+                        const mStr = m.toString().padStart(2, '0')
+                        const hStr = h.toString().padStart(2, '0')
+
+                        if (d > 0) return `${d}d ${hStr}:${mStr}:${sStr}`
+                        if (h > 0) return `${h}:${mStr}:${sStr}`
+                        if (m > 0) return `${m}:${sStr}`
+                        if (s > 0) return `${s}.${milStr}s`
+                        return `${mil}ms`
+                    }
+
+                    // Always show static time constant pills (matches ASM behavior)
+                    if (entry.type === 'time_const') {
+                        return { 
+                            text: formatTime(entry.value), 
+                            className: 'u32 timer' 
+                        }
+                    }
+
+                    if (!editor.window_manager?.isMonitoringActive?.() || !editor.device_manager?.connected) {
+                        return null
+                    }
+
+                    const liveEntry = editor.live_symbol_values?.get(entry.name)
+                    if (!liveEntry) return null
+
+                    let previewText = typeof liveEntry.text === 'string' ? liveEntry.text : 
+                                     typeof liveEntry.value !== 'undefined' ? String(liveEntry.value) : '-'
+                    
+                    let className = ''
+                    const fullType = entry.type || (liveEntry.type)
+
+                    // Timer/Counter output handling
+                    if (entry.location === 'timer') {
+                         const et = typeof liveEntry.value === 'number' ? liveEntry.value : 0
+                         const pt = typeof entry.presetValue === 'number' ? entry.presetValue : 0
+
+                         if (entry.isTimerOutput) {
+                             // TON Instruction Pill: Show ON/OFF
+                             const isOn = (pt > 0 && et >= pt)
+                             previewText = isOn ? 'ON' : 'OFF'
+                             className = `${isOn ? 'on' : 'off'} bit`
+                         } else if (entry.isTonInstance) {
+                             // TON Instance (T0): Show Elapsed Time (ET)
+                             // Showing remaining time (PT-ET) caused confusion where 0ms meant Done.
+                             previewText = formatTime(et)
+                             className = 'u32 timer' // force timer style
+                         } else if (typeof liveEntry.value === 'number') {
+                             // Just a timer usage (e.g. L T0)
+                             if (fullType === 'bit') {
+                                 // Used as bit (A T0) -> Show ON/OFF
+                             } else {
+                                 // Used as value (L T0) -> Show ET
+                                 previewText = formatTime(liveEntry.value)
+                                 className = 'u32 timer'
+                             }
+                         }
+                    }
+
+                    if (fullType === 'bit' || liveEntry.type === 'bit' || previewText === 'ON' || previewText === 'OFF') {
+                        // Ensure text is ON/OFF
+                        if (previewText === 'true') previewText = 'ON'
+                        if (previewText === 'false') previewText = 'OFF'
+                        
+                        const isOn = (previewText === 'ON' || liveEntry.value === true || liveEntry.value === 1)
+                        // If we haven't set previewText to ON/OFF yet (e.g. from liveEntry.value number)
+                        if (previewText !== 'ON' && previewText !== 'OFF') {
+                             previewText = isOn ? 'ON' : 'OFF'
                         }
 
-                        return {
-                            text: previewText,
-                            color: valueColor,
-                            background: backgroundColor,
-                            tooltip: `${addressStr} (${entry.location}): ${previewText}`,
+                        // Strict check: if it is numbers, don't show ON/OFF unless type is explicitly bit
+                        // For isTimerOutput we already set text to ON/OFF with class
+                        if (fullType === 'bit' || previewText === 'ON' || previewText === 'OFF') {
+                             const isReallyOn = (previewText === 'ON')
+                             className = `${isReallyOn ? 'on' : 'off'} bit`
                         }
-                    }).filter(Boolean)
+                    } else {
+                        // Default number style
+                         if (!className) className = 'u32'
+                    }
+
+                    return {
+                        text: previewText,
+                        className: className
+                    }
                 },
                 onLintHover: payload => {
                     if (editor.window_manager?.setProblemHover) {

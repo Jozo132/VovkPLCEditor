@@ -843,9 +843,12 @@ export class VovkPLCEditor {
             Y: 'output',
             M: 'marker',
             S: 'system',
+            I: 'input',
+            Q: 'output',
         }
         // Match: 1=Prefix, 2=Byte, 3=Bit (Optional) OR 4=Byte, 5=Bit
-        const regex = /\b(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))\b/gi
+        // Extended to support I/Q (Siemens style)
+        const regex = /\b(?:([KCTXYMSIQ])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))\b/gi
         let match = null
         while ((match = regex.exec(masked))) {
             let prefix = '',
@@ -953,7 +956,8 @@ export class VovkPLCEditor {
 
         // Match timer instructions: ton/tof/tp storage preset
         // Preset can be #123 (raw ms) or T#... (IEC style, e.g. T#5s, T#1h30m)
-        const timerRegex = /\b(?:u8\.)?(ton|tof|tp)\b\s+([A-Za-z_]\w*(?:\.\d+)?|[KCTXYMS]\d+(?:\.\d+)?)\s+((?:T#[A-Za-z0-9_]+|#\d+)|[A-Za-z_]\w*(?:\.\d+)?|[KCTXYMS]\d+(?:\.\d+)?)\b/gi
+        // Supports both ASM space separation (TON T0 T#5s) and STL comma separation (TON T0, T#5s)
+        const timerRegex = /\b(?:u8\.)?(ton|tof|tp)\b\s+([A-Za-z_]\w*(?:\.\d+)?|[KCTXYMS]\d+(?:\.\d+)?)\s*(?:,|\s)\s*((?:T#[A-Za-z0-9_]+|#\d+)|[A-Za-z_]\w*(?:\.\d+)?|[KCTXYMS]\d+(?:\.\d+)?)\b/gi
         
         let match = null
         while ((match = timerRegex.exec(masked))) {
@@ -1120,7 +1124,7 @@ export class VovkPLCEditor {
         programs.forEach(program => {
             const blocks = program.blocks || []
             blocks.forEach(block => {
-                if (!block || block.type !== 'asm') return
+                if (!block || (block.type !== 'asm' && block.type !== 'stl')) return
                 this._ensureBlockAddressRefs(block, normalizedOffsets, symbolDetails)
                 const blockRefs = [...(block.cached_address_refs || []), ...(block.cached_timer_refs || [])]
                 blockRefs.forEach(ref => {
