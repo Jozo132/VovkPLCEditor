@@ -311,6 +311,9 @@ end:                      // Label to jump to
     const runtime = this.#editor.runtime
     if (!runtime) throw new Error('Runtime not initialized')
     
+    // Transpile any Ladder blocks to PLCASM first (Ladder -> STL -> PLCASM)
+    asm = await this.transpileLadderBlocks(asm, runtime)
+    
     // Transpile any STL blocks to PLCASM before compilation
     asm = await this.transpileSTLBlocks(asm, runtime)
     
@@ -348,6 +351,202 @@ end:                      // Label to jump to
         cleanup()
         throw e
     }
+  }
+
+  /**
+   * Transpiles Ladder JSON blocks to PLCASM assembly.
+   * Looks for markers: // ladder_block_start ... // ladder_block_end
+   * The transpilation chain: LADDER JSON -> STL -> PLCASM
+   * @param {string} asm - Assembly code with potential Ladder blocks
+   * @param {object} runtime - VovkPLC runtime instance
+   * @returns {Promise<string>} - Assembly code with Ladder transpiled to PLCASM
+   */
+  async transpileLadderBlocks(asm, runtime) {
+    // Check if runtime has compileLadder method
+    const hasLadderCompiler = runtime && typeof runtime.compileLadder === 'function'
+    
+    // Find all Ladder blocks
+    const ladderBlockRegex = /\/\/ ladder_block_start\n([\s\S]*?)\/\/ ladder_block_end\n/g
+    let match
+    const replacements = []
+    /** @type {Array<{type: string, message: string, blockName?: string, programName?: string, programPath?: string}>} */
+    const allErrors = []
+    
+    while ((match = ladderBlockRegex.exec(asm)) !== null) {
+        const ladderJson = match[1].trim()
+        const fullMatch = match[0]
+        const startIndex = match.index
+        
+        // Try to extract block info from preceding comment (// block:xxx)
+        const beforeMatch = asm.substring(0, startIndex)
+        const blockIdMatch = beforeMatch.match(/\/\/ block:([^\n]+)\n[^\n]*$/)
+        let blockId = blockIdMatch ? blockIdMatch[1].trim() : null
+        
+        // Find the block and program for this ladder
+        let blockInfo = null
+        let programInfo = null
+        if (blockId) {
+            const programs = this.#editor._getLintPrograms?.() || []
+            for (const prog of programs) {
+                const foundBlock = prog.blocks?.find(b => b.id === blockId)
+                if (foundBlock) {
+                    blockInfo = foundBlock
+                    programInfo = prog
+                    break
+                }
+            }
+        }
+        
+        // Parse the JSON to extract any embedded errors from ladderToIR
+        let parsedLadder = null
+        let ladderErrors = []
+        try {
+            parsedLadder = JSON.parse(ladderJson)
+            if (parsedLadder.errors && Array.isArray(parsedLadder.errors)) {
+                ladderErrors = parsedLadder.errors
+            }
+        } catch (parseErr) {
+            // JSON parse error
+            allErrors.push({
+                type: 'error',
+                message: `Invalid ladder JSON: ${parseErr.message}`,
+                blockName: blockInfo?.name || 'Unknown',
+                programName: programInfo?.name || '',
+                programPath: programInfo?.full_path || programInfo?.path || ''
+            })
+            replacements.push({
+                start: startIndex,
+                end: startIndex + fullMatch.length,
+                replacement: `// Ladder block error: Invalid JSON\n`
+            })
+            continue
+        }
+        
+        // Report any ladder structure errors (disconnected blocks, etc.)
+        for (const err of ladderErrors) {
+            allErrors.push({
+                type: err.type || 'error',
+                message: err.message,
+                blockName: blockInfo?.name || 'Unknown',
+                programName: programInfo?.name || '',
+                programPath: programInfo?.full_path || programInfo?.path || ''
+            })
+        }
+        
+        // If there are errors, skip compilation but still report them
+        if (ladderErrors.some(e => e.type === 'error')) {
+            const errorMsgs = ladderErrors.filter(e => e.type === 'error').map(e => e.message).join('; ')
+            replacements.push({
+                start: startIndex,
+                end: startIndex + fullMatch.length,
+                replacement: `// Ladder block has errors: ${errorMsgs}\n`
+            })
+            continue
+        }
+        
+        // Check if there are any rungs to compile
+        if (!parsedLadder.rungs || parsedLadder.rungs.length === 0) {
+            replacements.push({
+                start: startIndex,
+                end: startIndex + fullMatch.length,
+                replacement: `// Ladder block is empty or has no valid rungs\n`
+            })
+            continue
+        }
+        
+        if (!hasLadderCompiler) {
+            // No Ladder compiler - emit warning comment
+            this.#editor.window_manager.logToConsole('Ladder compiler not available in runtime. Ladder blocks will be skipped.', 'warning')
+            replacements.push({
+                start: startIndex,
+                end: startIndex + fullMatch.length,
+                replacement: `// Ladder block skipped - compiler not available\n`
+            })
+            continue
+        }
+        
+        try {
+            // Only send the rungs to the runtime (not the errors)
+            const rungsOnlyJson = JSON.stringify({ rungs: parsedLadder.rungs })
+            
+            // Step 1: Transpile Ladder JSON to STL using runtime's compileLadder
+            // This returns { type: 'stl', size: number, output: string }
+            const ladderResult = await runtime.compileLadder(rungsOnlyJson)
+            
+            if (!ladderResult || !ladderResult.output) {
+                throw new Error('Ladder compilation returned no output')
+            }
+            
+            const stlCode = ladderResult.output
+            
+            // Step 2: Transpile STL to PLCASM using runtime's compile with language: 'stl'
+            // This returns { type: 'plcasm', size: number, output: string }
+            const stlResult = await runtime.compile(stlCode, { language: 'stl' })
+            
+            if (!stlResult || !stlResult.output) {
+                throw new Error('STL compilation returned no output')
+            }
+            
+            const plcasm = stlResult.output
+            
+            // Successfully transpiled
+            replacements.push({
+                start: startIndex,
+                end: startIndex + fullMatch.length,
+                replacement: `// Ladder -> STL -> PLCASM transpiled\n${plcasm}\n`
+            })
+        } catch (e) {
+            // Transpilation failed - emit error
+            const errorMsg = e.message || 'Unknown error'
+            allErrors.push({
+                type: 'error',
+                message: `Ladder transpilation failed: ${errorMsg}`,
+                blockName: blockInfo?.name || 'Unknown',
+                programName: programInfo?.name || '',
+                programPath: programInfo?.full_path || programInfo?.path || ''
+            })
+            replacements.push({
+                start: startIndex,
+                end: startIndex + fullMatch.length,
+                replacement: `// Ladder transpilation error: ${errorMsg}\n`
+            })
+        }
+    }
+    
+    // Report all errors to the problems panel
+    if (allErrors.length > 0) {
+        const problemsList = allErrors.map(err => ({
+            type: err.type,
+            message: err.message,
+            line: 1,
+            column: 1,
+            blockName: err.blockName,
+            blockType: 'ladder',
+            language: 'ladder',
+            languageStack: ['ladder'],
+            programName: err.programName,
+            programPath: err.programPath,
+        }))
+        
+        // Get existing problems and add ladder problems
+        if (this.#editor.window_manager?.setConsoleProblems) {
+            // We'll log to console for now - the lint system will pick these up too
+            for (const err of allErrors) {
+                const location = err.programName ? `${err.programName} -> ${err.blockName}` : err.blockName
+                this.#editor.window_manager.logToConsole(`[Ladder] ${location}: ${err.message}`, err.type)
+            }
+        }
+    }
+    
+    // Apply replacements in reverse order to maintain indices
+    if (replacements.length > 0) {
+        replacements.sort((a, b) => b.start - a.start)
+        for (const r of replacements) {
+            asm = asm.substring(0, r.start) + r.replacement + asm.substring(r.end)
+        }
+    }
+    
+    return asm
   }
 
   /**

@@ -360,6 +360,9 @@ export class VovkPLCEditor {
         selection: []
     }
 
+    /** @type {{ blocks: any[], connections: any[], ladder_id: string | null } | null} */
+    ladder_clipboard = null
+
     /** @param {{ workspace?: HTMLElement | string | null, debug_css?: boolean, debug_context?: boolean, debug_hover?: boolean, initial_program?: string | Object }} options */
     constructor({workspace, debug_css, debug_context, debug_hover, initial_program}) {
         this.initial_program = initial_program || {
@@ -1343,8 +1346,8 @@ export class VovkPLCEditor {
         programs.forEach(file => {
             if (!file.blocks) return
             file.blocks.forEach(block => {
-                // Handle both ASM and STL block types
-                if (block.type !== 'asm' && block.type !== 'stl') {
+                // Handle ASM, STL, and Ladder block types
+                if (block.type !== 'asm' && block.type !== 'stl' && block.type !== 'ladder') {
                     if (onUnsupported) onUnsupported(file, block)
                     return
                 }
@@ -1358,6 +1361,16 @@ export class VovkPLCEditor {
                     // For now, mark it with a special header so the compiler knows to transpile it
                     const stlCode = block.code || ''
                     code = `// stl_block_start\n${stlCode}\n// stl_block_end\n`
+                } else if (block.type === 'ladder') {
+                    // Ladder blocks need to be compiled to JSON, then transpiled
+                    // The transpilation chain: LADDER JSON -> STL -> PLCASM
+                    const ladderLang = this.language_manager.getLanguage('ladder')
+                    if (ladderLang && ladderLang.compile) {
+                        code = ladderLang.compile(block)
+                    } else {
+                        console.warn('Ladder language module not found')
+                        code = '// ladder block skipped - language module not available\n'
+                    }
                 } else {
                     // ASM blocks use the cache
                     code = this._ensureAsmCache(block, signature, map, details) || ''
@@ -1381,13 +1394,15 @@ export class VovkPLCEditor {
     }
 
     async _transpileSTLForLinting(assembly) {
-        // Transpile STL blocks to PLCASM before linting
+        // Transpile Ladder blocks to PLCASM before STL
+        let result = await this._transpileLadderForLinting(assembly)
+        
+        // Then transpile STL blocks to PLCASM
         const stlBlockRegex = /\/\/ stl_block_start\n([\s\S]*?)\/\/ stl_block_end\n/g
-        let result = assembly
         let match
         const replacements = []
 
-        while ((match = stlBlockRegex.exec(assembly)) !== null) {
+        while ((match = stlBlockRegex.exec(result)) !== null) {
             const stlCode = match[1]
             const fullMatch = match[0]
             const startIndex = match.index
@@ -1409,6 +1424,79 @@ export class VovkPLCEditor {
                     start: startIndex,
                     end: startIndex + fullMatch.length,
                     replacement: '// STL block with errors\n'
+                })
+            }
+        }
+
+        // Apply replacements in reverse order to preserve indices
+        replacements.sort((a, b) => b.start - a.start)
+        for (const r of replacements) {
+            result = result.slice(0, r.start) + r.replacement + result.slice(r.end)
+        }
+
+        return result
+    }
+
+    async _transpileLadderForLinting(assembly) {
+        // Transpile Ladder blocks to PLCASM via Ladder -> STL -> PLCASM chain
+        const ladderBlockRegex = /\/\/ ladder_block_start\n([\s\S]*?)\/\/ ladder_block_end\n/g
+        let result = assembly
+        let match
+        const replacements = []
+
+        while ((match = ladderBlockRegex.exec(assembly)) !== null) {
+            const ladderJson = match[1].trim()
+            const fullMatch = match[0]
+            const startIndex = match.index
+
+            try {
+                // Parse the JSON to check for embedded errors
+                let parsedLadder = null
+                try {
+                    parsedLadder = JSON.parse(ladderJson)
+                } catch (parseErr) {
+                    throw new Error('Invalid ladder JSON')
+                }
+                
+                // If there are errors in the ladder structure, skip compilation
+                if (parsedLadder.errors && parsedLadder.errors.some(e => e.type === 'error')) {
+                    throw new Error('Ladder has structural errors')
+                }
+                
+                // Skip if no rungs
+                if (!parsedLadder.rungs || parsedLadder.rungs.length === 0) {
+                    throw new Error('No valid rungs')
+                }
+                
+                // Check if compileLadder is available
+                if (typeof this.runtime.compileLadder !== 'function') {
+                    throw new Error('Ladder compiler not available')
+                }
+                
+                // Only send rungs to runtime (not errors)
+                const rungsOnlyJson = JSON.stringify({ rungs: parsedLadder.rungs })
+                
+                // Step 1: Ladder JSON -> STL
+                const ladderResult = await this.runtime.compileLadder(rungsOnlyJson)
+                if (!ladderResult || !ladderResult.output) {
+                    throw new Error('Ladder compilation returned no output')
+                }
+                
+                // Step 2: STL -> PLCASM
+                const stlResult = await this.runtime.compile(ladderResult.output, { language: 'stl' })
+                if (stlResult && stlResult.output) {
+                    replacements.push({
+                        start: startIndex,
+                        end: startIndex + fullMatch.length,
+                        replacement: stlResult.output + '\n'
+                    })
+                }
+            } catch (e) {
+                // If transpilation fails, replace with empty comment
+                replacements.push({
+                    start: startIndex,
+                    end: startIndex + fullMatch.length,
+                    replacement: '// Ladder block with errors\n'
                 })
             }
         }
@@ -1553,6 +1641,55 @@ export class VovkPLCEditor {
                             } catch (e) {
                                 console.warn('STL lint failed for block', info.block.id, e)
                             }
+                        }
+                    }
+                }
+
+                // Lint ladder blocks for structural errors
+                for (const info of blocks) {
+                    if (info.block.type === 'ladder') {
+                        try {
+                            // Import ladder language module dynamically to use toIR (for ladder validation)
+                            const ladderLanguage = await import('../languages/ladder/language.js')
+                            // The block itself IS the ladder with blocks and connections arrays
+                            if (ladderLanguage.toIR && info.block.blocks) {
+                                const irResult = ladderLanguage.toIR(info.block)
+                                if (irResult.errors && irResult.errors.length > 0) {
+                                    const list = diagnosticsByBlock.get(info.block.id) || []
+                                    
+                                    for (const err of irResult.errors) {
+                                        // Add to diagnostics for this block
+                                        list.push({
+                                            type: err.type || 'error',
+                                            start: 0,
+                                            end: 0,
+                                            message: err.message || 'Ladder error',
+                                        })
+
+                                        // Add to problems list for the console panel
+                                        problemsList.push({
+                                            type: err.type || 'error',
+                                            message: err.message || 'Ladder error',
+                                            token: '',
+                                            line: 1,
+                                            column: 1,
+                                            start: 0,
+                                            end: 0,
+                                            blockId: info.block.id,
+                                            blockName: info.block.name || '',
+                                            blockType: 'ladder',
+                                            language: 'ladder',
+                                            languageStack: ['ladder'],
+                                            programName: info.program?.name || '',
+                                            programPath: info.program?.full_path || info.program?.path || '',
+                                            programId: info.program?.id || '',
+                                        })
+                                    }
+                                    diagnosticsByBlock.set(info.block.id, list)
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Ladder lint failed for block', info.block.id, e)
                         }
                     }
                 }
