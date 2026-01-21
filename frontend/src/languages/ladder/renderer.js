@@ -740,6 +740,199 @@ function formatTime(ms) {
 }
 
 
+const draw_counter = (editor, like, ctx, block) => {
+  const { ladder_block_width, ladder_block_height, style } = editor.properties
+  const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color, font_error_color } = style
+  block = getBlockState(editor, block)
+  if (!block.state) return // Block state not found, skip
+  const { x, y, type, state } = block
+  const symbol = state?.symbol
+  
+  const presetValue = typeof block.preset === 'number' ? block.preset : 10
+
+  const x0 = x * ladder_block_width
+  const y0 = y * ladder_block_height
+  const x1 = x0 + ladder_block_width
+  const y1 = y0 + ladder_block_height
+
+  const x_mid = x0 + ladder_block_width / 2
+  const y_mid = y0 + ladder_block_height / 2
+
+  // Counter box dimensions
+  const boxLeft = x0 + 8
+  const boxRight = x1 - 8
+  const boxTop = y0 + 12
+  const boxBottom = y1 - 12
+  const boxWidth = boxRight - boxLeft
+  const boxHeight = boxBottom - boxTop
+
+  // Get counter label (support old and new type names)
+  const counterLabels = {
+    'counter_u': 'CTU',
+    'counter_d': 'CTD',
+    'counter_ctu': 'CTU',
+    'counter_ctd': 'CTD',
+    'counter_ctud': 'CTUD'
+  }
+  const counterLabel = counterLabels[type] || 'CTR'
+
+  // Get current count value and calculate done state
+  let currentCount = 0
+  let done = false
+  if (symbol) {
+    // Calculate the absolute address for the counter
+    const offsets = ensureOffsets(editor.project?.offsets || {})
+    const counterOffset = offsets.counter?.offset || 768
+    const absoluteAddress = counterOffset + Math.floor(symbol.address) * 5 // Counters are 5 bytes per unit (4 bytes count + 1 byte flags)
+    
+    // Look up live value
+    const liveValues = editor.live_symbol_values
+    if (liveValues) {
+      let liveEntry = liveValues.get(symbol.name)
+      
+      // For counter instances, we need the i32 count value
+      if (!liveEntry || liveEntry.type === 'byte') {
+        const counterLiveEntry = [...liveValues.values()].find(
+          l => l.absoluteAddress === absoluteAddress && (l.type === 'i32' || l.type === 'dint')
+        )
+        if (counterLiveEntry) {
+          liveEntry = counterLiveEntry
+        }
+      }
+      
+      if (liveEntry && typeof liveEntry.value === 'number') {
+        currentCount = liveEntry.value
+        // CTU: done when count >= preset
+        // CTD: done when count <= 0
+        // CTUD: done when count >= preset
+        if (type === 'counter_d' || type === 'counter_ctd') {
+          done = currentCount <= 0
+        } else {
+          done = currentCount >= presetValue
+        }
+      }
+    }
+  }
+
+  if (like === 'highlight') {
+    // Use cyan for simulation, lime green for device/serial mode
+    const isSimulation = editor.window_manager.active_device === 'simulation'
+    const activeColor = isSimulation ? '#00ffff' : '#32cd32'
+    ctx.strokeStyle = activeColor
+    ctx.lineWidth = highlight_width
+    ctx.beginPath()
+    if (state?.powered) {
+      // Draw input line highlight
+      ctx.moveTo(x0, y_mid)
+      ctx.lineTo(boxLeft, y_mid)
+      // Draw output line highlight when done (Q = ON)
+      if (done) {
+        ctx.moveTo(boxRight, y_mid)
+        ctx.lineTo(x1, y_mid)
+      }
+    }
+    if (state?.terminated_output && done) {
+      ctx.moveTo(x1 - 2, y_mid - 12)
+      ctx.lineTo(x1 - 2, y_mid + 12)
+    }
+    ctx.stroke()
+    
+    // Draw active border outline when counter is done
+    if (done) {
+      ctx.strokeStyle = activeColor
+      ctx.lineWidth = 4
+      ctx.strokeRect(boxLeft - 2, boxTop - 2, boxWidth + 4, boxHeight + 4)
+    }
+    
+    // Draw progress bar highlight (only for CTU/CTUD, not CTD)
+    if (state?.powered && currentCount > 0 && !done && type !== 'counter_d' && type !== 'counter_ctd') {
+      const progress = Math.min(currentCount / presetValue, 1)
+      const progressWidth = (boxWidth - 4) * progress
+      ctx.fillStyle = activeColor
+      ctx.globalAlpha = 0.3
+      ctx.fillRect(boxLeft + 2, boxBottom - 8, progressWidth, 4)
+      ctx.globalAlpha = 1.0
+    }
+    return
+  }
+
+  if (like === 'symbol') {
+    const isSimulation = editor.window_manager.active_device === 'simulation'
+    const activeOnColor = isSimulation ? '#00ffff' : '#32cd32'
+    const activeOffColor = '#c04040'
+    const countingColor = isSimulation ? '#00cccc' : '#f0a020'
+    
+    ctx.strokeStyle = color
+    ctx.lineWidth = line_width
+
+    // Draw input/output horizontal lines
+    ctx.beginPath()
+    ctx.moveTo(x0, y_mid)
+    ctx.lineTo(boxLeft, y_mid)
+    ctx.moveTo(boxRight, y_mid)
+    ctx.lineTo(x1, y_mid)
+
+    // Draw counter box
+    ctx.rect(boxLeft, boxTop, boxWidth, boxHeight)
+
+    if (state?.terminated_output) {
+      ctx.moveTo(x1 - 2, y_mid - 8)
+      ctx.lineTo(x1 - 2, y_mid + 8)
+    }
+    ctx.stroke()
+
+    // Draw counter type label at top
+    ctx.fillStyle = font_color
+    ctx.font = 'bold 11px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText(counterLabel, x_mid, boxTop + 2)
+
+    // Draw symbol name below counter type
+    if (symbol) ctx.fillStyle = font_color
+    else ctx.fillStyle = font_error_color
+    ctx.font = '10px Arial'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(block.symbol || '???', x_mid, boxTop + 18)
+
+    // Draw preset value (PV)
+    ctx.fillStyle = font_color
+    ctx.font = '9px Arial'
+    ctx.textAlign = 'left'
+    ctx.fillText('PV:', boxLeft + 3, boxBottom - 16)
+    ctx.textAlign = 'right'
+    ctx.fillText(String(presetValue), boxRight - 3, boxBottom - 16)
+
+    // Draw current count (CV)
+    ctx.textAlign = 'left'
+    ctx.fillText('CV:', boxLeft + 3, boxBottom - 5)
+    ctx.textAlign = 'right'
+    if (editor.device_manager.connected) {
+      ctx.fillStyle = done ? activeOnColor : (currentCount > 0 ? countingColor : font_color)
+      ctx.fillText(String(currentCount), boxRight - 3, boxBottom - 5)
+    } else {
+      ctx.fillStyle = '#666'
+      ctx.fillText('---', boxRight - 3, boxBottom - 5)
+    }
+
+    // Draw Q (output) indicator with ON/OFF state
+    ctx.textAlign = 'right'
+    ctx.font = 'bold 10px Arial'
+    if (editor.device_manager.connected) {
+      ctx.fillStyle = done ? activeOnColor : activeOffColor
+      ctx.fillText(done ? 'ON' : 'OFF', boxRight - 3, y_mid)
+    } else {
+      ctx.fillStyle = '#666'
+      ctx.fillText('Q', boxRight - 3, y_mid)
+    }
+
+    return
+  }
+
+  throw new Error(`Invalid style: ${style}`)
+}
+
+
 // Draw links between blocks
 
 /** @typedef {{ from: PLC_LadderBlock , to: PLC_LadderBlock, powered: boolean }} LadderLink */
@@ -854,6 +1047,46 @@ const evaluate_ladder = (editor, ladder) => {
     return elapsed >= presetMs
   }
   
+  // Helper function to get counter's Q (done) output state
+  const getCounterDone = (block) => {
+    if (!['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)) return false
+    
+    const presetValue = typeof block.preset === 'number' ? block.preset : 10
+    const symbol = block.state?.symbol
+    
+    if (!symbol) return false
+    
+    // Get current count from live values
+    const liveValues = editor.live_symbol_values
+    if (!liveValues) return false
+    
+    let currentCount = 0
+    const offsets = ensureOffsets(editor.project?.offsets || {})
+    const counterOffset = offsets.counter?.offset || 768
+    const absoluteAddress = counterOffset + Math.floor(symbol.address) * 5
+    
+    let liveEntry = liveValues.get(symbol.name)
+    if (!liveEntry || liveEntry.type === 'byte') {
+      const counterLiveEntry = [...liveValues.values()].find(
+        l => l.absoluteAddress === absoluteAddress && (l.type === 'i32' || l.type === 'dint')
+      )
+      if (counterLiveEntry) {
+        liveEntry = counterLiveEntry
+      }
+    }
+    
+    if (liveEntry && typeof liveEntry.value === 'number') {
+      currentCount = liveEntry.value
+    }
+    
+    // CTU: done when count >= preset
+    // CTD: done when count <= 0
+    if (block.type === 'counter_d' || block.type === 'counter_ctd') {
+      return currentCount <= 0
+    }
+    return currentCount >= presetValue
+  }
+  
   blocks.forEach(block => {
     block = getBlockState(editor, block)
     if (!block.state) return // Block state not found, skip
@@ -868,8 +1101,9 @@ const evaluate_ladder = (editor, ladder) => {
     state.evaluated = false
     block.state.terminated_input = false
     block.state.terminated_output = false
-    // Calculate and store timer done state
+    // Calculate and store timer/counter done state
     block.state.timerDone = getTimerDone(block)
+    block.state.counterDone = getCounterDone(block)
   })
   connections.forEach(con => {
     con.state = con.state || {
@@ -902,14 +1136,17 @@ const evaluate_ladder = (editor, ladder) => {
     const isContact = block.type === 'contact'
     const isCoil = ['coil', 'coil_set', 'coil_rset'].includes(block.type)
     const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)
+    const isCounter = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)
     const pass_through = isCoil && !first
     const timer_pass_through = isTimer && !first && state.timerDone
-    state.powered = isContact || pass_through || timer_pass_through
+    const counter_pass_through = isCounter && !first && state.counterDone
+    state.powered = isContact || pass_through || timer_pass_through || counter_pass_through
     if (isCoil && first) return
     if (isTimer && first) return
+    if (isCounter && first) return
     const momentary = block.trigger !== 'normal'
-    // For timers, only propagate power if done (Q output is true)
-    const shouldPropagate = isTimer ? state.timerDone : ((!momentary && state.active) || pass_through)
+    // For timers/counters, only propagate power if done (Q output is true)
+    const shouldPropagate = isTimer ? state.timerDone : isCounter ? state.counterDone : ((!momentary && state.active) || pass_through)
     if (shouldPropagate) {
       state.evaluated = true
       const outgoing_connections = connections.filter(con => con.from.id === block.id)
@@ -1163,10 +1400,11 @@ export const ladderRenderer = {
     // Draw the ladder highlights (for live values)
     blocks.forEach(b => {
       if (live) {
-        // Only draw highlights if we are live (connected AND monitoring)
+        // Only draw highlights if we are live (connected AND monitoring active)
         if (b.type === 'contact') draw_contact(editor, 'highlight', ctx, b)
         if (['coil', 'coil_set', 'coil_rset'].includes(b.type)) draw_coil(editor, 'highlight', ctx, b)
         if (['timer_ton', 'timer_tof', 'timer_tp'].includes(b.type)) draw_timer(editor, 'highlight', ctx, b)
+        if (['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(b.type)) draw_counter(editor, 'highlight', ctx, b)
       }
     })
 
@@ -1192,6 +1430,7 @@ export const ladderRenderer = {
       if (b.type === 'contact') draw_contact(editor, 'symbol', ctx, b)
       if (['coil', 'coil_set', 'coil_rset'].includes(b.type)) draw_coil(editor, 'symbol', ctx, b)
       if (['timer_ton', 'timer_tof', 'timer_tp'].includes(b.type)) draw_timer(editor, 'symbol', ctx, b)
+      if (['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(b.type)) draw_counter(editor, 'symbol', ctx, b)
     })
     links.forEach(link => {
       draw_connection(editor, 'symbol', ctx, link)
@@ -1548,8 +1787,11 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       
       if (block) {
         const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)
+        const isCounter = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)
         if (isTimer) {
           promptForTimerParameters(editor, block, ladder)
+        } else if (isCounter) {
+          promptForCounterParameters(editor, block, ladder)
         } else {
           promptForSymbol(editor, block, ladder)
         }
@@ -1655,16 +1897,34 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           menuItems.push(
             {
               type: 'submenu', name: 'insert', label: 'Insert', items: [
-                { type: 'item', name: 'insert_contact', label: 'Contact (NO)' },
-                { type: 'item', name: 'insert_contact_nc', label: 'Contact (NC)' },
-                { type: 'separator' },
-                { type: 'item', name: 'insert_coil', label: 'Coil' },
-                { type: 'item', name: 'insert_coil_set', label: 'Coil (Set)' },
-                { type: 'item', name: 'insert_coil_reset', label: 'Coil (Reset)' },
-                { type: 'separator' },
-                { type: 'item', name: 'insert_timer_ton', label: 'Timer TON (On Delay)' },
-                { type: 'item', name: 'insert_timer_tof', label: 'Timer TOF (Off Delay)' },
-                { type: 'item', name: 'insert_timer_tp', label: 'Timer TP (Pulse)' },
+                {
+                  type: 'submenu', name: 'insert_contacts', label: 'Contacts', items: [
+                    { type: 'item', name: 'insert_contact', label: 'Contact (NO)' },
+                    { type: 'item', name: 'insert_contact_nc', label: 'Contact (NC)' },
+                    { type: 'item', name: 'insert_contact_rising', label: 'Rising Edge (P)' },
+                    { type: 'item', name: 'insert_contact_falling', label: 'Falling Edge (N)' },
+                  ]
+                },
+                {
+                  type: 'submenu', name: 'insert_coils', label: 'Coils', items: [
+                    { type: 'item', name: 'insert_coil', label: 'Coil (=)' },
+                    { type: 'item', name: 'insert_coil_set', label: 'Set Coil (S)' },
+                    { type: 'item', name: 'insert_coil_reset', label: 'Reset Coil (R)' },
+                  ]
+                },
+                {
+                  type: 'submenu', name: 'insert_timers', label: 'Timers', items: [
+                    { type: 'item', name: 'insert_timer_ton', label: 'TON (On Delay)' },
+                    { type: 'item', name: 'insert_timer_tof', label: 'TOF (Off Delay)' },
+                    { type: 'item', name: 'insert_timer_tp', label: 'TP (Pulse)' },
+                  ]
+                },
+                {
+                  type: 'submenu', name: 'insert_counters', label: 'Counters', items: [
+                    { type: 'item', name: 'insert_counter_u', label: 'CTU (Count Up)' },
+                    { type: 'item', name: 'insert_counter_d', label: 'CTD (Count Down)' },
+                  ]
+                },
               ]
             },
             { type: 'separator' }
@@ -1676,6 +1936,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           const isCoil = blockAtPosition.type === 'coil' || blockAtPosition.type === 'coil_set' || blockAtPosition.type === 'coil_rset'
           const isContact = blockAtPosition.type === 'contact'
           const isTimer = blockAtPosition.type === 'timer_ton' || blockAtPosition.type === 'timer_tof' || blockAtPosition.type === 'timer_tp'
+          const isCounter = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(blockAtPosition.type)
           
           // Show different edit option based on block type
           if (isTimer) {
@@ -1687,6 +1948,18 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             const timerLabel = timerTypeLabels[blockAtPosition.type] || 'Timer'
             menuItems.push(
               { type: 'item', name: 'edit_timer', label: `Edit ${timerLabel}...` }
+            )
+          } else if (isCounter) {
+            const counterTypeLabels = {
+              'counter_u': 'CTU',
+              'counter_d': 'CTD',
+              'counter_ctu': 'CTU',
+              'counter_ctd': 'CTD',
+              'counter_ctud': 'CTUD'
+            }
+            const counterLabel = counterTypeLabels[blockAtPosition.type] || 'Counter'
+            menuItems.push(
+              { type: 'item', name: 'edit_counter', label: `Edit ${counterLabel}...` }
             )
           } else {
             menuItems.push(
@@ -1735,6 +2008,18 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             )
           }
           
+          // Counter-specific options
+          if (isCounter) {
+            menuItems.push(
+              {
+                type: 'submenu', name: 'change_counter_type', label: 'Counter Type', items: [
+                  { type: 'item', name: 'counter_type_ctu', label: 'CTU (Count Up)', className: (blockAtPosition.type === 'counter_u' || blockAtPosition.type === 'counter_ctu') ? 'selected' : '' },
+                  { type: 'item', name: 'counter_type_ctd', label: 'CTD (Count Down)', className: (blockAtPosition.type === 'counter_d' || blockAtPosition.type === 'counter_ctd') ? 'selected' : '' },
+                ]
+              }
+            )
+          }
+          
           menuItems.push({ type: 'separator' })
         }
 
@@ -1778,7 +2063,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             inverted: false,
             trigger: 'normal',
             symbol: '',
-            preset: 1000 // Default preset for timers
+            preset: 1000 // Default preset for timers/counters
           }
 
           if (selected_action === 'insert_contact') {
@@ -1787,6 +2072,14 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           } else if (selected_action === 'insert_contact_nc') {
             newBlock.type = 'contact'
             newBlock.inverted = true
+          } else if (selected_action === 'insert_contact_rising') {
+            newBlock.type = 'contact'
+            newBlock.inverted = false
+            newBlock.trigger = 'rising'
+          } else if (selected_action === 'insert_contact_falling') {
+            newBlock.type = 'contact'
+            newBlock.inverted = false
+            newBlock.trigger = 'falling'
           } else if (selected_action === 'insert_coil') {
             newBlock.type = 'coil'
           } else if (selected_action === 'insert_coil_set') {
@@ -1799,6 +2092,10 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             newBlock.type = 'timer_tof'
           } else if (selected_action === 'insert_timer_tp') {
             newBlock.type = 'timer_tp'
+          } else if (selected_action === 'insert_counter_u') {
+            newBlock.type = 'counter_u'
+          } else if (selected_action === 'insert_counter_d') {
+            newBlock.type = 'counter_d'
           }
 
           ladder.blocks.push(newBlock)
@@ -1813,9 +2110,13 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
 
           // Prompt for symbol/parameters based on block type
           const isTimerBlock = ['timer_ton', 'timer_tof', 'timer_tp'].includes(newBlock.type)
+          const isCounterBlock = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(newBlock.type)
           if (isTimerBlock) {
             // @ts-ignore - newBlock type is correct at runtime
             promptForTimerParameters(editor, newBlock, ladder)
+          } else if (isCounterBlock) {
+            // @ts-ignore - newBlock type is correct at runtime
+            promptForCounterParameters(editor, newBlock, ladder)
           } else {
             // @ts-ignore - newBlock type is correct at runtime
             promptForSymbol(editor, newBlock, ladder)
@@ -1860,11 +2161,31 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           }
         }
 
+        // Handle counter type change
+        if (selected_action?.startsWith('counter_type_')) {
+          const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+          if (blockAtPosition) {
+            if (selected_action === 'counter_type_ctu') {
+              blockAtPosition.type = 'counter_u'
+            } else if (selected_action === 'counter_type_ctd') {
+              blockAtPosition.type = 'counter_d'
+            }
+          }
+        }
+
         // Handle edit timer parameters
         if (selected_action === 'edit_timer') {
           const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
           if (blockAtPosition) {
             promptForTimerParameters(editor, blockAtPosition, ladder)
+          }
+        }
+
+        // Handle edit counter parameters
+        if (selected_action === 'edit_counter') {
+          const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+          if (blockAtPosition) {
+            promptForCounterParameters(editor, blockAtPosition, ladder)
           }
         }
 
@@ -2404,7 +2725,12 @@ async function promptForSymbol(editor, block, ladder) {
     'coil_rset': 'Coil (Reset)',
     'timer_ton': 'Timer TON',
     'timer_tof': 'Timer TOF',
-    'timer_tp': 'Timer TP'
+    'timer_tp': 'Timer TP',
+    'counter_u': 'Counter CTU',
+    'counter_d': 'Counter CTD',
+    'counter_ctu': 'Counter CTU',
+    'counter_ctd': 'Counter CTD',
+    'counter_ctud': 'Counter CTUD'
   }
   const blockTypeLabel = blockTypeLabels[block.type] || block.type
   const currentSymbol = block.symbol || ''
@@ -2611,5 +2937,62 @@ async function promptForTimerParameters(editor, block, ladder) {
   }
 }
 
+async function promptForCounterParameters(editor, block, ladder) {
+  const counterTypeLabels = {
+    'counter_u': 'CTU (Count Up)',
+    'counter_d': 'CTD (Count Down)',
+    'counter_ctu': 'CTU (Count Up)',
+    'counter_ctd': 'CTD (Count Down)',
+    'counter_ctud': 'CTUD (Up/Down)'
+  }
+  const counterTypeLabel = counterTypeLabels[block.type] || 'Counter'
+  const currentSymbol = block.symbol || ''
+  const currentPreset = block.preset || 10
 
+  const result = await Popup.form({
+    title: `Edit ${counterTypeLabel}`,
+    description: 'Configure counter symbol and preset value',
+    inputs: [
+      { 
+        name: 'symbol', 
+        label: 'Counter Symbol', 
+        type: 'text', 
+        value: currentSymbol,
+        placeholder: 'e.g. Counter_1 or C0'
+      },
+      { 
+        name: 'preset', 
+        label: 'Preset Value (PV)', 
+        type: 'number', 
+        value: currentPreset,
+        placeholder: 'e.g. 10'
+      }
+    ],
+    verify: values => {
+      const preset = values.preset
+      const num = parseInt(preset.value)
+      if (isNaN(num) || num < 0) {
+        return preset.setError('Preset must be a non-negative integer')
+      }
+      preset.clearError()
+      return true
+    },
+    buttons: [
+      { text: 'OK', value: 'ok' },
+      { text: 'Cancel', value: 'cancel' }
+    ]
+  })
+
+  if (result && result.symbol !== undefined) {
+    block.symbol = result.symbol.trim()
+    block.preset = parseInt(result.preset) || 10
+    
+    // Clear cached state so it gets re-resolved
+    block.state = undefined
+    // Re-render the ladder
+    if (ladder) {
+      ladderRenderer.render(editor, ladder)
+    }
+  }
+}
 export default ladderRenderer

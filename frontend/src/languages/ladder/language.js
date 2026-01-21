@@ -3,7 +3,7 @@ import { LanguageModule } from "../types.js"
 import { evaluateLadder } from "./evaluator.js"
 
 
-/** @typedef { 'contact' | 'coil' | 'coil_set' | 'coil_rset' | 'timer_ton' | 'timer_tof' | 'timer_tp' } PLC_Ladder_Block_Type * @type { PLC_Ladder_Block_Type } */
+/** @typedef { 'contact' | 'coil' | 'coil_set' | 'coil_rset' | 'timer_ton' | 'timer_tof' | 'timer_tp' | 'counter_u' | 'counter_d' } PLC_Ladder_Block_Type * @type { PLC_Ladder_Block_Type } */
 export let PLC_Ladder_Block_Type
 
 /** @typedef { 'normal' | 'rising' | 'falling' | 'change' } PLC_Trigger_Type * @type { PLC_Trigger_Type } */
@@ -77,6 +77,11 @@ function blockToElement(block) {
         // @ts-ignore
         element.preset = block.preset || 'T#1s'
     }
+    // Add preset for counters (support old type names)
+    if (['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)) {
+        // @ts-ignore
+        element.preset = block.preset || 10
+    }
     return element
 }
 
@@ -124,6 +129,7 @@ function ladderToIR(ladder) {
         const disconnectedContacts = blocks.filter(b => b.type === 'contact')
         const disconnectedCoils = blocks.filter(b => b.type === 'coil' || b.type === 'coil_set' || b.type === 'coil_rset')
         const disconnectedTimers = blocks.filter(b => b.type === 'timer_ton' || b.type === 'timer_tof' || b.type === 'timer_tp')
+        const disconnectedCounters = blocks.filter(b => b.type === 'counter_u' || b.type === 'counter_d' || b.type === 'counter_ctu' || b.type === 'counter_ctd' || b.type === 'counter_ctud')
         
         if (disconnectedContacts.length > 0) {
             errors.push({
@@ -144,6 +150,13 @@ function ladderToIR(ladder) {
                 message: `${disconnectedTimers.length} timer(s) not connected to any input: ${disconnectedTimers.map(b => b.symbol).join(', ')}`,
                 type: 'error',
                 blockIds: disconnectedTimers.map(b => b.id)
+            })
+        }
+        if (disconnectedCounters.length > 0) {
+            errors.push({
+                message: `${disconnectedCounters.length} counter(s) not connected to any input: ${disconnectedCounters.map(b => b.symbol).join(', ')}`,
+                type: 'error',
+                blockIds: disconnectedCounters.map(b => b.id)
             })
         }
         return { rungs: [], errors }
@@ -174,6 +187,7 @@ function ladderToIR(ladder) {
         const contacts = disconnectedBlocks.filter(b => b.type === 'contact')
         const coils = disconnectedBlocks.filter(b => b.type === 'coil' || b.type === 'coil_set' || b.type === 'coil_rset')
         const timers = disconnectedBlocks.filter(b => b.type === 'timer_ton' || b.type === 'timer_tof' || b.type === 'timer_tp')
+        const counters = disconnectedBlocks.filter(b => b.type === 'counter_u' || b.type === 'counter_d' || b.type === 'counter_ctu' || b.type === 'counter_ctd' || b.type === 'counter_ctud')
         
         if (contacts.length > 0) {
             errors.push({
@@ -194,6 +208,13 @@ function ladderToIR(ladder) {
                 message: `${timers.length} timer(s) not connected: ${timers.map(b => b.symbol).join(', ')}`,
                 type: 'error',
                 blockIds: timers.map(b => b.id)
+            })
+        }
+        if (counters.length > 0) {
+            errors.push({
+                message: `${counters.length} counter(s) not connected: ${counters.map(b => b.symbol).join(', ')}`,
+                type: 'error',
+                blockIds: counters.map(b => b.id)
             })
         }
     }
@@ -218,11 +239,25 @@ function ladderToIR(ladder) {
         (b.type === 'coil' || b.type === 'coil_set' || b.type === 'coil_rset') &&
         (!reverseMap.has(b.id) || reverseMap.get(b.id).length === 0)
     )
+    // Find timers/counters that have no incoming connections
+    const outputsWithoutInputs = connectedBlocks.filter(b =>
+        (b.type === 'timer_ton' || b.type === 'timer_tof' || b.type === 'timer_tp' ||
+         b.type === 'counter_u' || b.type === 'counter_d' ||
+         b.type === 'counter_ctu' || b.type === 'counter_ctd' || b.type === 'counter_ctud') &&
+        (!reverseMap.has(b.id) || reverseMap.get(b.id).length === 0)
+    )
     if (coilsWithoutInputs.length > 0) {
         errors.push({
             message: `${coilsWithoutInputs.length} coil(s) have no input path: ${coilsWithoutInputs.map(b => b.symbol).join(', ')}`,
             type: 'error',
             blockIds: coilsWithoutInputs.map(b => b.id)
+        })
+    }
+    if (outputsWithoutInputs.length > 0) {
+        errors.push({
+            message: `${outputsWithoutInputs.length} timer/counter(s) have no input path: ${outputsWithoutInputs.map(b => b.symbol).join(', ')}`,
+            type: 'error',
+            blockIds: outputsWithoutInputs.map(b => b.id)
         })
     }
 
@@ -342,7 +377,10 @@ function ladderToIR(ladder) {
         // Find all coils (outputs) in this network
         const networkCoils = connectedBlocks.filter(b => 
             network.has(b.id) && 
-            (b.type === 'coil' || b.type === 'coil_set' || b.type === 'coil_rset')
+            (b.type === 'coil' || b.type === 'coil_set' || b.type === 'coil_rset' ||
+             b.type === 'timer_ton' || b.type === 'timer_tof' || b.type === 'timer_tp' ||
+             b.type === 'counter_u' || b.type === 'counter_d' ||
+             b.type === 'counter_ctu' || b.type === 'counter_ctd' || b.type === 'counter_ctud')
         )
         
         // Group coils that share the same input(s) - parallel coils

@@ -2,9 +2,9 @@ import { getEventPath } from "../utils/tools.js"
 import { PLCEditor } from "../utils/types.js"
 
 /**
- *  @typedef {{ type: 'item', name: string, label: string, disabled?: boolean, hidden?: boolean, className?: string }} MenuItem 
+ *  @typedef {{ type: 'item', name: string, label: string, icon?: string, disabled?: boolean, hidden?: boolean, className?: string }} MenuItem 
  *  @typedef {{ type: 'separator', name?: undefined, label?: undefined, hidden?: boolean, className?: string }} MenuSeparator
- *  @typedef {{ type: 'submenu', name: string, label: string, items: MenuElement[], disabled?: boolean, hidden?: boolean, className?: string }} MenuSubmenu
+ *  @typedef {{ type: 'submenu', name: string, label: string, icon?: string, items: MenuElement[], disabled?: boolean, hidden?: boolean, className?: string }} MenuSubmenu
  *  @typedef { MenuItem | MenuSeparator | MenuSubmenu } MenuElement
  *  @typedef { (event: MouseEvent, element: any) => MenuElement[] | undefined } MenuOnOpen 
  *  @typedef { (selected: string, event: MouseEvent, element: any) => void } MenuOnClose  
@@ -55,7 +55,19 @@ export default class Menu {
       div.classList.add('item')
       if (className) div.classList.add(...className.split(' '))
       if (item.disabled) div.classList.add('disabled')
-      div.innerText = item.label
+      
+      // Add icon if provided
+      if (item.icon) {
+        const icon = document.createElement('span')
+        icon.classList.add('codicon', `codicon-${item.icon}`)
+        icon.style.marginRight = '6px'
+        div.appendChild(icon)
+        const labelSpan = document.createElement('span')
+        labelSpan.innerText = item.label
+        div.appendChild(labelSpan)
+      } else {
+        div.innerText = item.label
+      }
 
       menu.appendChild(div)
 
