@@ -279,71 +279,213 @@ function ladderToIR(ladder) {
         
         if (netStartBlocks.length === 0) continue
 
-        // Trace paths specific to each start block
-        // We accumulate paths and separate them into main elements and branches
-        // But for common holding circuit pattern (A.X... + B.X...) = (A+B).X...
-        // We will simple emit multiple full paths as main elements + branches
-        // The runtime treats branches as OR'd conditions
-        
-        /** @type {Array<Array<any>>} */
-        const paths = []
-        let hasCoil = false
-
-        for (const startBlock of netStartBlocks) {
-            const elements = []
-            const queue = [startBlock.id]
-            const pathVisited = new Set()
+        // Helper to find common successor (First Convergence Node)
+        const findConvergence = (nodes) => {
+            if (nodes.length < 2) return null
             
-            // Simple trace for linear path
-            // Note: This simple BFS flattens the graph. 
-            // Truly complex graphs with internal splits/joins require DAG analysis.
-            // But for Ladder->STL flattening, repeating shared tail is valid Sum-of-Products.
-            while (queue.length > 0) {
-                const currentId = queue.shift()
-                if (!currentId || pathVisited.has(currentId)) continue
+            // Build reachability map for each node
+            // Map<NodeID, Count>
+            const reachCounts = new Map()
+            const visited = new Set()
+            
+            // Allow checking "null" as a path terminator? No, we need blocks.
+            // BFS from all nodes strictly using adjacencyMap
+            
+            // Optimization: Only traverse within 'network'
+            // We want the FIRST valid node that is reachable from ALL start 'nodes'
+            
+            // We can do a lock-step search or full reachability
+            
+            // For each start node, find all reachable nodes
+            for (const startNode of nodes) {
+                const nodeVisited = new Set()
+                const q = [startNode.id]
+                nodeVisited.add(startNode.id)
                 
-                // Don't re-visit nodes already in THIS path
-                // But DO visit nodes that were visited by OTHER paths (shared tail)
-                pathVisited.add(currentId)
-
-                const block = blocks.find(b => b.id === currentId)
-                if (!block) continue
-
-                elements.push(blockToElement(block))
-                
-                if (block.type.startsWith('coil')) hasCoil = true
-
-                const nextIds = adjacencyMap.get(currentId) || []
-                // If multiple outputs, we push all. BFS will process them.
-                for (const nextId of nextIds) {
-                    if (!pathVisited.has(nextId)) {
-                        queue.push(nextId)
+                while (q.length > 0) {
+                    const curr = q.shift()
+                    
+                    // Don't count the start nodes themselves as convergence points for themselves
+                    // (Unless looping, but Ladder is DAG usually).
+                    // Actually, if we start at A and B, and A->B. Then B is reachable from A and B.
+                    // So B is a convergence point.
+                    
+                    if (!reachCounts.has(curr)) reachCounts.set(curr, 0)
+                    reachCounts.set(curr, reachCounts.get(curr) + 1)
+                    
+                    const neighbors = adjacencyMap.get(curr) || []
+                    for (const next of neighbors) {
+                        if (network.has(next) && !nodeVisited.has(next)) {
+                            nodeVisited.add(next)
+                            q.push(next)
+                        }
                     }
                 }
             }
-            if (elements.length > 0) {
-                paths.push(elements)
+            
+            // Find candidate with count == nodes.length
+            // We want the one "topologically first" or "shallowest".
+            // Actually, we want the one that is closest to all?
+            // "Dominator" usually.
+            // Simple heuristic: Filter candidates, check if any candidate is reachable from another candidate.
+            // The one not reachable from any other candidate is the first one.
+            
+            const candidates = []
+            for (const [id, count] of reachCounts.entries()) {
+                if (count === nodes.length) {
+                    // It must not be one of the start nodes (unless logic loops back?)
+                    // In `A->B` case with starts `[A, B]`. Reach(A)=1, Reach(B)=2.
+                    // So B is candidate. Correct.
+                    candidates.push(id)
+                }
             }
+            
+            if (candidates.length === 0) return null
+            
+            // Find the first one (not reachable from other candidates)
+            // Or sort by sorting logic?
+            // Actually in DAG, there is a unique first one usually?
+            // Let's verify reachability between candidates.
+            
+            // We can reuse reachCounts? No.
+            // Check if Candidate A reaches Candidate B.
+            
+            let bestCandidate = candidates[0]
+            
+            // If we have candidates C1, C2.
+            // If C1 -> ... -> C2. Then C1 is BEFORE C2. We want C1.
+            
+            // We can run a mini-BFS from each candidate to see if it reaches others.
+            // The one that reaches others is "earlier".
+            // The one NOT reachable from others is "earliest".
+            
+            const reachableFromOthers = new Set()
+            for (const c1 of candidates) {
+                const q = [c1]
+                const v = new Set([c1])
+                while (q.length > 0) {
+                    const curr = q.shift()
+                    const neighbors = adjacencyMap.get(curr) || []
+                    for (const n of neighbors) {
+                        if (candidates.includes(n) && !v.has(n)) {
+                            reachableFromOthers.add(n)
+                            v.add(n)
+                            q.push(n)
+                        } else if (!v.has(n) && network.has(n)) {
+                            v.add(n)
+                            q.push(n)
+                        }
+                    }
+                }
+            }
+            
+            const roots = candidates.filter(c => !reachableFromOthers.has(c))
+            
+            // If multiple roots (e.g. Diamond shape that merges later?), pick one.
+            // Ideally should be just one merge point for the branches.
+            
+            // Also, exclude start nodes themselves if they were passed in? Use case: A->B, [A,B].
+            // Candidates: B. Roots: B.
+            // But we start at A and B. Convergence is B.
+            // Logic: trace(A->B) and trace(B->B).
+            
+            return roots.length > 0 ? blocks.find(b => b.id === roots[0]) : null
         }
 
-        if (paths.length > 0 && hasCoil) {
-             // Construct Rung
-             // First path is "Main Elements"
-             // Subsequent paths are "Branches"
-             rungs.push({
-                 comment: ladder.comment || ladder.name,
-                 elements: paths[0],
-                 branches: paths.slice(1).map(p => ({ elements: p }))
-             })
-             
-             // Mark all as visited globally so specific warnings don't trigger?
-             // Actually visitedBlocks is used for "Unprocessed blocks" warning?
-             // No, contactsWithoutCoils logic uses visitedBlocks.
-             for (const id of network) visitedBlocks.add(id)
+        const traceGraph = (currentNodes, stopNodeId = null) => {
+            const result = []
+            
+            // Keep going until done or merged
+            while (currentNodes.length > 0) {
+                // Remove duplicates in currentNodes
+                const uniqueIds = [...new Set(currentNodes.map(n => n.id))]
+                currentNodes = uniqueIds.map(id => blocks.find(b => b.id === id))
 
-        } else if (paths.length > 0 && !hasCoil) {
-             contactsWithoutCoils.push(...netStartBlocks)
+                // If stopped
+                if (stopNodeId && currentNodes.some(n => n.id === stopNodeId)) {
+                    // Logic break: We reached the convergence point.
+                    // But all branches must reach it.
+                    // In recursive call, we stop HERE.
+                    return result
+                }
+
+                // 1. Check for Convergence if multiple paths
+                if (currentNodes.length > 1) {
+                    // Try to find a global convergence for specific active set
+                    const mergeNode = findConvergence(currentNodes)
+                    
+                    if (mergeNode) {
+                        // Recursively trace each branch until mergeNode
+                        const branches = currentNodes.map(node => ({
+                            elements: traceGraph([node], mergeNode.id)
+                        }))
+                        
+                        result.push({
+                            type: 'or',
+                            branches: branches
+                        })
+                        
+                        // Continue from the merge node
+                        currentNodes = [mergeNode]
+                        continue
+                    }
+                }
+                
+                // 2. Sequential Processing
+                // If we are here, we either have 1 node, or multiple disjoint nodes (no convergence found)
+                
+                if (currentNodes.length === 1) {
+                    const node = currentNodes[0]
+                     // If we hit stopNode (should be caught above, but verify)
+                    if (stopNodeId && node.id === stopNodeId) return result
+                    
+                    result.push(blockToElement(node))
+                    
+                    const nextIds = adjacencyMap.get(node.id) || []
+                    const nextBlocks = nextIds.map(id => blocks.find(b => b.id === id))
+                    
+                    currentNodes = nextBlocks
+                
+                } else {
+                    // Multiple nodes, no convergence found.
+                    // This implies disjoint parallel paths (e.g. driving separate coils).
+                    // We must output them. But we can't wrap in 'OR' if they don't merge (logic wise?)
+                    // Actually, "A" and "B" running parallel is "OR" logic in terms of execution flow?
+                    // No, it's just multiple independent statements.
+                    // But effectively we can wrap them in 'branches' to process them all.
+                    // The runtime likely treats 'branches' as "Execute these too".
+                    // But `type: 'or'` implies RLO merge.
+                    
+                    // Fallback: Treat as independent branches that terminate.
+                     const branches = currentNodes.map(node => ({
+                        elements: traceGraph([node], null)
+                    }))
+                    
+                    // We map this to Top-Level branches? 
+                    // Or push an OR block that doesn't merge?
+                    // Let's use 'or' block.
+                    result.push({
+                        type: 'or',
+                        branches: branches
+                    })
+                    
+                    // We processed everything.
+                    currentNodes = []
+                }
+            }
+            return result
         }
+
+        const mainElements = traceGraph(netStartBlocks, null)
+        
+        // Push the rung with just elements (nested structure handles the complexity)
+        rungs.push({
+            comment: ladder.comment || ladder.name,
+            elements: mainElements
+        })
+        
+        // Mark all nodes in network as visited to avoid errors
+        for (const id of network) visitedBlocks.add(id)
     }
 
     // Report contacts that don't lead to coils
