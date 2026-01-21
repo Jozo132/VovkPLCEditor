@@ -279,86 +279,49 @@ function ladderToIR(ladder) {
         
         if (netStartBlocks.length === 0) continue
 
-        // Helper to find common successor (First Convergence Node)
+        // Helper to find common successor for a subset of nodes (Partial Convergence)
         const findConvergence = (nodes) => {
             if (nodes.length < 2) return null
             
-            // Build reachability map for each node
-            // Map<NodeID, Count>
-            const reachCounts = new Map()
-            const visited = new Set()
+            // Build reachability map: NodeId -> Set of StartNode indices
+            const reachMap = new Map() 
             
-            // Allow checking "null" as a path terminator? No, we need blocks.
-            // BFS from all nodes strictly using adjacencyMap
-            
-            // Optimization: Only traverse within 'network'
-            // We want the FIRST valid node that is reachable from ALL start 'nodes'
-            
-            // We can do a lock-step search or full reachability
-            
-            // For each start node, find all reachable nodes
-            for (const startNode of nodes) {
-                const nodeVisited = new Set()
+            for (let i = 0; i < nodes.length; i++) {
+                const startNode = nodes[i]
                 const q = [startNode.id]
-                nodeVisited.add(startNode.id)
+                const visited = new Set([startNode.id])
                 
                 while (q.length > 0) {
                     const curr = q.shift()
                     
-                    // Don't count the start nodes themselves as convergence points for themselves
-                    // (Unless looping, but Ladder is DAG usually).
-                    // Actually, if we start at A and B, and A->B. Then B is reachable from A and B.
-                    // So B is a convergence point.
-                    
-                    if (!reachCounts.has(curr)) reachCounts.set(curr, 0)
-                    reachCounts.set(curr, reachCounts.get(curr) + 1)
+                    // Register reachability
+                    if (curr !== startNode.id) {
+                         if (!reachMap.has(curr)) reachMap.set(curr, new Set())
+                         reachMap.get(curr).add(i)
+                    } else if (nodes.length > 1 && nodes.some((n, idx) => idx !== i && n.id === curr)) {
+                         if (!reachMap.has(curr)) reachMap.set(curr, new Set())
+                         reachMap.get(curr).add(i)
+                    }
                     
                     const neighbors = adjacencyMap.get(curr) || []
                     for (const next of neighbors) {
-                        if (network.has(next) && !nodeVisited.has(next)) {
-                            nodeVisited.add(next)
+                        if (network.has(next) && !visited.has(next)) {
+                            visited.add(next)
                             q.push(next)
                         }
                     }
                 }
             }
             
-            // Find candidate with count == nodes.length
-            // We want the one "topologically first" or "shallowest".
-            // Actually, we want the one that is closest to all?
-            // "Dominator" usually.
-            // Simple heuristic: Filter candidates, check if any candidate is reachable from another candidate.
-            // The one not reachable from any other candidate is the first one.
-            
+            // Find candidates reachable by at least 2 start nodes
             const candidates = []
-            for (const [id, count] of reachCounts.entries()) {
-                if (count === nodes.length) {
-                    // It must not be one of the start nodes (unless logic loops back?)
-                    // In `A->B` case with starts `[A, B]`. Reach(A)=1, Reach(B)=2.
-                    // So B is candidate. Correct.
-                    candidates.push(id)
-                }
+            for (const [id, sources] of reachMap.entries()) {
+                if (sources.size >= 2) candidates.push(id)
             }
             
             if (candidates.length === 0) return null
             
-            // Find the first one (not reachable from other candidates)
-            // Or sort by sorting logic?
-            // Actually in DAG, there is a unique first one usually?
-            // Let's verify reachability between candidates.
-            
-            // We can reuse reachCounts? No.
-            // Check if Candidate A reaches Candidate B.
-            
-            let bestCandidate = candidates[0]
-            
-            // If we have candidates C1, C2.
-            // If C1 -> ... -> C2. Then C1 is BEFORE C2. We want C1.
-            
-            // We can run a mini-BFS from each candidate to see if it reaches others.
-            // The one that reaches others is "earlier".
-            // The one NOT reachable from others is "earliest".
-            
+            // Filter candidates to find the "Topologically First" ones
             const reachableFromOthers = new Set()
             for (const c1 of candidates) {
                 const q = [c1]
@@ -380,43 +343,36 @@ function ladderToIR(ladder) {
             }
             
             const roots = candidates.filter(c => !reachableFromOthers.has(c))
+            if (roots.length === 0) return null
             
-            // If multiple roots (e.g. Diamond shape that merges later?), pick one.
-            // Ideally should be just one merge point for the branches.
+            const mergeNodeId = roots[0]
+            const sourceIndices = reachMap.get(mergeNodeId)
             
-            // Also, exclude start nodes themselves if they were passed in? Use case: A->B, [A,B].
-            // Candidates: B. Roots: B.
-            // But we start at A and B. Convergence is B.
-            // Logic: trace(A->B) and trace(B->B).
-            
-            return roots.length > 0 ? blocks.find(b => b.id === roots[0]) : null
+            return {
+                node: blocks.find(b => b.id === mergeNodeId),
+                sources: nodes.filter((_, i) => sourceIndices.has(i))
+            }
         }
 
         const traceGraph = (currentNodes, stopNodeId = null) => {
             const result = []
             
-            // Keep going until done or merged
             while (currentNodes.length > 0) {
-                // Remove duplicates in currentNodes
                 const uniqueIds = [...new Set(currentNodes.map(n => n.id))]
                 currentNodes = uniqueIds.map(id => blocks.find(b => b.id === id))
 
-                // If stopped
                 if (stopNodeId && currentNodes.some(n => n.id === stopNodeId)) {
-                    // Logic break: We reached the convergence point.
-                    // But all branches must reach it.
-                    // In recursive call, we stop HERE.
                     return result
                 }
 
-                // 1. Check for Convergence if multiple paths
+                // 1. Check for Convergence (Partial or Full)
                 if (currentNodes.length > 1) {
-                    // Try to find a global convergence for specific active set
-                    const mergeNode = findConvergence(currentNodes)
+                    const convergence = findConvergence(currentNodes)
                     
-                    if (mergeNode) {
-                        // Recursively trace each branch until mergeNode
-                        const branches = currentNodes.map(node => ({
+                    if (convergence) {
+                        const { node: mergeNode, sources: convergingNodes } = convergence
+                        
+                        const branches = convergingNodes.map(node => ({
                             elements: traceGraph([node], mergeNode.id)
                         }))
                         
@@ -425,18 +381,20 @@ function ladderToIR(ladder) {
                             branches: branches
                         })
                         
-                        // Continue from the merge node
-                        currentNodes = [mergeNode]
+                        const remainingNodes = currentNodes.filter(n => !convergingNodes.includes(n))
+                        if (!remainingNodes.some(n => n.id === mergeNode.id)) {
+                            remainingNodes.push(mergeNode)
+                        }
+                        
+                        remainingNodes.sort((a,b) => a.y - b.y)
+                        currentNodes = remainingNodes
                         continue
                     }
                 }
                 
                 // 2. Sequential Processing
-                // If we are here, we either have 1 node, or multiple disjoint nodes (no convergence found)
-                
                 if (currentNodes.length === 1) {
                     const node = currentNodes[0]
-                     // If we hit stopNode (should be caught above, but verify)
                     if (stopNodeId && node.id === stopNodeId) return result
                     
                     result.push(blockToElement(node))
@@ -447,29 +405,16 @@ function ladderToIR(ladder) {
                     currentNodes = nextBlocks
                 
                 } else {
-                    // Multiple nodes, no convergence found.
-                    // This implies disjoint parallel paths (e.g. driving separate coils).
-                    // We must output them. But we can't wrap in 'OR' if they don't merge (logic wise?)
-                    // Actually, "A" and "B" running parallel is "OR" logic in terms of execution flow?
-                    // No, it's just multiple independent statements.
-                    // But effectively we can wrap them in 'branches' to process them all.
-                    // The runtime likely treats 'branches' as "Execute these too".
-                    // But `type: 'or'` implies RLO merge.
-                    
-                    // Fallback: Treat as independent branches that terminate.
+                    // Disjoint paths (no convergence found EVER)
                      const branches = currentNodes.map(node => ({
                         elements: traceGraph([node], null)
                     }))
                     
-                    // We map this to Top-Level branches? 
-                    // Or push an OR block that doesn't merge?
-                    // Let's use 'or' block.
                     result.push({
                         type: 'or',
                         branches: branches
                     })
                     
-                    // We processed everything.
                     currentNodes = []
                 }
             }
