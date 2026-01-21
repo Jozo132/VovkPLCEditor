@@ -4213,6 +4213,7 @@ export default class WindowManager {
             
             if (dm.connected) {
                 this.active_mode = 'online'
+                this.active_device = 'serial'  // Set to serial for proper highlight colors
                 this.device_online_button.innerText = '✕'
                 this.device_online_button.title = 'Disconnect'
                 this.device_online_button.style.background = '#dc3545'
