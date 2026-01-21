@@ -1687,56 +1687,8 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     
     const live = editor.device_manager.connected && !!editor.window_manager?.isMonitoringActive?.()
 
-    // Handle pill click (Single Click Toggle)
-    if (live) {
-      const block = ladder.blocks.find(b => b.x === x && b.y === y)
-      if (block && block.symbol) {
-        const symbol = getBlockState(editor, block).state?.symbol
-        if (symbol && (symbol.type === 'bit' || symbol.type === 'bool')) {
-          // Check collision with pill
-          const ctx = canvas.getContext('2d')
-          // Use current editor style to ensure match with render
-          const currentStyle = editor.properties.style || style 
-          ctx.font = currentStyle.font || '16px Consolas' 
-          const symWidth = ctx.measureText(block.symbol).width
-          
-          const val = !!getSymbolValue(editor, symbol)
-          const pillGap = 5
-          const pillHeight = 14
-          const pillFontSize = 10
-          ctx.font = 'bold ' + pillFontSize + 'px Arial'
-          const pillText = val ? 'ON' : 'OFF'
-          const pillWidth = ctx.measureText(pillText).width + 8
-          
-          const ladder_block_width = getBlockWidth()
-          const ladder_block_height = getBlockHeight()
-          
-          const x0 = block.x * ladder_block_width
-          const y0 = block.y * ladder_block_height
-          const x_mid = x0 + ladder_block_width / 2
-          const ct = y0 + ladder_block_height * 1 / 3
-          
-          const totalW = symWidth + pillGap + pillWidth
-          const startX = x_mid - (totalW / 2)
-          
-          // Pill coordinates (top-left)
-          const px = startX + symWidth + pillGap
-          const py = ct - 13 - (pillHeight / 2)
-          
-          const mouseX = event.offsetX * scale
-          const mouseY = event.offsetY * scale
-          
-          // Check if click is inside pill
-          if (mouseX >= px && mouseX <= px + pillWidth &&
-              mouseY >= py && mouseY <= py + pillHeight) {
-            
-            setSymbolBit(editor, symbol, !val)
-            ladderRenderer.render(editor, ladder)
-            return // Don't process selection if pill was clicked
-          }
-        }
-      }
-    }
+    // Pill click is read-only in live mode - no toggle on single click
+    // Double-click opens context menu instead (handled in onDblClick)
 
     const ctrl = event.ctrlKey
     const shift = event.shiftKey
@@ -1777,14 +1729,27 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   
   /** @param { MouseEvent } event */
   const onDblClick = (event) => {
-    // Edit Mode: Open Symbol Prompt
     const live = editor.device_manager.connected && !!editor.window_manager?.isMonitoringActive?.()
-    if (!live) {
-      const scale = getScale()
-      const x = Math.floor(event.offsetX * scale / getBlockWidth())
-      const y = Math.floor(event.offsetY * scale / getBlockHeight())
-      const block = ladder.blocks.find(b => b.x === x && b.y === y)
-      
+    const scale = getScale()
+    const x = Math.floor(event.offsetX * scale / getBlockWidth())
+    const y = Math.floor(event.offsetY * scale / getBlockHeight())
+    const block = ladder.blocks.find(b => b.x === x && b.y === y)
+    
+    if (live) {
+      // Live Mode: Open context menu on double-click (like right-click)
+      if (block) {
+        // Dispatch a contextmenu event to trigger the context menu
+        const contextEvent = new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          button: 2
+        })
+        canvas.dispatchEvent(contextEvent)
+      }
+    } else {
+      // Edit Mode: Open Symbol Prompt
       if (block) {
         const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)
         const isCounter = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)
