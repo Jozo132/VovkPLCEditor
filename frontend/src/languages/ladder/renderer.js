@@ -1354,19 +1354,42 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
 
         // Edit mode: Modify existing block
         if (edit && blockAtPosition) {
+          const isCoil = blockAtPosition.type === 'coil' || blockAtPosition.type === 'coil_set' || blockAtPosition.type === 'coil_rset'
+          const isContact = blockAtPosition.type === 'contact'
+          
           menuItems.push(
-            { type: 'item', name: 'edit_symbol', label: 'Edit Symbol...' },
-            { type: 'item', name: 'toggle_inverted', label: blockAtPosition.inverted ? 'Make Normal' : 'Make Inverted' },
-            {
-              type: 'submenu', name: 'change_trigger', label: 'Trigger Type', items: [
-                { type: 'item', name: 'trigger_normal', label: 'Normal', className: blockAtPosition.trigger === 'normal' ? 'selected' : '' },
-                { type: 'item', name: 'trigger_rising', label: 'Rising Edge', className: blockAtPosition.trigger === 'rising' ? 'selected' : '' },
-                { type: 'item', name: 'trigger_falling', label: 'Falling Edge', className: blockAtPosition.trigger === 'falling' ? 'selected' : '' },
-                { type: 'item', name: 'trigger_change', label: 'Any Change', className: blockAtPosition.trigger === 'change' ? 'selected' : '' },
-              ]
-            },
-            { type: 'separator' }
+            { type: 'item', name: 'edit_symbol', label: 'Edit Symbol...' }
           )
+          
+          // Contact-specific options
+          if (isContact) {
+            menuItems.push(
+              { type: 'item', name: 'toggle_inverted', label: blockAtPosition.inverted ? 'Make Normal (NO)' : 'Make Inverted (NC)' },
+              {
+                type: 'submenu', name: 'change_trigger', label: 'Trigger Type', items: [
+                  { type: 'item', name: 'trigger_normal', label: 'Normal', className: blockAtPosition.trigger === 'normal' ? 'selected' : '' },
+                  { type: 'item', name: 'trigger_rising', label: 'Rising Edge', className: blockAtPosition.trigger === 'rising' ? 'selected' : '' },
+                  { type: 'item', name: 'trigger_falling', label: 'Falling Edge', className: blockAtPosition.trigger === 'falling' ? 'selected' : '' },
+                  { type: 'item', name: 'trigger_change', label: 'Any Change', className: blockAtPosition.trigger === 'change' ? 'selected' : '' },
+                ]
+              }
+            )
+          }
+          
+          // Coil-specific options
+          if (isCoil) {
+            menuItems.push(
+              {
+                type: 'submenu', name: 'change_coil_type', label: 'Coil Type', items: [
+                  { type: 'item', name: 'coil_type_assign', label: 'Assign (=)', className: blockAtPosition.type === 'coil' ? 'selected' : '' },
+                  { type: 'item', name: 'coil_type_set', label: 'Set (S)', className: blockAtPosition.type === 'coil_set' ? 'selected' : '' },
+                  { type: 'item', name: 'coil_type_reset', label: 'Reset (R)', className: blockAtPosition.type === 'coil_rset' ? 'selected' : '' },
+                ]
+              }
+            )
+          }
+          
+          menuItems.push({ type: 'separator' })
         }
 
         // Edit mode: Delete, Cut, Copy, Paste
@@ -1447,6 +1470,20 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             const trigger = selected_action.replace('trigger_', '')
             // @ts-ignore
             blockAtPosition.trigger = trigger
+          }
+        }
+
+        // Handle coil type change
+        if (selected_action?.startsWith('coil_type_')) {
+          const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+          if (blockAtPosition) {
+            if (selected_action === 'coil_type_assign') {
+              blockAtPosition.type = 'coil'
+            } else if (selected_action === 'coil_type_set') {
+              blockAtPosition.type = 'coil_set'
+            } else if (selected_action === 'coil_type_reset') {
+              blockAtPosition.type = 'coil_rset'
+            }
           }
         }
 
