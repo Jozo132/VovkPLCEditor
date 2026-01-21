@@ -283,6 +283,45 @@ export default class ProjectManager {
     // Ensure project state is up to date before compiling
     this.checkAndSave()
 
+    // Build symbol definitions from symbol table
+    // Format: $$ name | type | address
+    let symbolDefs = ''
+    const symbols = this.#editor.project?.symbols || []
+    
+    // Map PLC symbol types to PLCASM compiler types
+    // Valid PLCASM types: i8, i16, i32, i64, u8, u16, u32, u64, f32, f64, bool, string, bit, byte, ptr, pointer, *
+    const typeMap = {
+        'bit': 'bit',
+        'bool': 'bool',
+        'byte': 'byte',
+        'int': 'i16',      // 16-bit signed integer
+        'dint': 'i32',     // 32-bit signed integer (double int)
+        'real': 'f32',     // 32-bit float
+        'word': 'u16',     // 16-bit unsigned
+        'dword': 'u32',    // 32-bit unsigned
+    }
+    
+    for (const sym of symbols) {
+        if (sym.name && sym.type && sym.address !== undefined) {
+            // Map location to prefix: control=C, input=X, output=Y, system=S, marker=M
+            const locationPrefix = {
+                'control': 'C',
+                'input': 'X',
+                'output': 'Y',
+                'system': 'S',
+                'marker': 'M'
+            }[sym.location] || 'M'
+            // Ensure bit addresses always have the .bit portion (2.0 not just 2)
+            let addrStr = String(sym.address)
+            const mappedType = typeMap[sym.type] || sym.type
+            if ((mappedType === 'bit' || mappedType === 'bool') && !addrStr.includes('.')) {
+                addrStr += '.0'
+            }
+            const fullAddress = `${locationPrefix}${addrStr}`
+            symbolDefs += `$$ ${sym.name} | ${mappedType} | ${fullAddress}\n`
+        }
+    }
+
     let asm = ''
     try {
         const { assembly } = this.#editor._buildAsmAssembly({
@@ -342,8 +381,14 @@ end:                      // Label to jump to
     await runtime.onStdout((msg) => this.#editor.window_manager.logToConsole(msg, 'info'))
     await runtime.onStderr((msg) => this.#editor.window_manager.logToConsole(msg, 'error'))
 
+    // Prepend symbol definitions to the assembly
+    const finalAsm = symbolDefs + asm
+
     try {
-        const result = await runtime.compile(asm)
+        // console.log('=== Final PLCASM before compilation ===')
+        // console.log(finalAsm)
+        // console.log('=== End PLCASM ===')
+        const result = await runtime.compile(finalAsm)
         // console.log('Compilation result:', result)
         cleanup()
         return result
