@@ -279,157 +279,127 @@ function ladderToIR(ladder) {
         
         if (netStartBlocks.length === 0) continue
 
-        // Helper to find common successor for a subset of nodes (Partial Convergence)
-        const findConvergence = (nodes) => {
-            if (nodes.length < 2) return null
-            
-            // Build reachability map: NodeId -> Set of StartNode indices
-            const reachMap = new Map() 
-            
-            for (let i = 0; i < nodes.length; i++) {
-                const startNode = nodes[i]
-                const q = [startNode.id]
-                const visited = new Set([startNode.id])
-                
-                while (q.length > 0) {
-                    const curr = q.shift()
-                    
-                    // Register reachability
-                    if (curr !== startNode.id) {
-                         if (!reachMap.has(curr)) reachMap.set(curr, new Set())
-                         reachMap.get(curr).add(i)
-                    } else if (nodes.length > 1 && nodes.some((n, idx) => idx !== i && n.id === curr)) {
-                         if (!reachMap.has(curr)) reachMap.set(curr, new Set())
-                         reachMap.get(curr).add(i)
-                    }
-                    
-                    const neighbors = adjacencyMap.get(curr) || []
-                    for (const next of neighbors) {
-                        if (network.has(next) && !visited.has(next)) {
-                            visited.add(next)
-                            q.push(next)
-                        }
-                    }
-                }
-            }
-            
-            // Find candidates reachable by at least 2 start nodes
-            const candidates = []
-            for (const [id, sources] of reachMap.entries()) {
-                if (sources.size >= 2) candidates.push(id)
-            }
-            
-            if (candidates.length === 0) return null
-            
-            // Filter candidates to find the "Topologically First" ones
-            const reachableFromOthers = new Set()
-            for (const c1 of candidates) {
-                const q = [c1]
-                const v = new Set([c1])
-                while (q.length > 0) {
-                    const curr = q.shift()
-                    const neighbors = adjacencyMap.get(curr) || []
-                    for (const n of neighbors) {
-                        if (candidates.includes(n) && !v.has(n)) {
-                            reachableFromOthers.add(n)
-                            v.add(n)
-                            q.push(n)
-                        } else if (!v.has(n) && network.has(n)) {
-                            v.add(n)
-                            q.push(n)
-                        }
-                    }
-                }
-            }
-            
-            const roots = candidates.filter(c => !reachableFromOthers.has(c))
-            if (roots.length === 0) return null
-            
-            const mergeNodeId = roots[0]
-            const sourceIndices = reachMap.get(mergeNodeId)
-            
-            return {
-                node: blocks.find(b => b.id === mergeNodeId),
-                sources: nodes.filter((_, i) => sourceIndices.has(i))
-            }
-        }
-
-        const traceGraph = (currentNodes, stopNodeId = null) => {
-            const result = []
-            
-            while (currentNodes.length > 0) {
-                const uniqueIds = [...new Set(currentNodes.map(n => n.id))]
-                currentNodes = uniqueIds.map(id => blocks.find(b => b.id === id))
-
-                if (stopNodeId && currentNodes.some(n => n.id === stopNodeId)) {
-                    return result
-                }
-
-                // 1. Check for Convergence (Partial or Full)
-                if (currentNodes.length > 1) {
-                    const convergence = findConvergence(currentNodes)
-                    
-                    if (convergence) {
-                        const { node: mergeNode, sources: convergingNodes } = convergence
-                        
-                        const branches = convergingNodes.map(node => ({
-                            elements: traceGraph([node], mergeNode.id)
-                        }))
-                        
-                        result.push({
-                            type: 'or',
-                            branches: branches
-                        })
-                        
-                        const remainingNodes = currentNodes.filter(n => !convergingNodes.includes(n))
-                        if (!remainingNodes.some(n => n.id === mergeNode.id)) {
-                            remainingNodes.push(mergeNode)
-                        }
-                        
-                        remainingNodes.sort((a,b) => a.y - b.y)
-                        currentNodes = remainingNodes
-                        continue
-                    }
-                }
-                
-                // 2. Sequential Processing
-                if (currentNodes.length === 1) {
-                    const node = currentNodes[0]
-                    if (stopNodeId && node.id === stopNodeId) return result
-                    
-                    result.push(blockToElement(node))
-                    
-                    const nextIds = adjacencyMap.get(node.id) || []
-                    const nextBlocks = nextIds.map(id => blocks.find(b => b.id === id))
-                    
-                    currentNodes = nextBlocks
-                
-                } else {
-                    // Disjoint paths (no convergence found EVER)
-                     const branches = currentNodes.map(node => ({
-                        elements: traceGraph([node], null)
-                    }))
-                    
-                    result.push({
-                        type: 'or',
-                        branches: branches
-                    })
-                    
-                    currentNodes = []
-                }
-            }
-            return result
-        }
-
-        const mainElements = traceGraph(netStartBlocks, null)
+        // ========================================================================
+        // BACKWARD TRAVERSAL ALGORITHM
+        // Build expression tree by walking backward from outputs (coils) to inputs
+        // This naturally creates the correct nested AND/OR structure
+        // ========================================================================
         
-        // Push the rung with just elements (nested structure handles the complexity)
-        rungs.push({
-            comment: ladder.comment || ladder.name,
-            elements: mainElements
-        })
+        /**
+         * Recursively build expression from a block backward to its inputs
+         * @param {string} blockId - Current block ID
+         * @param {Set<string>} visited - Visited blocks (cycle prevention)
+         * @returns {object|object[]|null} - Expression element(s)
+         */
+        const buildExprBackward = (blockId, visited = new Set()) => {
+            if (visited.has(blockId)) return null // Cycle prevention
+            visited.add(blockId)
+            
+            const block = blocks.find(b => b.id === blockId)
+            if (!block) return null
+            
+            const inputs = reverseMap.get(blockId) || []
+            const element = blockToElement(block)
+            
+            // No inputs = start block (left rail contact)
+            if (inputs.length === 0) {
+                return element
+            }
+            
+            // Single input = AND chain (series connection)
+            if (inputs.length === 1) {
+                const inputExpr = buildExprBackward(inputs[0], new Set(visited))
+                if (!inputExpr) return element
+                
+                // Flatten: if inputExpr is an array, spread it; otherwise wrap
+                const inputElements = Array.isArray(inputExpr) ? inputExpr : [inputExpr]
+                return [...inputElements, element]
+            }
+            
+            // Multiple inputs = OR (parallel branches merging here)
+            // Each input path becomes a branch
+            const branches = []
+            for (const inputId of inputs) {
+                const branchExpr = buildExprBackward(inputId, new Set(visited))
+                if (branchExpr) {
+                    // Normalize to array of elements
+                    const branchElements = Array.isArray(branchExpr) ? branchExpr : [branchExpr]
+                    branches.push({ elements: branchElements })
+                }
+            }
+            
+            if (branches.length === 0) return element
+            if (branches.length === 1) {
+                // Single valid branch - just AND with current element
+                return [...branches[0].elements, element]
+            }
+            
+            // Multiple branches - create OR, then AND with current element
+            const orBlock = { type: 'or', branches }
+            return [orBlock, element]
+        }
         
-        // Mark all nodes in network as visited to avoid errors
+        // Find all coils (outputs) in this network
+        const networkCoils = connectedBlocks.filter(b => 
+            network.has(b.id) && 
+            (b.type === 'coil' || b.type === 'coil_set' || b.type === 'coil_rset')
+        )
+        
+        // Group coils that share the same input(s) - parallel coils
+        // Key: sorted input IDs joined, Value: array of coils
+        const coilGroups = new Map()
+        for (const coil of networkCoils) {
+            const inputs = reverseMap.get(coil.id) || []
+            const key = inputs.slice().sort().join(',')
+            if (!coilGroups.has(key)) coilGroups.set(key, [])
+            coilGroups.get(key).push(coil)
+        }
+        
+        for (const [inputKey, coils] of coilGroups) {
+            // Build the condition expression backward from the first coil's inputs
+            // (All coils in group share the same inputs)
+            const inputs = reverseMap.get(coils[0].id) || []
+            
+            let conditionElements = []
+            
+            if (inputs.length === 0) {
+                // Coils with no inputs - unconditional (error case, but handle gracefully)
+                conditionElements = []
+            } else if (inputs.length === 1) {
+                // Single input to coils
+                const expr = buildExprBackward(inputs[0], new Set())
+                if (expr) {
+                    conditionElements = Array.isArray(expr) ? expr : [expr]
+                }
+            } else {
+                // Multiple inputs to coils = OR of all input paths
+                const branches = []
+                for (const inputId of inputs) {
+                    const branchExpr = buildExprBackward(inputId, new Set())
+                    if (branchExpr) {
+                        const branchElements = Array.isArray(branchExpr) ? branchExpr : [branchExpr]
+                        branches.push({ elements: branchElements })
+                    }
+                }
+                if (branches.length === 1) {
+                    conditionElements = branches[0].elements
+                } else if (branches.length > 1) {
+                    conditionElements = [{ type: 'or', branches }]
+                }
+            }
+            
+            // Add ALL coils in this group as output elements
+            for (const coil of coils) {
+                conditionElements.push(blockToElement(coil))
+            }
+            
+            rungs.push({
+                comment: ladder.comment || ladder.name,
+                elements: conditionElements
+            })
+        }
+        
+        // Mark all nodes in network as visited
         for (const id of network) visitedBlocks.add(id)
     }
 
