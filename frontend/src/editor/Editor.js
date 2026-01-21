@@ -310,7 +310,7 @@ export class VovkPLCEditor {
     version_build = VOVKPLC_VERSION_BUILD
     static version_build = VOVKPLC_VERSION_BUILD
 
-    memory = new Array(100).fill(0)
+    memory = new Uint8Array(65536) // 64KB to match DataFetcher buffer and cover all PLC memory regions
     /** @type { VovkPLC | VovkPLCWorker } */
     runtime
     runtime_ready = false
@@ -338,8 +338,8 @@ export class VovkPLCEditor {
             background_color_online: '#444',
             background_color_edit: '#666',
             color: '#000',
-            highlight_color: '#3C3',
-            highlight_sim_color: '#4AD',
+            highlight_color: '#32cd32', // lime green for device mode
+            highlight_sim_color: '#00ffff', // cyan for simulation mode
             grid_color: '#FFF4',
             select_highlight_color: '#7AF',
             select_color: '#456',
@@ -1127,15 +1127,48 @@ export class VovkPLCEditor {
         programs.forEach(program => {
             const blocks = program.blocks || []
             blocks.forEach(block => {
-                if (!block || (block.type !== 'asm' && block.type !== 'stl')) return
-                this._ensureBlockAddressRefs(block, normalizedOffsets, symbolDetails)
-                const blockRefs = [...(block.cached_address_refs || []), ...(block.cached_timer_refs || [])]
-                blockRefs.forEach(ref => {
-                    if (!ref || !ref.name) return
-                    if (seen.has(ref.name)) return
-                    seen.add(ref.name)
-                    refs.push(ref)
-                })
+                if (!block) return
+                
+                // Handle ASM/STL blocks
+                if (block.type === 'asm' || block.type === 'stl') {
+                    this._ensureBlockAddressRefs(block, normalizedOffsets, symbolDetails)
+                    const blockRefs = [...(block.cached_address_refs || []), ...(block.cached_timer_refs || [])]
+                    blockRefs.forEach(ref => {
+                        if (!ref || !ref.name) return
+                        if (seen.has(ref.name)) return
+                        seen.add(ref.name)
+                        refs.push(ref)
+                    })
+                }
+                
+                // Handle Ladder blocks - collect timer symbols for monitoring
+                if (block.type === 'ladder' && block.blocks) {
+                    block.blocks.forEach(ladderBlock => {
+                        if (!ladderBlock || !ladderBlock.symbol) return
+                        const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(ladderBlock.type)
+                        if (!isTimer) return
+                        
+                        const symbolName = ladderBlock.symbol
+                        if (seen.has(symbolName)) return
+                        seen.add(symbolName)
+                        
+                        // Parse the timer address (e.g., T0, T1)
+                        const match = symbolName.match(/^[tT]([0-9]+)$/i)
+                        if (match) {
+                            const timerIndex = parseInt(match[1], 10)
+                            const timerOffset = normalizedOffsets.timer?.offset || 704
+                            // Timer storage is 9 bytes per timer unit in memory layout
+                            const absoluteAddress = timerOffset + (timerIndex * 9)
+                            refs.push({
+                                name: symbolName,
+                                location: 'timer',
+                                type: 'u32', // Timer elapsed time is u32
+                                address: timerIndex,
+                                absoluteAddress: absoluteAddress
+                            })
+                        }
+                    })
+                }
             })
         })
         return refs

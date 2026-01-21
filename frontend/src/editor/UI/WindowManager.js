@@ -2740,8 +2740,10 @@ export default class WindowManager {
         this.active_mode = mode
         this.updateLiveMonitorState()
         
-        // Clear active_device after use to allow auto-detection next time
-        this.active_device = null
+        // Only clear active_device when going offline, preserve it while online
+        if (mode !== 'online') {
+            this.active_device = null
+        }
     }
 
     #on_navigation_minimize_toggle = () => {

@@ -131,7 +131,17 @@ const parseAddressToSymbol = (addressStr) => {
   
   const location = locationMap[code] || 'marker'
   const hasBit = valStr.includes('.')
-  const type = hasBit ? 'bit' : 'byte'
+  
+  // Determine type based on location:
+  // - Timers store u32 elapsed time values (4 bytes)
+  // - Counters store u16 count values (2 bytes)
+  // - Others use bit or byte based on address format
+  let type = hasBit ? 'bit' : 'byte'
+  if (location === 'timer') {
+    type = 'u32' // Timers are 4-byte elapsed time values
+  } else if (location === 'counter') {
+    type = 'u16' // Counters are 2-byte count values
+  }
   
   return {
     name: addressStr,
@@ -200,9 +210,12 @@ const draw_contact = (editor, like, ctx, block) => {
   //      Location Address
 
 
-  // Draw thick green line for the contact to symbolize the input state if true for the left and the right side of the contact
+  // Draw thick highlight line for the contact to symbolize the input state
   if (like === 'highlight') {
-    ctx.strokeStyle = editor.window_manager.active_device === 'simulation' ? highlight_sim_color : highlight_color
+    // Use cyan for simulation, lime green for device/serial mode
+    const isSimulation = editor.window_manager.active_device === 'simulation'
+    const activeColor = isSimulation ? '#00ffff' : '#32cd32'
+    ctx.strokeStyle = activeColor
     ctx.lineWidth = highlight_width
     ctx.beginPath()
     if (state?.powered) {
@@ -375,9 +388,12 @@ const draw_coil = (editor, like, ctx, block) => {
 
   // The coil is a circle 
 
-  // Draw thick green line for the contact to symbolize the input state if true for the left and the right side of the contact
+  // Draw thick highlight line for the coil to symbolize the output state
   if (like === 'highlight') {
-    ctx.strokeStyle = editor.window_manager.active_device === 'simulation' ? highlight_sim_color : highlight_color
+    // Use cyan for simulation, lime green for device/serial mode
+    const isSimulation = editor.window_manager.active_device === 'simulation'
+    const activeColor = isSimulation ? '#00ffff' : '#32cd32'
+    ctx.strokeStyle = activeColor
     ctx.lineWidth = highlight_width
     ctx.beginPath()
     if (state?.powered) {
@@ -493,6 +509,237 @@ const draw_coil = (editor, like, ctx, block) => {
 }
 
 
+/** @type {(editor: VovkPLCEditor, like: 'symbol' | 'highlight', ctx: CanvasRenderingContext2D, block: PLC_LadderBlock) => void} */
+const draw_timer = (editor, like, ctx, block) => {
+  const { ladder_block_width, ladder_block_height, style } = editor.properties
+  const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color, font_error_color } = style
+  block = getBlockState(editor, block)
+  if (!block.state) return // Block state not found, skip
+  const { x, y, type, state } = block
+  const symbol = state?.symbol
+  
+  // Handle backward compatibility: preset can be number or T# string
+  let presetStr = block.preset || 'T#1s'
+  let presetMs = 1000
+  if (typeof presetStr === 'number') {
+    presetMs = presetStr
+    presetStr = formatTimeDuration(presetMs)
+  } else {
+    const presetParsed = parseTimeDuration(presetStr)
+    presetMs = presetParsed.valid ? presetParsed.ms : 1000
+  }
+
+  const x0 = x * ladder_block_width
+  const y0 = y * ladder_block_height
+  const x1 = x0 + ladder_block_width
+  const y1 = y0 + ladder_block_height
+
+  const x_mid = x0 + ladder_block_width / 2
+  const y_mid = y0 + ladder_block_height / 2
+
+  // Timer box dimensions
+  const boxLeft = x0 + 8
+  const boxRight = x1 - 8
+  const boxTop = y0 + 12
+  const boxBottom = y1 - 12
+  const boxWidth = boxRight - boxLeft
+  const boxHeight = boxBottom - boxTop
+
+  // Get timer label
+  const timerLabels = {
+    'timer_ton': 'TON',
+    'timer_tof': 'TOF',
+    'timer_tp': 'TP'
+  }
+  const timerLabel = timerLabels[type] || 'TMR'
+
+  // Get current elapsed time and calculate done state
+  // For timers, we need to read the u32/dint elapsed time from live_symbol_values,
+  // not just the byte value from getSymbolValue (which only reads 1 byte)
+  let elapsed = 0
+  let done = false
+  let remaining = presetMs
+  if (symbol) {
+    // Calculate the absolute address for the timer
+    // Timer memory layout: 9 bytes per timer (same as WindowManager normalizeAddress)
+    const offsets = ensureOffsets(editor.project?.offsets || {})
+    const timerOffset = offsets.timer?.offset || 704
+    const absoluteAddress = timerOffset + Math.floor(symbol.address) * 9 // Timers are 9 bytes per unit
+    
+    // Look up live value by absoluteAddress and type u32/dint (same as STL/ASM renderers)
+    const liveValues = editor.live_symbol_values
+    if (liveValues) {
+      // First try by symbol name
+      let liveEntry = liveValues.get(symbol.name)
+      
+      // For timer instances, we need the u32 elapsed time value
+      // The timer storage is stored with type 'u32' or 'dint'
+      if (!liveEntry || liveEntry.type === 'byte') {
+        // Search by absolute address and type
+        const timerLiveEntry = [...liveValues.values()].find(
+          l => l.absoluteAddress === absoluteAddress && (l.type === 'u32' || l.type === 'dint')
+        )
+        if (timerLiveEntry) {
+          liveEntry = timerLiveEntry
+        }
+      }
+      
+      if (liveEntry && typeof liveEntry.value === 'number') {
+        elapsed = liveEntry.value
+        done = elapsed >= presetMs
+        // Calculate remaining time (countdown) - same as STL/ASM renderers
+        remaining = Math.max(0, presetMs - elapsed)
+      }
+    }
+  }
+
+  if (like === 'highlight') {
+    // Use cyan for simulation, lime green for device/serial mode
+    const isSimulation = editor.window_manager.active_device === 'simulation'
+    const activeColor = isSimulation ? '#00ffff' : '#32cd32' // cyan : lime green
+    ctx.strokeStyle = activeColor
+    ctx.lineWidth = highlight_width
+    ctx.beginPath()
+    if (state?.powered) {
+      // Draw input line highlight
+      ctx.moveTo(x0, y_mid)
+      ctx.lineTo(boxLeft, y_mid)
+      // Draw output line highlight when done (Q = ON)
+      if (done) {
+        ctx.moveTo(boxRight, y_mid)
+        ctx.lineTo(x1, y_mid)
+      }
+    }
+    if (state?.terminated_output && done) {
+      ctx.moveTo(x1 - 2, y_mid - 12)
+      ctx.lineTo(x1 - 2, y_mid + 12)
+    }
+    ctx.stroke()
+    
+    // Draw active border outline when timer is ON (conducting) - thicker border
+    if (done) {
+      ctx.strokeStyle = activeColor
+      ctx.lineWidth = 4
+      ctx.strokeRect(boxLeft - 2, boxTop - 2, boxWidth + 4, boxHeight + 4)
+    }
+    
+    // Draw progress bar highlight only when timer is running (not done)
+    if (state?.powered && elapsed > 0 && !done) {
+      const progress = Math.min(elapsed / presetMs, 1)
+      const progressWidth = (boxWidth - 4) * progress
+      ctx.fillStyle = activeColor
+      ctx.globalAlpha = 0.3
+      ctx.fillRect(boxLeft + 2, boxBottom - 8, progressWidth, 4)
+      ctx.globalAlpha = 1.0
+    }
+    return
+  }
+
+  if (like === 'symbol') {
+    // Determine active color based on mode: cyan for simulation, lime green for device
+    const isSimulation = editor.window_manager.active_device === 'simulation'
+    const activeColor = isSimulation ? '#00ffff' : '#32cd32' // cyan : lime green
+    const activeOnColor = isSimulation ? '#00ffff' : '#32cd32'
+    const activeOffColor = '#c04040'
+    const runningColor = isSimulation ? '#00cccc' : '#f0a020' // slightly dimmer cyan or orange
+    
+    ctx.strokeStyle = color
+    ctx.lineWidth = line_width
+
+    // Draw input/output horizontal lines
+    ctx.beginPath()
+    ctx.moveTo(x0, y_mid)
+    ctx.lineTo(boxLeft, y_mid)
+    ctx.moveTo(boxRight, y_mid)
+    ctx.lineTo(x1, y_mid)
+
+    // Draw timer box
+    ctx.rect(boxLeft, boxTop, boxWidth, boxHeight)
+
+    if (state?.terminated_output) {
+      ctx.moveTo(x1 - 2, y_mid - 8)
+      ctx.lineTo(x1 - 2, y_mid + 8)
+    }
+    ctx.stroke()
+
+    // Draw timer type label at top
+    ctx.fillStyle = font_color
+    ctx.font = 'bold 11px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText(timerLabel, x_mid, boxTop + 2)
+
+    // Draw symbol name below timer type
+    if (symbol) ctx.fillStyle = font_color
+    else ctx.fillStyle = font_error_color
+    ctx.font = '10px Arial'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(block.symbol || '???', x_mid, boxTop + 18)
+
+    // Draw preset time (PT) - show the T# string directly
+    ctx.fillStyle = font_color
+    ctx.font = '9px Arial'
+    ctx.textAlign = 'left'
+    ctx.fillText('PT:', boxLeft + 3, boxBottom - 16)
+    ctx.textAlign = 'right'
+    ctx.fillText(presetStr, boxRight - 3, boxBottom - 16)
+
+    // Draw remaining time (countdown) or elapsed time display
+    ctx.textAlign = 'left'
+    ctx.fillText('ET:', boxLeft + 3, boxBottom - 5)
+    ctx.textAlign = 'right'
+    if (editor.device_manager.connected) {
+      // Show remaining time (countdown) like STL/ASM do - use mode-appropriate colors
+      ctx.fillStyle = done ? activeOnColor : (elapsed > 0 ? runningColor : font_color)
+      ctx.fillText(formatTime(remaining), boxRight - 3, boxBottom - 5)
+    } else {
+      ctx.fillStyle = '#666'
+      ctx.fillText('---', boxRight - 3, boxBottom - 5)
+    }
+
+    // Draw Q (output) indicator with ON/OFF state
+    ctx.textAlign = 'right'
+    ctx.font = 'bold 10px Arial'
+    if (editor.device_manager.connected) {
+      ctx.fillStyle = done ? activeOnColor : activeOffColor
+      ctx.fillText(done ? 'ON' : 'OFF', boxRight - 3, y_mid)
+    } else {
+      ctx.fillStyle = '#666'
+      ctx.fillText('Q', boxRight - 3, y_mid)
+    }
+
+    return
+  }
+
+  throw new Error(`Invalid style: ${style}`)
+}
+
+/**
+ * Format time in milliseconds to a readable string (matches STL/ASM pill format)
+ * @param {number} ms - Time in milliseconds
+ * @returns {string}
+ */
+function formatTime(ms) {
+  const totalSec = Math.floor(ms / 1000)
+  const d = Math.floor(totalSec / 86400)
+  const h = Math.floor((totalSec % 86400) / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  const mil = ms % 1000
+
+  const milStr = mil.toString().padStart(3, '0')
+  const sStr = s.toString().padStart(2, '0')
+  const mStr = m.toString().padStart(2, '0')
+  const hStr = h.toString().padStart(2, '0')
+
+  if (d > 0) return `${d}d ${hStr}:${mStr}:${sStr}`
+  if (h > 0) return `${h}:${mStr}:${sStr}`
+  if (m > 0) return `${m}:${sStr}`
+  if (s > 0) return `${s}.${milStr}s`
+  return `${mil}ms`
+}
+
+
 // Draw links between blocks
 
 /** @typedef {{ from: PLC_LadderBlock , to: PLC_LadderBlock, powered: boolean }} LadderLink */
@@ -515,7 +762,10 @@ const draw_connection = (editor, like, ctx, link) => {
   if (x_direction === 0 && y_direction === 0) return // elements are touching, no need to draw a connection
   if (like === 'highlight') {
     if (powered) {
-      ctx.strokeStyle = editor.window_manager.active_device === 'simulation' ? highlight_sim_color : highlight_color
+      // Use cyan for simulation, lime green for device/serial mode
+      const isSimulation = editor.window_manager.active_device === 'simulation'
+      const activeColor = isSimulation ? '#00ffff' : '#32cd32'
+      ctx.strokeStyle = activeColor
       ctx.lineWidth = highlight_width
       ctx.beginPath()
       if (x_direction === 0) {
@@ -553,6 +803,57 @@ const evaluate_ladder = (editor, ladder) => {
   const { blocks, connections } = ladder
   // Reset the state of all blocks and connections
   const blockHasInputConnection = (block) => connections.some(connection => connection.to.id === block.id)
+  
+  // Helper function to get timer elapsed time from live_symbol_values (same as STL/ASM)
+  const getTimerElapsed = (block) => {
+    if (!['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)) return 0
+    const symbol = block.state?.symbol
+    if (!symbol) return 0
+    
+    // Calculate the absolute address for the timer
+    // Timer memory layout: 9 bytes per timer (same as WindowManager normalizeAddress)
+    const offsets = ensureOffsets(editor.project?.offsets || {})
+    const timerOffset = offsets.timer?.offset || 704
+    const absoluteAddress = timerOffset + Math.floor(symbol.address) * 9 // Timers are 9 bytes per unit
+    
+    // Look up live value by absoluteAddress and type u32/dint
+    const liveValues = editor.live_symbol_values
+    if (liveValues) {
+      let liveEntry = liveValues.get(symbol.name)
+      if (!liveEntry || liveEntry.type === 'byte') {
+        const timerLiveEntry = [...liveValues.values()].find(
+          l => l.absoluteAddress === absoluteAddress && (l.type === 'u32' || l.type === 'dint')
+        )
+        if (timerLiveEntry) {
+          liveEntry = timerLiveEntry
+        }
+      }
+      if (liveEntry && typeof liveEntry.value === 'number') {
+        return liveEntry.value
+      }
+    }
+    return 0
+  }
+  
+  // Helper function to get timer's Q (done) output state
+  const getTimerDone = (block) => {
+    if (!['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)) return false
+    
+    // Get preset value
+    let presetMs = 1000
+    const presetStr = block.preset || 'T#1s'
+    if (typeof presetStr === 'number') {
+      presetMs = presetStr
+    } else {
+      const presetParsed = parseTimeDuration(presetStr)
+      presetMs = presetParsed.valid ? presetParsed.ms : 1000
+    }
+    
+    // Get elapsed value from live_symbol_values
+    const elapsed = getTimerElapsed(block)
+    return elapsed >= presetMs
+  }
+  
   blocks.forEach(block => {
     block = getBlockState(editor, block)
     if (!block.state) return // Block state not found, skip
@@ -567,6 +868,8 @@ const evaluate_ladder = (editor, ladder) => {
     state.evaluated = false
     block.state.terminated_input = false
     block.state.terminated_output = false
+    // Calculate and store timer done state
+    block.state.timerDone = getTimerDone(block)
   })
   connections.forEach(con => {
     con.state = con.state || {
@@ -598,11 +901,16 @@ const evaluate_ladder = (editor, ladder) => {
     const { state } = block
     const isContact = block.type === 'contact'
     const isCoil = ['coil', 'coil_set', 'coil_rset'].includes(block.type)
+    const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)
     const pass_through = isCoil && !first
-    state.powered = isContact || (pass_through && !first)
+    const timer_pass_through = isTimer && !first && state.timerDone
+    state.powered = isContact || pass_through || timer_pass_through
     if (isCoil && first) return
+    if (isTimer && first) return
     const momentary = block.trigger !== 'normal'
-    if ((!momentary && state.active) || pass_through) {
+    // For timers, only propagate power if done (Q output is true)
+    const shouldPropagate = isTimer ? state.timerDone : ((!momentary && state.active) || pass_through)
+    if (shouldPropagate) {
       state.evaluated = true
       const outgoing_connections = connections.filter(con => con.from.id === block.id)
       outgoing_connections.forEach(con => {
@@ -728,8 +1036,8 @@ export const ladderRenderer = {
       background_color_online: '#444',
       background_color_edit: '#666',
       color: '#000',
-      highlight_color: '#3C3',
-      highlight_sim_color: '#4AD',
+      highlight_color: '#32cd32', // lime green for device mode
+      highlight_sim_color: '#00ffff', // cyan for simulation mode
       grid_color: '#FFF4',
       select_highlight_color: '#7AF',
       select_color: '#456',
@@ -858,6 +1166,7 @@ export const ladderRenderer = {
         // Only draw highlights if we are live (connected AND monitoring)
         if (b.type === 'contact') draw_contact(editor, 'highlight', ctx, b)
         if (['coil', 'coil_set', 'coil_rset'].includes(b.type)) draw_coil(editor, 'highlight', ctx, b)
+        if (['timer_ton', 'timer_tof', 'timer_tp'].includes(b.type)) draw_timer(editor, 'highlight', ctx, b)
       }
     })
 
@@ -882,6 +1191,7 @@ export const ladderRenderer = {
     blocks.forEach(b => {
       if (b.type === 'contact') draw_contact(editor, 'symbol', ctx, b)
       if (['coil', 'coil_set', 'coil_rset'].includes(b.type)) draw_coil(editor, 'symbol', ctx, b)
+      if (['timer_ton', 'timer_tof', 'timer_tp'].includes(b.type)) draw_timer(editor, 'symbol', ctx, b)
     })
     links.forEach(link => {
       draw_connection(editor, 'symbol', ctx, link)
@@ -1237,7 +1547,12 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       const block = ladder.blocks.find(b => b.x === x && b.y === y)
       
       if (block) {
-        promptForSymbol(editor, block, ladder)
+        const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)
+        if (isTimer) {
+          promptForTimerParameters(editor, block, ladder)
+        } else {
+          promptForSymbol(editor, block, ladder)
+        }
       }
     }
   }
@@ -1346,6 +1661,10 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
                 { type: 'item', name: 'insert_coil', label: 'Coil' },
                 { type: 'item', name: 'insert_coil_set', label: 'Coil (Set)' },
                 { type: 'item', name: 'insert_coil_reset', label: 'Coil (Reset)' },
+                { type: 'separator' },
+                { type: 'item', name: 'insert_timer_ton', label: 'Timer TON (On Delay)' },
+                { type: 'item', name: 'insert_timer_tof', label: 'Timer TOF (Off Delay)' },
+                { type: 'item', name: 'insert_timer_tp', label: 'Timer TP (Pulse)' },
               ]
             },
             { type: 'separator' }
@@ -1356,10 +1675,24 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         if (edit && blockAtPosition) {
           const isCoil = blockAtPosition.type === 'coil' || blockAtPosition.type === 'coil_set' || blockAtPosition.type === 'coil_rset'
           const isContact = blockAtPosition.type === 'contact'
+          const isTimer = blockAtPosition.type === 'timer_ton' || blockAtPosition.type === 'timer_tof' || blockAtPosition.type === 'timer_tp'
           
-          menuItems.push(
-            { type: 'item', name: 'edit_symbol', label: 'Edit Symbol...' }
-          )
+          // Show different edit option based on block type
+          if (isTimer) {
+            const timerTypeLabels = {
+              'timer_ton': 'TON',
+              'timer_tof': 'TOF',
+              'timer_tp': 'TP'
+            }
+            const timerLabel = timerTypeLabels[blockAtPosition.type] || 'Timer'
+            menuItems.push(
+              { type: 'item', name: 'edit_timer', label: `Edit ${timerLabel}...` }
+            )
+          } else {
+            menuItems.push(
+              { type: 'item', name: 'edit_symbol', label: 'Edit Symbol...' }
+            )
+          }
           
           // Contact-specific options
           if (isContact) {
@@ -1384,6 +1717,19 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
                   { type: 'item', name: 'coil_type_assign', label: 'Assign (=)', className: blockAtPosition.type === 'coil' ? 'selected' : '' },
                   { type: 'item', name: 'coil_type_set', label: 'Set (S)', className: blockAtPosition.type === 'coil_set' ? 'selected' : '' },
                   { type: 'item', name: 'coil_type_reset', label: 'Reset (R)', className: blockAtPosition.type === 'coil_rset' ? 'selected' : '' },
+                ]
+              }
+            )
+          }
+          
+          // Timer-specific options
+          if (isTimer) {
+            menuItems.push(
+              {
+                type: 'submenu', name: 'change_timer_type', label: 'Timer Type', items: [
+                  { type: 'item', name: 'timer_type_ton', label: 'TON (On Delay)', className: blockAtPosition.type === 'timer_ton' ? 'selected' : '' },
+                  { type: 'item', name: 'timer_type_tof', label: 'TOF (Off Delay)', className: blockAtPosition.type === 'timer_tof' ? 'selected' : '' },
+                  { type: 'item', name: 'timer_type_tp', label: 'TP (Pulse)', className: blockAtPosition.type === 'timer_tp' ? 'selected' : '' },
                 ]
               }
             )
@@ -1431,7 +1777,8 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             type: 'contact',
             inverted: false,
             trigger: 'normal',
-            symbol: ''
+            symbol: '',
+            preset: 1000 // Default preset for timers
           }
 
           if (selected_action === 'insert_contact') {
@@ -1446,6 +1793,12 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             newBlock.type = 'coil_set'
           } else if (selected_action === 'insert_coil_reset') {
             newBlock.type = 'coil_rset'
+          } else if (selected_action === 'insert_timer_ton') {
+            newBlock.type = 'timer_ton'
+          } else if (selected_action === 'insert_timer_tof') {
+            newBlock.type = 'timer_tof'
+          } else if (selected_action === 'insert_timer_tp') {
+            newBlock.type = 'timer_tp'
           }
 
           ladder.blocks.push(newBlock)
@@ -1458,9 +1811,15 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             selection: [{ type: 'block', x: contextMenuX, y: contextMenuY }]
           }
 
-          // Prompt for symbol name
-          // @ts-ignore - newBlock type is correct at runtime
-          promptForSymbol(editor, newBlock, ladder)
+          // Prompt for symbol/parameters based on block type
+          const isTimerBlock = ['timer_ton', 'timer_tof', 'timer_tp'].includes(newBlock.type)
+          if (isTimerBlock) {
+            // @ts-ignore - newBlock type is correct at runtime
+            promptForTimerParameters(editor, newBlock, ladder)
+          } else {
+            // @ts-ignore - newBlock type is correct at runtime
+            promptForSymbol(editor, newBlock, ladder)
+          }
         }
 
         // Handle trigger change
@@ -1484,6 +1843,28 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             } else if (selected_action === 'coil_type_reset') {
               blockAtPosition.type = 'coil_rset'
             }
+          }
+        }
+
+        // Handle timer type change
+        if (selected_action?.startsWith('timer_type_')) {
+          const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+          if (blockAtPosition) {
+            if (selected_action === 'timer_type_ton') {
+              blockAtPosition.type = 'timer_ton'
+            } else if (selected_action === 'timer_type_tof') {
+              blockAtPosition.type = 'timer_tof'
+            } else if (selected_action === 'timer_type_tp') {
+              blockAtPosition.type = 'timer_tp'
+            }
+          }
+        }
+
+        // Handle edit timer parameters
+        if (selected_action === 'edit_timer') {
+          const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+          if (blockAtPosition) {
+            promptForTimerParameters(editor, blockAtPosition, ladder)
           }
         }
 
@@ -2020,7 +2401,10 @@ async function promptForSymbol(editor, block, ladder) {
     'contact': 'Contact',
     'coil': 'Coil',
     'coil_set': 'Coil (Set)',
-    'coil_rset': 'Coil (Reset)'
+    'coil_rset': 'Coil (Reset)',
+    'timer_ton': 'Timer TON',
+    'timer_tof': 'Timer TOF',
+    'timer_tp': 'Timer TP'
   }
   const blockTypeLabel = blockTypeLabels[block.type] || block.type
   const currentSymbol = block.symbol || ''
@@ -2045,6 +2429,179 @@ async function promptForSymbol(editor, block, ladder) {
 
   if (result && result.symbol !== undefined) {
     block.symbol = result.symbol.trim()
+    // Clear cached state so it gets re-resolved
+    block.state = undefined
+    // Re-render the ladder
+    if (ladder) {
+      ladderRenderer.render(editor, ladder)
+    }
+  }
+}
+
+
+/**
+ * Parse T# time duration syntax to milliseconds
+ * Supports formats like: T#1ms, T#500ms, T#1s, T#1.5s, T#1m, T#1m30s, T#1h, T#1h30m, T#2h15m30s
+ * @param {string} input - The time string in T# format
+ * @returns {{ valid: boolean, ms: number, error?: string }}
+ */
+function parseTimeDuration(input) {
+  if (!input || typeof input !== 'string') {
+    return { valid: false, ms: 0, error: 'Empty input' }
+  }
+  
+  let str = input.trim().toUpperCase()
+  
+  // Check for T# prefix (optional for convenience)
+  if (str.startsWith('T#')) {
+    str = str.substring(2)
+  }
+  
+  if (!str) {
+    return { valid: false, ms: 0, error: 'Empty duration' }
+  }
+  
+  // Pattern to match time components: number followed by unit (h, m, s, ms)
+  const pattern = /^(\d+(?:\.\d+)?)(MS|S|M|H)(.*)$/i
+  let remaining = str
+  let totalMs = 0
+  let hasMatch = false
+  
+  while (remaining.length > 0) {
+    const match = remaining.match(pattern)
+    if (!match) {
+      if (remaining.length > 0) {
+        return { valid: false, ms: 0, error: `Invalid format: "${remaining}"` }
+      }
+      break
+    }
+    
+    hasMatch = true
+    const value = parseFloat(match[1])
+    const unit = match[2].toUpperCase()
+    remaining = match[3]
+    
+    switch (unit) {
+      case 'MS':
+        totalMs += value
+        break
+      case 'S':
+        totalMs += value * 1000
+        break
+      case 'M':
+        totalMs += value * 60000
+        break
+      case 'H':
+        totalMs += value * 3600000
+        break
+      default:
+        return { valid: false, ms: 0, error: `Unknown unit: ${unit}` }
+    }
+  }
+  
+  if (!hasMatch) {
+    return { valid: false, ms: 0, error: 'No valid time components found' }
+  }
+  
+  if (totalMs < 1) {
+    return { valid: false, ms: 0, error: 'Duration must be at least 1ms' }
+  }
+  
+  return { valid: true, ms: Math.round(totalMs) }
+}
+
+/**
+ * Format milliseconds to T# time duration syntax
+ * @param {number} ms - Time in milliseconds
+ * @returns {string}
+ */
+function formatTimeDuration(ms) {
+  if (ms < 1000) {
+    return `T#${ms}ms`
+  }
+  
+  const hours = Math.floor(ms / 3600000)
+  ms %= 3600000
+  const minutes = Math.floor(ms / 60000)
+  ms %= 60000
+  const seconds = Math.floor(ms / 1000)
+  const milliseconds = ms % 1000
+  
+  let result = 'T#'
+  if (hours > 0) result += `${hours}h`
+  if (minutes > 0) result += `${minutes}m`
+  if (seconds > 0) result += `${seconds}s`
+  if (milliseconds > 0) result += `${milliseconds}ms`
+  
+  return result || 'T#0ms'
+}
+
+/**
+ * Prompt user to enter timer parameters
+ * @param {VovkPLCEditor} editor
+ * @param {PLC_LadderBlock} block
+ * @param {any} ladder - The ladder block to re-render after parameter change
+ */
+async function promptForTimerParameters(editor, block, ladder) {
+  const timerTypeLabels = {
+    'timer_ton': 'TON (On Delay)',
+    'timer_tof': 'TOF (Off Delay)',
+    'timer_tp': 'TP (Pulse)'
+  }
+  const timerTypeLabel = timerTypeLabels[block.type] || 'Timer'
+  const currentSymbol = block.symbol || ''
+  
+  // Handle backward compatibility: convert number to T# string if needed
+  let currentPreset = block.preset
+  if (typeof currentPreset === 'number') {
+    currentPreset = formatTimeDuration(currentPreset)
+  } else if (!currentPreset) {
+    currentPreset = 'T#1s'
+  }
+
+  const result = await Popup.form({
+    title: `Edit ${timerTypeLabel}`,
+    description: 'Use T#<value><unit> format (e.g. T#1s, T#500ms, T#1m30s)',
+    inputs: [
+      { 
+        name: 'symbol', 
+        label: 'Timer Symbol', 
+        type: 'text', 
+        value: currentSymbol,
+        placeholder: 'e.g. Timer_1 or T0'
+      },
+      { 
+        name: 'preset', 
+        label: 'Preset Time (PT)', 
+        type: 'text', 
+        value: currentPreset,
+        placeholder: 'e.g. T#1s, T#500ms, T#1m30s'
+      }
+    ],
+    verify: values => {
+      const preset = values.preset
+      const parsed = parseTimeDuration(preset.value)
+      if (!parsed.valid) {
+        return preset.setError(parsed.error || 'Invalid time format')
+      }
+      preset.clearError()
+      return true
+    },
+    buttons: [
+      { text: 'OK', value: 'ok' },
+      { text: 'Cancel', value: 'cancel' }
+    ]
+  })
+
+  if (result && result.symbol !== undefined) {
+    block.symbol = result.symbol.trim()
+    // Store the T# string directly (ensure it has T# prefix)
+    let presetStr = result.preset.trim()
+    if (!presetStr.toUpperCase().startsWith('T#')) {
+      presetStr = 'T#' + presetStr
+    }
+    block.preset = presetStr
+    
     // Clear cached state so it gets re-resolved
     block.state = undefined
     // Re-render the ladder

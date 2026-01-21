@@ -3,7 +3,7 @@ import { LanguageModule } from "../types.js"
 import { evaluateLadder } from "./evaluator.js"
 
 
-/** @typedef { 'contact' | 'coil' | 'coil_set' | 'coil_rset' } PLC_Ladder_Block_Type * @type { PLC_Ladder_Block_Type } */
+/** @typedef { 'contact' | 'coil' | 'coil_set' | 'coil_rset' | 'timer_ton' | 'timer_tof' | 'timer_tp' } PLC_Ladder_Block_Type * @type { PLC_Ladder_Block_Type } */
 export let PLC_Ladder_Block_Type
 
 /** @typedef { 'normal' | 'rising' | 'falling' | 'change' } PLC_Trigger_Type * @type { PLC_Trigger_Type } */
@@ -18,6 +18,7 @@ export let PLC_Trigger_Type
  *      inverted: boolean, 
  *      trigger: PLC_Trigger_Type, 
  *      symbol: string, 
+ *      preset?: number,
  *      state?: { active: boolean, powered: boolean, terminated_input: boolean, terminated_output: boolean, evaluated: boolean, symbol?: PLC_Symbol } 
  * }} PLC_LadderBlock * @type { PLC_LadderBlock }
 **/
@@ -58,7 +59,7 @@ export let PLC_Ladder
 /**
  * Converts a PLC_LadderBlock to the runtime's element format
  * @param {PLC_LadderBlock} block 
- * @returns {{ type: string, address: string, inverted?: boolean, trigger?: string }}
+ * @returns {{ type: string, address: string, inverted?: boolean, trigger?: string, preset?: string }}
  */
 function blockToElement(block) {
     const element = {
@@ -70,6 +71,11 @@ function blockToElement(block) {
     if (block.type === 'contact') {
         // @ts-ignore
         element.trigger = block.trigger || 'normal'
+    }
+    // Add preset for timers (pass as T# string directly)
+    if (['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)) {
+        // @ts-ignore
+        element.preset = block.preset || 'T#1s'
     }
     return element
 }
@@ -117,6 +123,7 @@ function ladderToIR(ladder) {
         // All blocks are disconnected
         const disconnectedContacts = blocks.filter(b => b.type === 'contact')
         const disconnectedCoils = blocks.filter(b => b.type === 'coil' || b.type === 'coil_set' || b.type === 'coil_rset')
+        const disconnectedTimers = blocks.filter(b => b.type === 'timer_ton' || b.type === 'timer_tof' || b.type === 'timer_tp')
         
         if (disconnectedContacts.length > 0) {
             errors.push({
@@ -130,6 +137,13 @@ function ladderToIR(ladder) {
                 message: `${disconnectedCoils.length} coil(s) not connected to any input: ${disconnectedCoils.map(b => b.symbol).join(', ')}`,
                 type: 'error',
                 blockIds: disconnectedCoils.map(b => b.id)
+            })
+        }
+        if (disconnectedTimers.length > 0) {
+            errors.push({
+                message: `${disconnectedTimers.length} timer(s) not connected to any input: ${disconnectedTimers.map(b => b.symbol).join(', ')}`,
+                type: 'error',
+                blockIds: disconnectedTimers.map(b => b.id)
             })
         }
         return { rungs: [], errors }
@@ -159,6 +173,7 @@ function ladderToIR(ladder) {
     if (disconnectedBlocks.length > 0) {
         const contacts = disconnectedBlocks.filter(b => b.type === 'contact')
         const coils = disconnectedBlocks.filter(b => b.type === 'coil' || b.type === 'coil_set' || b.type === 'coil_rset')
+        const timers = disconnectedBlocks.filter(b => b.type === 'timer_ton' || b.type === 'timer_tof' || b.type === 'timer_tp')
         
         if (contacts.length > 0) {
             errors.push({
@@ -172,6 +187,13 @@ function ladderToIR(ladder) {
                 message: `${coils.length} coil(s) not connected: ${coils.map(b => b.symbol).join(', ')}`,
                 type: 'error',
                 blockIds: coils.map(b => b.id)
+            })
+        }
+        if (timers.length > 0) {
+            errors.push({
+                message: `${timers.length} timer(s) not connected: ${timers.map(b => b.symbol).join(', ')}`,
+                type: 'error',
+                blockIds: timers.map(b => b.id)
             })
         }
     }

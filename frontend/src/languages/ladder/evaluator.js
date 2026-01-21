@@ -66,7 +66,9 @@ export function evaluateLadder(editor, ladder) {
    */
   const propagate = (block, first) => {
     if (!block.state || block.state.evaluated) return
-    const passThrough = ['coil', 'coil_set', 'coil_rset'].includes(block.type) && !first
+    const isCoil = ['coil', 'coil_set', 'coil_rset'].includes(block.type)
+    const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)
+    const passThrough = (isCoil || isTimer) && !first
     if (passThrough || block.type === 'contact') {
       if (!first) block.state.powered = true
       if (block.state.active || passThrough) {
