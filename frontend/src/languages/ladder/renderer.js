@@ -1646,6 +1646,107 @@ export const ladderRenderer = {
     links.forEach(link => {
       draw_connection(editor, 'symbol', ctx, link)
     })
+    
+    // Draw connection handles and wire in edit mode
+    if (edit) {
+      const connState = editor.ladder_connection_state?.[ladderId]
+      if (connState) {
+        const hover_x = connState.hover_x
+        const hover_y = connState.hover_y
+        const handleRadius = 8
+        const proximityDistance = 1.5 // How close cursor needs to be to show handles (in cells)
+        
+        // Find blocks near the cursor
+        blocks.forEach(b => {
+          const blockCenterX = b.x + 0.5
+          const blockCenterY = b.y + 0.5
+          const dist = Math.sqrt((hover_x - blockCenterX) ** 2 + (hover_y - blockCenterY) ** 2)
+          
+          if (dist < proximityDistance) {
+            const x0 = b.x * ladder_block_width
+            const y_mid = b.y * ladder_block_height + ladder_block_height / 2
+            const x1 = x0 + ladder_block_width
+            
+            // Determine which side is closer to cursor
+            const distToLeft = Math.abs(hover_x - b.x)
+            const distToRight = Math.abs(hover_x - (b.x + 1))
+            
+            // Check if we're dragging and this is a valid target
+            const isDragging = connState.dragging_wire
+            const startBlock = connState.wire_start_block
+            const startSide = connState.wire_start_side
+            
+            // Highlight valid drop targets when dragging
+            let leftHighlight = false
+            let rightHighlight = false
+            if (isDragging && startBlock && b.id !== startBlock.id) {
+              // If dragging from right, left side of other blocks is valid target (if they're to the right)
+              if (startSide === 'right' && b.x > startBlock.x) {
+                leftHighlight = true
+              }
+              // If dragging from left, right side of other blocks is valid target (if they're to the left)
+              if (startSide === 'left' && b.x < startBlock.x) {
+                rightHighlight = true
+              }
+            }
+            
+            // Draw left handle
+            const showLeft = distToLeft < distToRight || leftHighlight
+            if (showLeft || isDragging) {
+              ctx.beginPath()
+              ctx.arc(x0, y_mid, handleRadius, 0, Math.PI * 2)
+              ctx.fillStyle = leftHighlight ? '#4CAF50' : (showLeft && !isDragging ? '#2196F3' : '#666')
+              ctx.fill()
+              ctx.strokeStyle = '#FFF'
+              ctx.lineWidth = 2
+              ctx.stroke()
+            }
+            
+            // Draw right handle
+            const showRight = distToRight <= distToLeft || rightHighlight
+            if (showRight || isDragging) {
+              ctx.beginPath()
+              ctx.arc(x1, y_mid, handleRadius, 0, Math.PI * 2)
+              ctx.fillStyle = rightHighlight ? '#4CAF50' : (showRight && !isDragging ? '#2196F3' : '#666')
+              ctx.fill()
+              ctx.strokeStyle = '#FFF'
+              ctx.lineWidth = 2
+              ctx.stroke()
+            }
+          }
+        })
+        
+        // Draw the connection wire being dragged
+        if (connState.dragging_wire && connState.wire_start_block) {
+          const startBlock = connState.wire_start_block
+          const startSide = connState.wire_start_side
+          
+          const startX = startSide === 'left' 
+            ? startBlock.x * ladder_block_width 
+            : (startBlock.x + 1) * ladder_block_width
+          const startY = startBlock.y * ladder_block_height + ladder_block_height / 2
+          
+          const endX = connState.wire_end_x
+          const endY = connState.wire_end_y
+          
+          // Draw dashed line
+          ctx.beginPath()
+          ctx.setLineDash([8, 4])
+          ctx.strokeStyle = '#2196F3'
+          ctx.lineWidth = 3
+          ctx.moveTo(startX, startY)
+          ctx.lineTo(endX, endY)
+          ctx.stroke()
+          ctx.setLineDash([])
+          
+          // Draw circle at the end
+          ctx.beginPath()
+          ctx.arc(endX, endY, 6, 0, Math.PI * 2)
+          ctx.fillStyle = '#2196F3'
+          ctx.fill()
+        }
+      }
+    }
   }
 }
 
@@ -1674,6 +1775,21 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       selection: []
     }
   }
+  
+  // Initialize connection wire state on editor for this ladder
+  if (!editor.ladder_connection_state) {
+    editor.ladder_connection_state = {}
+  }
+  editor.ladder_connection_state[ladderId] = {
+    hover_x: -1,
+    hover_y: -1,
+    dragging_wire: false,
+    wire_start_block: null,
+    wire_start_side: null, // 'left' or 'right'
+    wire_end_x: 0,
+    wire_end_y: 0
+  }
+  const connState = editor.ladder_connection_state[ladderId]
 
   let is_dragging = false
   let is_moving = false
@@ -1725,7 +1841,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
 
     if (event.button !== 0) return
     event.preventDefault()
-    is_dragging = true
+    
     start_x = Math.floor(event.clientX - rect.left)
     start_y = Math.floor(event.clientY - rect.top)
     end_x = start_x
@@ -1735,6 +1851,49 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     const y_raw = start_y * getScale() / getBlockHeight()
     const x = Math.floor(x_raw)
     const y = Math.floor(y_raw)
+    
+    // Check if clicking on a connection handle (left/right edge of block)
+    const live = editor.device_manager.connected && !!editor.window_manager?.isMonitoringActive?.()
+    const edit = !live
+    
+    if (edit) {
+      const block = ladder.blocks.find(b => b.x === x && b.y === y)
+      if (block) {
+        const x_in_cell = x_raw - x
+        const y_in_cell = y_raw - y
+        const handleRadius = 0.15 // Radius of connection handle in cell units
+        const handleY = 0.5 // Y position of handle in cell (middle)
+        
+        // Check left handle (at x=0, y=0.5)
+        const distToLeftHandle = Math.sqrt((x_in_cell - 0) ** 2 + (y_in_cell - handleY) ** 2)
+        // Check right handle (at x=1, y=0.5)
+        const distToRightHandle = Math.sqrt((x_in_cell - 1) ** 2 + (y_in_cell - handleY) ** 2)
+        
+        if (distToLeftHandle < handleRadius * 2) {
+          // Start dragging from left handle
+          connState.dragging_wire = true
+          connState.wire_start_block = block
+          connState.wire_start_side = 'left'
+          connState.wire_end_x = start_x * getScale()
+          connState.wire_end_y = start_y * getScale()
+          ladderRenderer.render(editor, ladder)
+          return
+        }
+        
+        if (distToRightHandle < handleRadius * 2) {
+          // Start dragging from right handle
+          connState.dragging_wire = true
+          connState.wire_start_block = block
+          connState.wire_start_side = 'right'
+          connState.wire_end_x = start_x * getScale()
+          connState.wire_end_y = start_y * getScale()
+          ladderRenderer.render(editor, ladder)
+          return
+        }
+      }
+    }
+    
+    is_dragging = true
 
     const distance_from_block_center_x = Math.abs(2 * (Math.abs(x_raw - x) - 0.5))
     const distance_from_block_center_y = Math.abs(2 * (Math.abs(y_raw - y) - 0.5))
@@ -1786,11 +1945,37 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   /** @param { MouseEvent } event */
   const onMove = (event) => {
     event.preventDefault()
+    
+    const rect = canvas.getBoundingClientRect()
+    const mouseX = Math.floor(event.clientX - rect.left)
+    const mouseY = Math.floor(event.clientY - rect.top)
+    
+    // Always track hover position for connection handles (even when not dragging)
+    const live = editor.device_manager.connected && !!editor.window_manager?.isMonitoringActive?.()
+    const edit = !live
+    
+    if (edit) {
+      const hover_x_raw = mouseX * getScale() / getBlockWidth()
+      const hover_y_raw = mouseY * getScale() / getBlockHeight()
+      connState.hover_x = hover_x_raw
+      connState.hover_y = hover_y_raw
+      
+      // If dragging a connection wire, update the end position
+      if (connState.dragging_wire) {
+        connState.wire_end_x = mouseX * getScale()
+        connState.wire_end_y = mouseY * getScale()
+        ladderRenderer.render(editor, ladder)
+        return
+      }
+      
+      // Trigger redraw to show/hide connection handles
+      ladderRenderer.render(editor, ladder)
+    }
+    
     if (!is_dragging) return
 
-    const rect = canvas.getBoundingClientRect()
-    end_x = Math.floor(event.clientX - rect.left)
-    end_y = Math.floor(event.clientY - rect.top)
+    end_x = mouseX
+    end_y = mouseY
 
     const distance_x = Math.abs(end_x - start_x)
     const distance_y = Math.abs(end_y - start_y)
@@ -1941,6 +2126,61 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   }
 
   const onRelease = () => {
+    // Handle connection wire drop
+    if (connState.dragging_wire) {
+      const startBlock = connState.wire_start_block
+      const startSide = connState.wire_start_side
+      
+      // Find target block under cursor
+      const cursor_x = connState.wire_end_x / getBlockWidth()
+      const cursor_y = connState.wire_end_y / getBlockHeight()
+      const target_x = Math.floor(cursor_x)
+      const target_y = Math.floor(cursor_y)
+      const targetBlock = ladder.blocks.find(b => b.x === target_x && b.y === target_y)
+      
+      if (targetBlock && targetBlock.id !== startBlock.id) {
+        // Determine which side of target we're connecting to
+        const x_in_cell = cursor_x - target_x
+        const targetSide = x_in_cell < 0.5 ? 'left' : 'right'
+        
+        // Valid connection: right side of source -> left side of target
+        // Or: left side of source -> right side of target (but target must be to the left)
+        let fromBlock, toBlock
+        if (startSide === 'right' && targetSide === 'left') {
+          // Normal forward connection
+          fromBlock = startBlock
+          toBlock = targetBlock
+        } else if (startSide === 'left' && targetSide === 'right') {
+          // Backward direction - swap to make it forward
+          fromBlock = targetBlock
+          toBlock = startBlock
+        }
+        
+        if (fromBlock && toBlock && fromBlock.x < toBlock.x) {
+          // Check if connection already exists
+          const exists = ladder.connections.find(c => 
+            c.from.id === fromBlock.id && c.to.id === toBlock.id
+          )
+          
+          if (!exists) {
+            // Create new connection
+            ladder.connections.push({
+              id: editor._generateID(),
+              from: { id: fromBlock.id },
+              to: { id: toBlock.id }
+            })
+          }
+        }
+      }
+      
+      // Reset connection wire state
+      connState.dragging_wire = false
+      connState.wire_start_block = null
+      connState.wire_start_side = null
+      ladderRenderer.render(editor, ladder)
+      return
+    }
+    
     is_dragging = false
     was_dragging = true
 
@@ -2056,6 +2296,19 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   canvas.addEventListener('mouseup', onRelease)
   canvas.addEventListener('click', onClick)
   canvas.addEventListener('dblclick', onDblClick)
+  
+  // Reset hover state when mouse leaves canvas
+  canvas.addEventListener('mouseleave', () => {
+    connState.hover_x = -1
+    connState.hover_y = -1
+    if (connState.dragging_wire) {
+      // Cancel wire drag if mouse leaves canvas
+      connState.dragging_wire = false
+      connState.wire_start_block = null
+      connState.wire_start_side = null
+    }
+    ladderRenderer.render(editor, ladder)
+  })
 
   // Touch event handlers
   let last_touched = {}
