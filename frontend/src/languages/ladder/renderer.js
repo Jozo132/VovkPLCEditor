@@ -1799,16 +1799,91 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
 
     if (is_moving) {
       // Move the selection
-      const end_x_block = Math.floor(end_x * getScale() / getBlockWidth())
-      const end_y_block = Math.floor(end_y * getScale() / getBlockHeight())
-      let dx = end_x_block - temp_x
-      let dy = end_y_block - temp_y
-      temp_x = end_x_block
-      temp_y = end_y_block
-      const x = editor.ladder_selection.origin.x
-      const y = editor.ladder_selection.origin.y
-      if (dx + x < 0) dx = 0
-      if (dy + y < 0) dy = 0
+      // Calculate current cursor cell position
+      const cursor_x_block = Math.floor(end_x * getScale() / getBlockWidth())
+      const cursor_y_block = Math.floor(end_y * getScale() / getBlockHeight())
+      
+      const start_cell_x = temp_x
+      const start_cell_y = temp_y
+    
+      const current_origin_x = editor.ladder_selection.origin.x
+      const current_origin_y = editor.ladder_selection.origin.y
+      
+      // Let me try a cleaner approach: always compute from start
+      const total_dx = cursor_x_block - start_cell_x
+      const total_dy = cursor_y_block - start_cell_y
+      
+      // How much have we already moved?
+      const already_dx = current_origin_x - start_cell_x
+      const already_dy = current_origin_y - start_cell_y
+      
+      // How much more do we need to move?
+      let dx = total_dx - already_dx
+      let dy = total_dy - already_dy
+      
+      // Clamp target to valid range
+      let target_x = current_origin_x + dx
+      let target_y = current_origin_y + dy
+      if (target_x < 0) {
+        dx = -current_origin_x
+        target_x = 0
+      }
+      if (target_y < 0) {
+        dy = -current_origin_y
+        target_y = 0
+      }
+      
+      // Skip if no movement
+      if (dx === 0 && dy === 0) return
+
+      // Check if the new positions would overlap with any non-moving blocks
+      const movingIds = new Set(moving_elements.filter(b => b).map(b => b.id))
+      const nonMovingBlocks = ladder.blocks.filter(b => !movingIds.has(b.id))
+      
+      // Calculate proposed new positions for all moving elements
+      const proposedPositions = moving_elements.filter(b => b).map(b => ({
+        id: b.id,
+        x: b.x + dx,
+        y: b.y + dy
+      }))
+      
+      // Check for collisions with non-moving blocks
+      const hasCollision = proposedPositions.some(pos => 
+        nonMovingBlocks.some(b => b.x === pos.x && b.y === pos.y)
+      )
+      
+      // If there's a collision, don't apply the move
+      if (hasCollision) return
+      
+      // Check connection constraints - connections cannot go backwards
+      // If a moving block connects TO a non-moving block, moving block must stay to the left (X < target X)
+      // If a non-moving block connects TO a moving block, moving block must stay to the right (X > source X)
+      const hasConnectionViolation = proposedPositions.some(pos => {
+        // Find connections where this moving block is the source (connects TO something)
+        const outgoingToNonMoving = ladder.connections.filter(c => 
+          c.from.id === pos.id && !movingIds.has(c.to.id)
+        )
+        // Moving block must have X < target's X (stay to the left)
+        for (const conn of outgoingToNonMoving) {
+          const targetBlock = nonMovingBlocks.find(b => b.id === conn.to.id)
+          if (targetBlock && pos.x >= targetBlock.x) return true
+        }
+        
+        // Find connections where this moving block is the target (something connects TO it)
+        const incomingFromNonMoving = ladder.connections.filter(c => 
+          c.to.id === pos.id && !movingIds.has(c.from.id)
+        )
+        // Moving block must have X > source's X (stay to the right)
+        for (const conn of incomingFromNonMoving) {
+          const sourceBlock = nonMovingBlocks.find(b => b.id === conn.from.id)
+          if (sourceBlock && pos.x <= sourceBlock.x) return true
+        }
+        
+        return false
+      })
+      
+      // If connection constraint is violated, don't apply the move
+      if (hasConnectionViolation) return
 
       const selected = editor.ladder_selection?.ladder_id === ladderId ? editor.ladder_selection.selection : []
       for (const sel of selected) {
