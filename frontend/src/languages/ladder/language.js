@@ -374,81 +374,239 @@ function ladderToIR(ladder) {
             return [orBlock, element]
         }
         
+        // Helper to check if a block is a coil type
+        const isCoilType = (type) => type === 'coil' || type === 'coil_set' || type === 'coil_rset'
+        
+        // Helper to check if a block is a timer type
+        const isTimerType = (type) => type === 'timer_ton' || type === 'timer_tof' || type === 'timer_tp'
+        
+        // Helper to check if a block is a counter type
+        const isCounterType = (type) => type === 'counter_u' || type === 'counter_d' ||
+            type === 'counter_ctu' || type === 'counter_ctd' || type === 'counter_ctud'
+        
+        // Helper to check if a coil has non-coil downstream connections
+        const hasNonCoilDownstream = (blockId) => {
+            const outgoing = adjacencyMap.get(blockId) || []
+            return outgoing.some(targetId => {
+                const target = blocks.find(b => b.id === targetId)
+                return target && !isCoilType(target.type)
+            })
+        }
+        
+        // Helper to check if a coil has ANY downstream connections (coil or not)
+        const hasAnyDownstream = (blockId) => {
+            const outgoing = adjacencyMap.get(blockId) || []
+            return outgoing.length > 0
+        }
+        
         // Find all terminal outputs in this network
-        // Coils are always terminal outputs (they never have outgoing connections)
-        // Timers/counters are only terminal outputs if they have NO outgoing connections
-        // (i.e., they're at the end of the chain, not in the middle of a sequence)
-        const networkCoils = connectedBlocks.filter(b => {
+        // - Coils are terminals if they have NO downstream, or ONLY coil downstream
+        //   (coils with non-coil downstream are mid-chain with TAP - not terminals)
+        // - Timers/counters are terminal only if they have NO outgoing connections
+        const networkTerminals = connectedBlocks.filter(b => {
             if (!network.has(b.id)) return false
             
-            // Coils are always terminal outputs
-            if (b.type === 'coil' || b.type === 'coil_set' || b.type === 'coil_rset') {
-                return true
+            // Coils are terminals unless they have non-coil downstream (TAP coils)
+            // TAP coils are mid-chain and feed into other logic
+            if (isCoilType(b.type)) {
+                return !hasNonCoilDownstream(b.id)
             }
             
-            // Timers and counters are only terminal if they have no outgoing connections
-            if (b.type === 'timer_ton' || b.type === 'timer_tof' || b.type === 'timer_tp' ||
-                b.type === 'counter_u' || b.type === 'counter_d' ||
-                b.type === 'counter_ctu' || b.type === 'counter_ctd' || b.type === 'counter_ctud') {
+            // Timers and counters are terminal only if they have no outgoing connections
+            if (isTimerType(b.type) || isCounterType(b.type)) {
                 const outgoing = adjacencyMap.get(b.id) || []
-                return outgoing.length === 0 // Terminal only if no outgoing connections
+                return outgoing.length === 0
             }
             
             return false
         })
         
-        // Group coils that share the same input(s) - parallel coils
-        // Key: sorted input IDs joined, Value: array of coils
-        const coilGroups = new Map()
-        for (const coil of networkCoils) {
-            const inputs = reverseMap.get(coil.id) || []
-            const key = inputs.slice().sort().join(',')
-            if (!coilGroups.has(key)) coilGroups.set(key, [])
-            coilGroups.get(key).push(coil)
-        }
+        // ========================================================================
+        // BACKWARD TRAVERSAL WITH MEMOIZATION
+        // Build expression for each terminal by tracing backward from it.
+        // Cache expressions for blocks to avoid redundant computation.
+        // Each terminal gets its own condition based on what leads TO it.
+        // NOTE: TAP is NOT used in backward traversal. TAP is only for forward
+        // traversal when building a single chain through the network.
+        // ========================================================================
         
-        for (const [inputKey, coils] of coilGroups) {
-            // Build the condition expression backward from the first coil's inputs
-            // (All coils in group share the same inputs)
-            const inputs = reverseMap.get(coils[0].id) || []
+        // Cache for block expressions (memoization)
+        const exprCache = new Map()
+        
+        /**
+         * Build expression backward from a block, with memoization
+         * @param {string} blockId 
+         * @param {Set<string>} pathVisited - Blocks visited in current path (cycle detection)
+         * @returns {object[]|null}
+         */
+        const buildExprMemo = (blockId, pathVisited = new Set()) => {
+            if (pathVisited.has(blockId)) return null // Cycle
             
-            let conditionElements = []
+            // Check cache first
+            if (exprCache.has(blockId)) {
+                return exprCache.get(blockId)
+            }
             
+            const block = blocks.find(b => b.id === blockId)
+            if (!block || !network.has(blockId)) return null
+            
+            pathVisited.add(blockId)
+            
+            // Filter inputs: exclude terminal coils (those with no downstream)
+            // Coils with ANY downstream pass logic through
+            const inputs = (reverseMap.get(blockId) || []).filter(id => {
+                if (!network.has(id)) return false
+                const inputBlock = blocks.find(b => b.id === id)
+                if (!inputBlock) return false
+                // Coils pass logic only if they have downstream (not terminals)
+                if (isCoilType(inputBlock.type)) {
+                    return hasAnyDownstream(inputBlock.id)
+                }
+                return true
+            })
+            
+            const element = blockToElement(block)
+            
+            // Check if this is a coil with non-coil downstream (needs TAP after it)
+            // TAP is needed when coil output feeds into contacts/timers/counters
+            const needsTap = isCoilType(block.type) && hasNonCoilDownstream(block.id)
+            
+            // Check if this is a pass-through coil (coil with coil-only downstream)
+            // These should NOT be included in expressions - they just pass through
+            const isPassThroughCoil = isCoilType(block.type) && hasAnyDownstream(block.id) && !hasNonCoilDownstream(block.id)
+            
+            let result
             if (inputs.length === 0) {
-                // Coils with no inputs - unconditional (error case, but handle gracefully)
-                conditionElements = []
+                // Start block
+                if (isPassThroughCoil) {
+                    result = [] // Pass-through coil with no inputs - empty
+                } else {
+                    result = needsTap ? [element, { type: 'tap' }] : [element]
+                }
             } else if (inputs.length === 1) {
-                // Single input to coils
-                const expr = buildExprBackward(inputs[0], new Set())
-                if (expr) {
-                    conditionElements = Array.isArray(expr) ? expr : [expr]
+                // Single input - series (AND)
+                const inputExpr = buildExprMemo(inputs[0], new Set(pathVisited))
+                if (isPassThroughCoil) {
+                    // Pass through - don't add this coil, just return input expression
+                    result = inputExpr ? [...inputExpr] : []
+                } else if (inputExpr) {
+                    result = needsTap 
+                        ? [...inputExpr, element, { type: 'tap' }]
+                        : [...inputExpr, element]
+                } else {
+                    result = needsTap ? [element, { type: 'tap' }] : [element]
                 }
             } else {
-                // Multiple inputs to coils = OR of all input paths
+                // Multiple inputs - parallel (OR)
+                // Sort inputs by position (Y ascending, then X ascending) for predictable execution order
+                const sortedInputs = [...inputs].sort((a, b) => {
+                    const blockA = blocks.find(bl => bl.id === a)
+                    const blockB = blocks.find(bl => bl.id === b)
+                    if (!blockA || !blockB) return 0
+                    if (blockA.y !== blockB.y) return blockA.y - blockB.y
+                    return blockA.x - blockB.x
+                })
+                
+                const branches = []
+                for (const inputId of sortedInputs) {
+                    const branchExpr = buildExprMemo(inputId, new Set(pathVisited))
+                    if (branchExpr && branchExpr.length > 0) {
+                        branches.push({ elements: [...branchExpr] })
+                    }
+                }
+                
+                if (isPassThroughCoil) {
+                    // Pass through - don't add this coil
+                    if (branches.length === 0) {
+                        result = []
+                    } else if (branches.length === 1) {
+                        result = [...branches[0].elements]
+                    } else {
+                        result = [{ type: 'or', branches }]
+                    }
+                } else if (branches.length === 0) {
+                    result = needsTap ? [element, { type: 'tap' }] : [element]
+                } else if (branches.length === 1) {
+                    result = needsTap
+                        ? [...branches[0].elements, element, { type: 'tap' }]
+                        : [...branches[0].elements, element]
+                } else {
+                    result = needsTap
+                        ? [{ type: 'or', branches }, element, { type: 'tap' }]
+                        : [{ type: 'or', branches }, element]
+                }
+            }
+            
+            exprCache.set(blockId, result)
+            pathVisited.delete(blockId)
+            return result
+        }
+        
+        // Build condition for each terminal and group by condition
+        const terminalsByExpr = new Map()
+        
+        for (const terminal of networkTerminals) {
+            const inputs = (reverseMap.get(terminal.id) || []).filter(id => network.has(id))
+            
+            let conditionExpr = []
+            if (inputs.length === 0) {
+                conditionExpr = []
+            } else if (inputs.length === 1) {
+                const expr = buildExprMemo(inputs[0], new Set())
+                conditionExpr = expr ? [...expr] : []
+            } else {
+                // Multiple inputs to terminal - OR them
                 const branches = []
                 for (const inputId of inputs) {
-                    const branchExpr = buildExprBackward(inputId, new Set())
-                    if (branchExpr) {
-                        const branchElements = Array.isArray(branchExpr) ? branchExpr : [branchExpr]
-                        branches.push({ elements: branchElements })
+                    const branchExpr = buildExprMemo(inputId, new Set())
+                    if (branchExpr && branchExpr.length > 0) {
+                        branches.push({ elements: [...branchExpr] })
                     }
                 }
                 if (branches.length === 1) {
-                    conditionElements = branches[0].elements
+                    conditionExpr = branches[0].elements
                 } else if (branches.length > 1) {
-                    conditionElements = [{ type: 'or', branches }]
+                    conditionExpr = [{ type: 'or', branches }]
                 }
             }
             
-            // Add ALL coils in this group as output elements
-            for (const coil of coils) {
-                conditionElements.push(blockToElement(coil))
+            // Serialize for grouping - include terminal type in key to separate coil/set/reset
+            const key = JSON.stringify({ 
+                condition: conditionExpr, 
+                termType: terminal.type 
+            }, (k, v) => {
+                if (k === 'id' || k === 'symbol') return undefined
+                return v
+            })
+            
+            if (!terminalsByExpr.has(key)) {
+                terminalsByExpr.set(key, { condition: conditionExpr, terminals: [] })
+            }
+            terminalsByExpr.get(key).terminals.push(terminal)
+        }
+        
+        // Create rungs for each group
+        for (const [key, group] of terminalsByExpr) {
+            const rungElements = [...group.condition]
+            
+            // Sort terminals by position (Y ascending, then X ascending) for predictable execution order
+            const sortedTerminals = [...group.terminals].sort((a, b) => {
+                if (a.y !== b.y) return a.y - b.y
+                return a.x - b.x
+            })
+            
+            // Add all terminals in this group
+            for (const terminal of sortedTerminals) {
+                const termElement = blockToElement(terminal)
+                rungElements.push(termElement)
             }
             
-            rungs.push({
-                comment: ladder.comment || ladder.name,
-                elements: conditionElements
-            })
+            if (rungElements.length > 0) {
+                rungs.push({
+                    comment: ladder.comment || ladder.name,
+                    elements: rungElements
+                })
+            }
         }
         
         // Mark all nodes in network as visited
