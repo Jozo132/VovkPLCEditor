@@ -188,11 +188,14 @@ export default class SerialCLASS {
      * Peeks at the oldest byte in the receive buffer without removing it.
      * @return {number} Next byte (0-255) or -1 if no data is available.
      */
-    peek() {
+    peek(offset = 0) {
         if (this._readBuffer.length === 0) {
             return -1;  // No data available, emulate Arduino Serial.peek() behavior
         }
-        const byte = this._readBuffer[0];
+        if (offset < 0 || offset >= this._readBuffer.length) {
+            return -2;  // Out of bounds
+        }
+        const byte = this._readBuffer[offset];
         // Convert byte (Uint8) to Number 0-255
         return (byte & 0xff);
     }

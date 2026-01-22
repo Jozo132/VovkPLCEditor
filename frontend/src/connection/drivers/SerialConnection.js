@@ -7,13 +7,13 @@ export default class SerialConnection extends ConnectionBase {
         super();
         this.debug = debug;
         this.baudrate = baudrate;
-        this.serial = new Serial(4096, debug); // buffer size
+        this.serial = new Serial(32 * 1024, debug); // buffer size
         this.plc = new VovkPLC(); // only used for buildCommand and crc8
         this._commandQueue = [];
         this._commandRunning = false;
         this._commandQueueLimit = 50;
         this._commandTimeoutMs = 8000;
-        
+
         this.serial.onDisconnect = (err) => {
             if (this.onDisconnected) this.onDisconnected(err);
         };
@@ -65,10 +65,10 @@ export default class SerialConnection extends ConnectionBase {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.programDownload(bytecode);
             await this.writeChunked(command + "\n");
-            
+
             // Wait for response
             await this._readResponseLine(12000);
-            
+
             // Flush any remaining data in the buffer to prevent offset issues
             await new Promise(resolve => setTimeout(resolve, 100));
             while (this.serial.available()) {
@@ -90,7 +90,7 @@ export default class SerialConnection extends ConnectionBase {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.programUpload();
             await this.serial.write(command + "\n");
-            
+
             const line = await this._readResponseLine(12000);
             let raw = line.trim();
             if (raw.startsWith('OK')) {
@@ -106,7 +106,7 @@ export default class SerialConnection extends ConnectionBase {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.memoryRead(address, size);
             await this.serial.write(command + "\n");
-            
+
             // Wait for the full line (including potential large data payload)
             const line = await this._readResponseLine(8000);
             let raw = line.trim();
@@ -141,9 +141,9 @@ export default class SerialConnection extends ConnectionBase {
 
     async writeMemoryAreaMasked(address, data, mask) {
         return this._enqueueCommand(async () => {
-             const command = this.plc.buildCommand.memoryWriteMask(address, data, mask);
-             await this.serial.write(command + "\n");
-             await this._readResponseLine(); // Wait for OK
+            const command = this.plc.buildCommand.memoryWriteMask(address, data, mask);
+            await this.serial.write(command + "\n");
+            await this._readResponseLine(); // Wait for OK
         }, { label: 'writeMemoryAreaMasked' });
     }
 
@@ -160,22 +160,66 @@ export default class SerialConnection extends ConnectionBase {
             const command = "PI";
             const cmdHex = this.plc.stringToHex(command);
             const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0');
+            if (this.debug) console.log("Sending info command:", command + checksum.toUpperCase());
             await this.serial.write(command + checksum.toUpperCase() + "\n");
 
             const available = await this._waitForReply(5000);
             if (!available) throw new Error("No response from device");
 
-            // Skip intro message
-            let raw = null
-            while (true) {
-                const available = await this._waitForReply(50);
-                if (!available) break;
-                raw = this.serial.readLine();
-                if (this.debug) console.log("Raw device info:", raw);
-                if (raw === null || typeof raw === 'undefined') break
-                raw = raw.trim();
-                if (!raw) continue // Skip empty lines
-                if (raw.startsWith('::')) continue // Skip intro message starting with '::...'
+            // ESP32-C6 USB-CDC sends data in chunks with gaps, so we need to:
+            // 1. Accumulate all incoming data
+            // 2. Wait for complete info line (contains both '[' and ']')
+            // 3. Use longer timeouts between chunks
+            let accumulated = ''
+            let infoLine = null
+            const startTime = Date.now()
+            const maxWaitTime = 8000 // Maximum time to wait for complete response
+            
+            while (Date.now() - startTime < maxWaitTime) {
+                // Use longer timeout for ESP32-C6 compatibility (USB-CDC has variable latency)
+                const hasData = await this._waitForReply(300);
+                if (hasData) {
+                    // Read all available data (not just one line) to handle chunked responses
+                    const chunk = this.serial.readAll();
+                    if (chunk) {
+                        accumulated += chunk;
+                        if (this.debug) console.log("Accumulated chunk:", chunk, "Total:", accumulated.length);
+                    }
+                }
+                
+                // Check if we have a complete info line in accumulated data
+                // Look for a line that contains '[' and ends with ']' followed by newline or end
+                const bracketStart = accumulated.indexOf('[');
+                if (bracketStart >= 0) {
+                    const bracketEnd = accumulated.indexOf(']', bracketStart);
+                    if (bracketEnd >= 0) {
+                        // Found complete bracketed content - extract the full line
+                        // Find the start of this line (after previous newline)
+                        let lineStart = accumulated.lastIndexOf('\n', bracketStart);
+                        lineStart = lineStart >= 0 ? lineStart + 1 : 0;
+                        // Find end of line (newline after bracket or end of string)
+                        let lineEnd = accumulated.indexOf('\n', bracketEnd);
+                        lineEnd = lineEnd >= 0 ? lineEnd : accumulated.length;
+                        
+                        infoLine = accumulated.substring(lineStart, lineEnd).trim();
+                        if (this.debug) console.log("Found complete info line:", infoLine);
+                        // Give a bit more time for any trailing data
+                        await new Promise(r => setTimeout(r, 50));
+                        break;
+                    }
+                }
+                
+                // If no data and we've been waiting a while, check if we should give up
+                if (!hasData && Date.now() - startTime > 2000 && accumulated.length === 0) {
+                    break; // No data at all after 2 seconds
+                }
+            }
+            
+            let raw = infoLine;
+
+            if (!raw) {
+                console.log("Remaining accumulated data:", accumulated);
+                throw new Error("Invalid info response: no data or incomplete response");
             }
 
             while (true) {
@@ -260,7 +304,7 @@ export default class SerialConnection extends ConnectionBase {
             const cmdHex = this.plc.stringToHex(command)
             const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
             await this.serial.write(command + checksum.toUpperCase() + "\n")
-            
+
             const line = await this._readResponseLine()
             let raw = line.trim()
             if (!raw) throw new Error("Invalid health response")
@@ -298,7 +342,7 @@ export default class SerialConnection extends ConnectionBase {
             const cmdHex = this.plc.stringToHex(command)
             const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
             await this.serial.write(command + checksum.toUpperCase() + "\n")
-            
+
             await this._readResponseLine()
         }, { label: 'resetHealth' });
     }
@@ -310,6 +354,20 @@ export default class SerialConnection extends ConnectionBase {
             await new Promise(r => setTimeout(r, 10));
         }
         return true;
+    }
+
+    async _waitForCharacter(char, timeout = 5000) { // Without consuming the serial buffer
+        const start = Date.now();
+        while (true) {
+            const available = this.serial.available();
+            if (available) {
+                const peeked = this.serial.peek(available); // number
+                const expected = typeof char === 'string' ? char.charCodeAt(0) : char;
+                if (peeked === expected) return true;
+            }
+            if (Date.now() - start > timeout) throw new Error(`Timeout waiting for character '${char}'`);
+            await new Promise(r => setTimeout(r, 10));
+        }
     }
 
     async _readResponseLine(timeout = 5000) {
