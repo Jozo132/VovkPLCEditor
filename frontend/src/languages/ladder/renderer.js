@@ -17,7 +17,7 @@ import { Popup } from "../../editor/UI/Elements/components/popup.js"
 export function connectTouchingBlocks(ladder) {
   const { blocks, connections } = ladder
   if (!blocks || blocks.length === 0) return
-  
+
   // Only add new connections for adjacent blocks - never remove existing ones
   for (const block of blocks) {
     const x = block.x + 1
@@ -38,65 +38,65 @@ export function connectTouchingBlocks(ladder) {
 
 /** @typedef */
 const memory_locations = [
-    { short: 'K', name: 'control', label: 'Control' },
-    { short: 'C', name: 'counter', label: 'Counter' },
-    { short: 'T', name: 'timer', label: 'Timer' },
-    { short: 'X', name: 'input', label: 'Input' },
-    { short: 'Y', name: 'output', label: 'Output' },
-    { short: 'S', name: 'system', label: 'System' },
-    { short: 'M', name: 'marker', label: 'Marker' },
-    { short: 'M', name: 'memory', label: 'Marker' },
+  { short: 'K', name: 'control', label: 'Control' },
+  { short: 'C', name: 'counter', label: 'Counter' },
+  { short: 'T', name: 'timer', label: 'Timer' },
+  { short: 'X', name: 'input', label: 'Input' },
+  { short: 'Y', name: 'output', label: 'Output' },
+  { short: 'S', name: 'system', label: 'System' },
+  { short: 'M', name: 'marker', label: 'Marker' },
+  { short: 'M', name: 'memory', label: 'Marker' },
 ]
 
 /** @type { PLC_Symbol[] } */
 const system_symbols = [
-    { name: 'P_100ms', location: 'control', type: 'bit', address: 2.0, initial_value: 0, comment: '100ms pulse' },
-    { name: 'P_200ms', location: 'control', type: 'bit', address: 2.1, initial_value: 0, comment: '200ms pulse' },
-    { name: 'P_300ms', location: 'control', type: 'bit', address: 2.2, initial_value: 0, comment: '300ms pulse' },
-    { name: 'P_500ms', location: 'control', type: 'bit', address: 2.3, initial_value: 0, comment: '500ms pulse' },
-    { name: 'P_1s', location: 'control', type: 'bit', address: 2.4, initial_value: 0, comment: '1 second pulse' },
-    { name: 'P_2s', location: 'control', type: 'bit', address: 2.5, initial_value: 0, comment: '2 second pulse' },
-    { name: 'P_5s', location: 'control', type: 'bit', address: 2.6, initial_value: 0, comment: '5 second pulse' },
-    { name: 'P_10s', location: 'control', type: 'bit', address: 2.7, initial_value: 0, comment: '10 second pulse' },
-    { name: 'P_30s', location: 'control', type: 'bit', address: 3.0, initial_value: 0, comment: '30 second pulse' },
-    { name: 'P_1min', location: 'control', type: 'bit', address: 3.1, initial_value: 0, comment: '1 minute pulse' },
-    { name: 'P_2min', location: 'control', type: 'bit', address: 3.2, initial_value: 0, comment: '2 minute pulse' },
-    { name: 'P_5min', location: 'control', type: 'bit', address: 3.3, initial_value: 0, comment: '5 minute pulse' },
-    { name: 'P_10min', location: 'control', type: 'bit', address: 3.4, initial_value: 0, comment: '10 minute pulse' },
-    { name: 'P_15min', location: 'control', type: 'bit', address: 3.5, initial_value: 0, comment: '15 minute pulse' },
-    { name: 'P_30min', location: 'control', type: 'bit', address: 3.6, initial_value: 0, comment: '30 minute pulse' },
-    { name: 'P_1hr', location: 'control', type: 'bit', address: 3.7, initial_value: 0, comment: '1 hour pulse' },
-    { name: 'P_2hr', location: 'control', type: 'bit', address: 4.0, initial_value: 0, comment: '2 hour pulse' },
-    { name: 'P_3hr', location: 'control', type: 'bit', address: 4.1, initial_value: 0, comment: '3 hour pulse' },
-    { name: 'P_4hr', location: 'control', type: 'bit', address: 4.2, initial_value: 0, comment: '4 hour pulse' },
-    { name: 'P_5hr', location: 'control', type: 'bit', address: 4.3, initial_value: 0, comment: '5 hour pulse' },
-    { name: 'P_6hr', location: 'control', type: 'bit', address: 4.4, initial_value: 0, comment: '6 hour pulse' },
-    { name: 'P_12hr', location: 'control', type: 'bit', address: 4.5, initial_value: 0, comment: '12 hour pulse' },
-    { name: 'P_1day', location: 'control', type: 'bit', address: 4.6, initial_value: 0, comment: '1 day pulse' },
+  { name: 'P_100ms', location: 'control', type: 'bit', address: 2.0, initial_value: 0, comment: '100ms pulse' },
+  { name: 'P_200ms', location: 'control', type: 'bit', address: 2.1, initial_value: 0, comment: '200ms pulse' },
+  { name: 'P_300ms', location: 'control', type: 'bit', address: 2.2, initial_value: 0, comment: '300ms pulse' },
+  { name: 'P_500ms', location: 'control', type: 'bit', address: 2.3, initial_value: 0, comment: '500ms pulse' },
+  { name: 'P_1s', location: 'control', type: 'bit', address: 2.4, initial_value: 0, comment: '1 second pulse' },
+  { name: 'P_2s', location: 'control', type: 'bit', address: 2.5, initial_value: 0, comment: '2 second pulse' },
+  { name: 'P_5s', location: 'control', type: 'bit', address: 2.6, initial_value: 0, comment: '5 second pulse' },
+  { name: 'P_10s', location: 'control', type: 'bit', address: 2.7, initial_value: 0, comment: '10 second pulse' },
+  { name: 'P_30s', location: 'control', type: 'bit', address: 3.0, initial_value: 0, comment: '30 second pulse' },
+  { name: 'P_1min', location: 'control', type: 'bit', address: 3.1, initial_value: 0, comment: '1 minute pulse' },
+  { name: 'P_2min', location: 'control', type: 'bit', address: 3.2, initial_value: 0, comment: '2 minute pulse' },
+  { name: 'P_5min', location: 'control', type: 'bit', address: 3.3, initial_value: 0, comment: '5 minute pulse' },
+  { name: 'P_10min', location: 'control', type: 'bit', address: 3.4, initial_value: 0, comment: '10 minute pulse' },
+  { name: 'P_15min', location: 'control', type: 'bit', address: 3.5, initial_value: 0, comment: '15 minute pulse' },
+  { name: 'P_30min', location: 'control', type: 'bit', address: 3.6, initial_value: 0, comment: '30 minute pulse' },
+  { name: 'P_1hr', location: 'control', type: 'bit', address: 3.7, initial_value: 0, comment: '1 hour pulse' },
+  { name: 'P_2hr', location: 'control', type: 'bit', address: 4.0, initial_value: 0, comment: '2 hour pulse' },
+  { name: 'P_3hr', location: 'control', type: 'bit', address: 4.1, initial_value: 0, comment: '3 hour pulse' },
+  { name: 'P_4hr', location: 'control', type: 'bit', address: 4.2, initial_value: 0, comment: '4 hour pulse' },
+  { name: 'P_5hr', location: 'control', type: 'bit', address: 4.3, initial_value: 0, comment: '5 hour pulse' },
+  { name: 'P_6hr', location: 'control', type: 'bit', address: 4.4, initial_value: 0, comment: '6 hour pulse' },
+  { name: 'P_12hr', location: 'control', type: 'bit', address: 4.5, initial_value: 0, comment: '12 hour pulse' },
+  { name: 'P_1day', location: 'control', type: 'bit', address: 4.6, initial_value: 0, comment: '1 day pulse' },
 
-    { name: 'S_100ms', location: 'control', type: 'bit', address: 5.0, initial_value: 0, comment: '100ms square wave' },
-    { name: 'S_200ms', location: 'control', type: 'bit', address: 5.1, initial_value: 0, comment: '200ms square wave' },
-    { name: 'S_300ms', location: 'control', type: 'bit', address: 5.2, initial_value: 0, comment: '300ms square wave' },
-    { name: 'S_500ms', location: 'control', type: 'bit', address: 5.3, initial_value: 0, comment: '500ms square wave' },
-    { name: 'S_1s', location: 'control', type: 'bit', address: 5.4, initial_value: 0, comment: '1 second square wave' },
-    { name: 'S_2s', location: 'control', type: 'bit', address: 5.5, initial_value: 0, comment: '2 second square wave' },
-    { name: 'S_5s', location: 'control', type: 'bit', address: 5.6, initial_value: 0, comment: '5 second square wave' },
-    { name: 'S_10s', location: 'control', type: 'bit', address: 5.7, initial_value: 0, comment: '10 second square wave' },
-    { name: 'S_30s', location: 'control', type: 'bit', address: 6.0, initial_value: 0, comment: '30 second square wave' },
-    { name: 'S_1min', location: 'control', type: 'bit', address: 6.1, initial_value: 0, comment: '1 minute square wave' },
-    { name: 'S_2min', location: 'control', type: 'bit', address: 6.2, initial_value: 0, comment: '2 minute square wave' },
-    { name: 'S_5min', location: 'control', type: 'bit', address: 6.3, initial_value: 0, comment: '5 minute square wave' },
-    { name: 'S_10min', location: 'control', type: 'bit', address: 6.4, initial_value: 0, comment: '10 minute square wave' },
-    { name: 'S_15min', location: 'control', type: 'bit', address: 6.5, initial_value: 0, comment: '15 minute square wave' },
-    { name: 'S_30min', location: 'control', type: 'bit', address: 6.6, initial_value: 0, comment: '30 minute square wave' },
-    { name: 'S_1hr', location: 'control', type: 'bit', address: 6.7, initial_value: 0, comment: '1 hour square wave' },
+  { name: 'S_100ms', location: 'control', type: 'bit', address: 5.0, initial_value: 0, comment: '100ms square wave' },
+  { name: 'S_200ms', location: 'control', type: 'bit', address: 5.1, initial_value: 0, comment: '200ms square wave' },
+  { name: 'S_300ms', location: 'control', type: 'bit', address: 5.2, initial_value: 0, comment: '300ms square wave' },
+  { name: 'S_500ms', location: 'control', type: 'bit', address: 5.3, initial_value: 0, comment: '500ms square wave' },
+  { name: 'S_1s', location: 'control', type: 'bit', address: 5.4, initial_value: 0, comment: '1 second square wave' },
+  { name: 'S_2s', location: 'control', type: 'bit', address: 5.5, initial_value: 0, comment: '2 second square wave' },
+  { name: 'S_5s', location: 'control', type: 'bit', address: 5.6, initial_value: 0, comment: '5 second square wave' },
+  { name: 'S_10s', location: 'control', type: 'bit', address: 5.7, initial_value: 0, comment: '10 second square wave' },
+  { name: 'S_30s', location: 'control', type: 'bit', address: 6.0, initial_value: 0, comment: '30 second square wave' },
+  { name: 'S_1min', location: 'control', type: 'bit', address: 6.1, initial_value: 0, comment: '1 minute square wave' },
+  { name: 'S_2min', location: 'control', type: 'bit', address: 6.2, initial_value: 0, comment: '2 minute square wave' },
+  { name: 'S_5min', location: 'control', type: 'bit', address: 6.3, initial_value: 0, comment: '5 minute square wave' },
+  { name: 'S_10min', location: 'control', type: 'bit', address: 6.4, initial_value: 0, comment: '10 minute square wave' },
+  { name: 'S_15min', location: 'control', type: 'bit', address: 6.5, initial_value: 0, comment: '15 minute square wave' },
+  { name: 'S_30min', location: 'control', type: 'bit', address: 6.6, initial_value: 0, comment: '30 minute square wave' },
+  { name: 'S_1hr', location: 'control', type: 'bit', address: 6.7, initial_value: 0, comment: '1 hour square wave' },
 
-    { name: 'elapsed_days', location: 'control', type: 'byte', address: 8.0, initial_value: 0, comment: 'Elapsed days' },
-    { name: 'elapsed_hours', location: 'control', type: 'byte', address: 9.0, initial_value: 0, comment: 'Elapsed hours' },
-    { name: 'elapsed_minutes', location: 'control', type: 'byte', address: 10.0, initial_value: 0, comment: 'Elapsed minutes' },
-    { name: 'elapsed_seconds', location: 'control', type: 'byte', address: 11.0, initial_value: 0, comment: 'Elapsed seconds' },
+  { name: 'elapsed_days', location: 'control', type: 'byte', address: 8.0, initial_value: 0, comment: 'Elapsed days' },
+  { name: 'elapsed_hours', location: 'control', type: 'byte', address: 9.0, initial_value: 0, comment: 'Elapsed hours' },
+  { name: 'elapsed_minutes', location: 'control', type: 'byte', address: 10.0, initial_value: 0, comment: 'Elapsed minutes' },
+  { name: 'elapsed_seconds', location: 'control', type: 'byte', address: 11.0, initial_value: 0, comment: 'Elapsed seconds' },
 
-    { name: 'system_uptime', location: 'control', type: 'dint', address: 12.0, initial_value: 0, comment: 'System uptime in seconds' },
+  { name: 'system_uptime', location: 'control', type: 'dint', address: 12.0, initial_value: 0, comment: 'System uptime in seconds' },
 ]
 
 
@@ -107,31 +107,31 @@ const system_symbols = [
  */
 const parseAddressToSymbol = (addressStr) => {
   if (!addressStr || typeof addressStr !== 'string') return null
-  
+
   const trimmed = addressStr.trim()
-  
+
   // Pattern: Letter + Number (e.g., X0.0, Y0, M100.2)
   const match = trimmed.match(/^([kKcCtTxXyYsSmM])([0-9]+(?:\.[0-9]+)?)$/i)
   if (!match) return null
-  
+
   const code = match[1].toUpperCase()
   const valStr = match[2]
   const val = parseFloat(valStr)
-  
+
   // Map letter to location
   const locationMap = {
     'K': 'control',
-    'C': 'counter', 
+    'C': 'counter',
     'T': 'timer',
     'X': 'input',
     'Y': 'output',
     'S': 'system',
     'M': 'marker'
   }
-  
+
   const location = locationMap[code] || 'marker'
   const hasBit = valStr.includes('.')
-  
+
   // Determine type based on location:
   // - Timers store u32 elapsed time values (4 bytes)
   // - Counters store u16 count values (2 bytes)
@@ -142,7 +142,7 @@ const parseAddressToSymbol = (addressStr) => {
   } else if (location === 'counter') {
     type = 'u16' // Counters are 2-byte count values
   }
-  
+
   return {
     name: addressStr,
     location,
@@ -164,13 +164,13 @@ const getBlockState = (editor, block) => {
     // First try to find symbol by name in system symbols or project symbols
     let symbol = system_symbols.find(symbol => symbol.name === block.symbol)
       || editor.project?.symbols?.find(symbol => symbol.name === block.symbol)
-    
+
     // If not found, try to parse as direct address (e.g., X0.0, Y0.0, M10.5)
     if (!symbol && block.symbol) {
       symbol = parseAddressToSymbol(block.symbol)
     }
-    
-    block.state = { active: false, powered: false, evaluated: false, symbol, terminated_input: false, terminated_output: false }
+
+    block.state = { active: false, powered: false, powered_input: false, evaluated: false, symbol, terminated_input: false, terminated_output: false }
   }
   return block
 }
@@ -218,24 +218,36 @@ const draw_contact = (editor, like, ctx, block) => {
     ctx.strokeStyle = activeColor
     ctx.lineWidth = highlight_width
     ctx.beginPath()
-    if (state?.powered) {
-      if (state.terminated_input) {
+
+    // For contacts: powered means the contact is receiving input power AND is active (closed)
+    // So if powered is true, we draw both input and output wires
+    const isPowered = !!state?.powered
+
+    // Input side (left)
+    if (isPowered || state?.terminated_input) {
+      if (state?.terminated_input) {
         ctx.moveTo(x0 + 1, y_mid - 12)
         ctx.lineTo(x0 + 1, y_mid + 12)
       }
-      ctx.moveTo(x0, y_mid)
-      ctx.lineTo(cl, y_mid)
+      if (isPowered) {
+        ctx.moveTo(x0, y_mid)
+        ctx.lineTo(cl, y_mid)
+      }
     }
 
-    const momentary = type === 'contact' && block.trigger !== 'normal'
-    if (state?.powered && value && !momentary) {
+    // Output side (right) - draw if contact is powered (active and has input power)
+    // trigger is only momentary if explicitly set to something other than 'normal'
+    const momentary = block.trigger && block.trigger !== 'normal'
+    if (isPowered && !momentary) {
       ctx.moveTo(cr, y_mid)
       ctx.lineTo(x1, y_mid)
     }
+
+    // Inner contact box - draw if contact value is true (active)
     if (value) {
       ctx.fillStyle = ctx.strokeStyle
       // Draw box inside the contact
-      if (state?.powered) {
+      if (isPowered) {
         ctx.roundRect(cl, ct, cr - cl, cb - ct, 2)
         ctx.fillRect(cl - 1, ct - 1, cr - cl + 2, cb - ct + 2)
       } else {
@@ -299,10 +311,10 @@ const draw_contact = (editor, like, ctx, block) => {
     ctx.font = font
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    
+
     if (editor.device_manager.connected && symbol && (symbol.type === 'bit' || symbol.type === 'bool')) {
       const val = !!getSymbolValue(editor, symbol)
-      
+
       const symWidth = ctx.measureText(block.symbol).width
       const pillGap = 5
       const pillHeight = 14
@@ -311,18 +323,18 @@ const draw_contact = (editor, like, ctx, block) => {
       ctx.font = 'bold ' + pillFontSize + 'px Arial'
       const pillText = val ? 'ON' : 'OFF'
       const pillWidth = ctx.measureText(pillText).width + 8
-      
+
       const totalW = symWidth + pillGap + pillWidth
       const startX = x_mid - (totalW / 2)
-      
+
       // Draw Symbol
       ctx.textAlign = 'left'
       ctx.fillText(block.symbol, startX, ct - 13)
-      
+
       // Draw Pill
       const px = startX + symWidth + pillGap
       const py = ct - 13 - (pillHeight / 2)
-      
+
       ctx.beginPath()
       if (ctx.roundRect) {
         ctx.roundRect(px, py, pillWidth, pillHeight, 3)
@@ -334,12 +346,12 @@ const draw_contact = (editor, like, ctx, block) => {
       ctx.strokeStyle = val ? '#1fba5f' : '#555'
       ctx.lineWidth = 1
       ctx.stroke()
-      
+
       ctx.fillStyle = val ? '#1fba5f' : 'rgba(200, 200, 200, 0.5)'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText(pillText, px + pillWidth/2, py + pillHeight/2 + 1)
-      
+      ctx.fillText(pillText, px + pillWidth / 2, py + pillHeight / 2 + 1)
+
       ctx.restore()
     } else {
       ctx.fillText(block.symbol, x_mid, ct - 13)
@@ -450,10 +462,10 @@ const draw_coil = (editor, like, ctx, block) => {
     ctx.font = font
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    
+
     if (editor.device_manager.connected && symbol && (symbol.type === 'bit' || symbol.type === 'bool')) {
       const val = !!getSymbolValue(editor, symbol)
-      
+
       const symWidth = ctx.measureText(block.symbol).width
       const pillGap = 5
       const pillHeight = 14
@@ -462,18 +474,18 @@ const draw_coil = (editor, like, ctx, block) => {
       ctx.font = 'bold ' + pillFontSize + 'px Arial'
       const pillText = val ? 'ON' : 'OFF'
       const pillWidth = ctx.measureText(pillText).width + 8
-      
+
       const totalW = symWidth + pillGap + pillWidth
       const startX = x_mid - (totalW / 2)
-      
+
       // Draw Symbol
       ctx.textAlign = 'left'
       ctx.fillText(block.symbol, startX, ct - 13)
-      
+
       // Draw Pill
       const px = startX + symWidth + pillGap
       const py = ct - 13 - (pillHeight / 2)
-      
+
       ctx.beginPath()
       if (ctx.roundRect) {
         ctx.roundRect(px, py, pillWidth, pillHeight, 3)
@@ -485,19 +497,19 @@ const draw_coil = (editor, like, ctx, block) => {
       ctx.strokeStyle = val ? '#1fba5f' : '#555'
       ctx.lineWidth = 1
       ctx.stroke()
-      
+
       ctx.fillStyle = val ? '#1fba5f' : 'rgba(200, 200, 200, 0.5)'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText(pillText, px + pillWidth/2, py + pillHeight/2 + 1)
-      
+      ctx.fillText(pillText, px + pillWidth / 2, py + pillHeight / 2 + 1)
+
       ctx.restore()
     } else {
       ctx.fillText(block.symbol, x_mid, ct - 13)
     }
 
     if (symbol) ctx.fillText(`${short_location}${symbol.address.toFixed(1)}`, x_mid, cb + 13)
-    
+
     ctx.fillStyle = color
     ctx.font = '18px Arial Black'
     if (type === 'coil_set') ctx.fillText('S', x_mid, y_mid + 1)
@@ -517,7 +529,7 @@ const draw_timer = (editor, like, ctx, block) => {
   if (!block.state) return // Block state not found, skip
   const { x, y, type, state } = block
   const symbol = state?.symbol
-  
+
   // Handle backward compatibility: preset can be number or T# string
   let presetStr = block.preset || 'T#1s'
   let presetMs = 1000
@@ -559,19 +571,25 @@ const draw_timer = (editor, like, ctx, block) => {
   let elapsed = 0
   let done = false
   let remaining = presetMs
+  let liveInputOn = false  // Live IN state from timer flags (IN_OLD bit)
+  let running = false      // RUNNING flag from timer
+  let flagsAddress = 0
   if (symbol) {
     // Calculate the absolute address for the timer
     // Timer memory layout: 9 bytes per timer (same as WindowManager normalizeAddress)
+    // [0..3] ET (u32), [4..7] StartTime (u32), [8] Flags
+    // Flags: Bit 0 = Q, Bit 1 = RUNNING, Bit 2 = IN_OLD
     const offsets = ensureOffsets(editor.project?.offsets || {})
     const timerOffset = offsets.timer?.offset || 704
     const absoluteAddress = timerOffset + Math.floor(symbol.address) * 9 // Timers are 9 bytes per unit
-    
+    flagsAddress = absoluteAddress + 8 // Flags byte is at offset 8
+
     // Look up live value by absoluteAddress and type u32/dint (same as STL/ASM renderers)
     const liveValues = editor.live_symbol_values
     if (liveValues) {
       // First try by symbol name
       let liveEntry = liveValues.get(symbol.name)
-      
+
       // For timer instances, we need the u32 elapsed time value
       // The timer storage is stored with type 'u32' or 'dint'
       if (!liveEntry || liveEntry.type === 'byte') {
@@ -583,54 +601,157 @@ const draw_timer = (editor, like, ctx, block) => {
           liveEntry = timerLiveEntry
         }
       }
-      
+
       if (liveEntry && typeof liveEntry.value === 'number') {
         elapsed = liveEntry.value
         done = elapsed >= presetMs
         // Calculate remaining time (countdown) - same as STL/ASM renderers
         remaining = Math.max(0, presetMs - elapsed)
       }
+
+      // Read the timer flags byte to get live IN state
+      // Try to find the flags entry by absolute address
+      const flagsEntry = [...liveValues.values()].find(
+        l => l.absoluteAddress === flagsAddress && l.type === 'byte'
+      )
+      if (flagsEntry && typeof flagsEntry.value === 'number') {
+        const flags = flagsEntry.value
+        liveInputOn = !!(flags & 0x04)  // Bit 2 = IN_OLD
+        running = !!(flags & 0x02)       // Bit 1 = RUNNING
+      }
+    }
+
+    // Always try to read from editor.memory as fallback for flags
+    if (!liveInputOn && editor.memory && editor.memory.length > flagsAddress) {
+      const flags = editor.memory[flagsAddress]
+      liveInputOn = !!(flags & 0x04)  // Bit 2 = IN_OLD
+      running = !!(flags & 0x02)       // Bit 1 = RUNNING
     }
   }
+
+  // Timer output (Q) state varies by type:
+  // TON: Q = done (ON when elapsed >= preset)
+  // TOF: Q = !done (ON while timer is holding after input off, OFF when elapsed >= preset)
+  // TP: Q = running AND !done (ON only while pulse is active, OFF when idle or elapsed >= preset)
+  const isTOF = type === 'timer_tof'
+  const isTP = type === 'timer_tp'
+  // For TP: output is ON only when actually running (elapsed > 0) AND not done yet
+  // When TP is idle (elapsed=0), output should be OFF
+  const tpOutputOn = isTP ? (elapsed > 0 && !done) : false
+  const tofOutputOn = isTOF ? !done : false
+  const tonOutputOn = (!isTOF && !isTP) ? done : false
+  const outputOn = tpOutputOn || tofOutputOn || tonOutputOn
+
+  // Use live input state from timer memory (IN_OLD flag) if available, 
+  // otherwise fall back to evaluator state (powered = inputPowered for timers)
+  // Use live input state from timer memory (IN_OLD flag) if available, 
+  // otherwise fall back to evaluator state (powered = inputPowered for timers)
+  const inputPowered = liveInputOn || !!state?.powered_input
+  const blockPowered = !!state?.powered
+
+  // Debug: log what we have
+  // console.log(`Timer ${symbol?.name}: liveInputOn=${liveInputOn}, powered=${state?.powered}, powered_input=${state?.powered_input}, inputPowered=${inputPowered}`)
 
   if (like === 'highlight') {
     // Use cyan for simulation, lime green for device/serial mode
     const isSimulation = editor.window_manager.active_device === 'simulation'
     const activeColor = isSimulation ? '#00ffff' : '#32cd32' // cyan : lime green
-    ctx.strokeStyle = activeColor
-    ctx.lineWidth = highlight_width
-    ctx.beginPath()
-    if (state?.powered) {
-      // Draw input line highlight
+
+    if (inputPowered) {
+      // Draw input connection wire highlight (from left edge of cell to box)
+      ctx.strokeStyle = activeColor
+      ctx.lineWidth = 8
+      ctx.beginPath()
       ctx.moveTo(x0, y_mid)
       ctx.lineTo(boxLeft, y_mid)
-      // Draw output line highlight when done (Q = ON)
-      if (done) {
-        ctx.moveTo(boxRight, y_mid)
-        ctx.lineTo(x1, y_mid)
-      }
+      ctx.stroke()
+
     }
-    if (state?.terminated_output && done) {
+
+    // Draw left border of timer box (input indicator)
+    if (blockPowered) {
+      ctx.beginPath()
+      ctx.lineWidth = 6
+      ctx.moveTo(boxLeft - 2, boxTop - 2)
+      ctx.lineTo(boxLeft - 2, boxBottom + 2)
+      ctx.stroke()
+    }
+
+    // Draw output section separately
+    if (outputOn) {
+      ctx.strokeStyle = activeColor
+      ctx.lineWidth = 8
+      ctx.beginPath()
+      // Draw output wire highlight
+      ctx.moveTo(boxRight, y_mid)
+      ctx.lineTo(x1, y_mid)
+      ctx.stroke()
+    }
+    if (state?.terminated_output && outputOn) {
+      ctx.beginPath()
+      ctx.lineWidth = 8
       ctx.moveTo(x1 - 2, y_mid - 12)
       ctx.lineTo(x1 - 2, y_mid + 12)
+      ctx.stroke()
     }
-    ctx.stroke()
-    
-    // Draw active border outline when timer is ON (conducting) - thicker border
-    if (done) {
+
+    // Check if timer is running (for progress bar)
+    const isRunning = elapsed > 0 && !done
+
+    // Draw top, right, bottom edges of border based on OUTPUT state
+    // For TOF when running: don't draw top/bottom (they'll be replaced by progress bar)
+    if (outputOn) {
       ctx.strokeStyle = activeColor
-      ctx.lineWidth = 4
-      ctx.strokeRect(boxLeft - 2, boxTop - 2, boxWidth + 4, boxHeight + 4)
+      ctx.lineWidth = 6
+      ctx.beginPath()
+
+      ctx.moveTo(boxRight + 2, boxTop - 2)
+      ctx.lineTo(boxRight + 2, boxBottom + 2)
+
+      const outset = 4
+      if (isTOF && isRunning) {
+        // TOF running: only draw right edge, top/bottom will be progress bars
+        ctx.moveTo(boxRight + outset, boxTop - outset)
+        ctx.lineTo(boxRight + outset, boxBottom + outset)
+      } else if (!isTP) {
+        // Normal: draw top, right, bottom edges
+        // Top edge
+        ctx.moveTo(boxLeft - outset, boxTop - outset)
+        ctx.lineTo(boxRight + outset, boxTop - outset)
+        // Bottom edge
+        ctx.moveTo(boxLeft - outset, boxBottom + outset)
+        ctx.lineTo(boxRight + outset, boxBottom + outset)
+      }
+      ctx.stroke()
     }
-    
-    // Draw progress bar highlight only when timer is running (not done)
-    if (state?.powered && elapsed > 0 && !done) {
+
+    // Draw progress bar on top and bottom edges of the timer block
+    // Show bars when timer is actively counting (elapsed > 0 and not finished)
+    if (isRunning) {
       const progress = Math.min(elapsed / presetMs, 1)
-      const progressWidth = (boxWidth - 4) * progress
+      const barHeight = 4
+      const barInset = -5 // Inset from box edges
+
       ctx.fillStyle = activeColor
-      ctx.globalAlpha = 0.3
-      ctx.fillRect(boxLeft + 2, boxBottom - 8, progressWidth, 4)
-      ctx.globalAlpha = 1.0
+
+      const progressWidth = (boxWidth - barInset * 2)
+      if (isTOF) {
+        // TOF: bar shrinks from right to left (shows remaining time)
+        const remainingProgress = progress
+        const remainingOffset = progressWidth * (remainingProgress)
+        const progressWidthNormal = progressWidth - remainingOffset
+        // Top edge bar (from left, shrinking width)
+        ctx.fillRect(boxLeft + barInset + remainingOffset, boxTop - barHeight - 2, progressWidthNormal, barHeight)
+        // Bottom edge bar (from left, shrinking width)
+        ctx.fillRect(boxLeft + barInset + remainingOffset, boxBottom + 2, progressWidthNormal, barHeight)
+      } else {
+        // TON/TP: bar grows from left to right
+        const progressWidthNormal = progressWidth * progress
+        // Top edge bar
+        ctx.fillRect(boxLeft + barInset, boxTop - barHeight - 2, progressWidthNormal, barHeight)
+        // Bottom edge bar
+        ctx.fillRect(boxLeft + barInset, boxBottom + 2, progressWidthNormal, barHeight)
+      }
     }
     return
   }
@@ -642,7 +763,7 @@ const draw_timer = (editor, like, ctx, block) => {
     const activeOnColor = isSimulation ? '#00ffff' : '#32cd32'
     const activeOffColor = '#c04040'
     const runningColor = isSimulation ? '#00cccc' : '#f0a020' // slightly dimmer cyan or orange
-    
+
     ctx.strokeStyle = color
     ctx.lineWidth = line_width
 
@@ -689,20 +810,27 @@ const draw_timer = (editor, like, ctx, block) => {
     ctx.fillText('ET:', boxLeft + 3, boxBottom - 5)
     ctx.textAlign = 'right'
     if (editor.device_manager.connected) {
-      // Show remaining time (countdown) like STL/ASM do - use mode-appropriate colors
-      ctx.fillStyle = done ? activeOnColor : (elapsed > 0 ? runningColor : font_color)
-      ctx.fillText(formatTime(remaining), boxRight - 3, boxBottom - 5)
+      // For TOF/TP: show preset time when done (output OFF), remaining when running
+      // For TON: show remaining time (countdown)
+      const displayTime = (isTOF || isTP) && done ? presetMs : remaining
+      // For TOF/TP: use normal color when idle (done), running color when active
+      // For TON: use green when done, running color when active
+      const etColor = (isTOF || isTP)
+        ? (done ? font_color : runningColor)  // TOF/TP: normal when idle, running when active
+        : (done ? activeOnColor : (elapsed > 0 ? runningColor : font_color))  // TON: green when done
+      ctx.fillStyle = etColor
+      ctx.fillText(formatTime(displayTime), boxRight - 3, boxBottom - 5)
     } else {
       ctx.fillStyle = '#666'
       ctx.fillText('---', boxRight - 3, boxBottom - 5)
     }
 
-    // Draw Q (output) indicator with ON/OFF state
+    // Draw Q (output) indicator with ON/OFF state (TOF/TP is inverted)
     ctx.textAlign = 'right'
     ctx.font = 'bold 10px Arial'
     if (editor.device_manager.connected) {
-      ctx.fillStyle = done ? activeOnColor : activeOffColor
-      ctx.fillText(done ? 'ON' : 'OFF', boxRight - 3, y_mid)
+      ctx.fillStyle = outputOn ? activeOnColor : activeOffColor
+      ctx.fillText(outputOn ? 'ON' : 'OFF', boxRight - 3, y_mid)
     } else {
       ctx.fillStyle = '#666'
       ctx.fillText('Q', boxRight - 3, y_mid)
@@ -747,7 +875,7 @@ const draw_counter = (editor, like, ctx, block) => {
   if (!block.state) return // Block state not found, skip
   const { x, y, type, state } = block
   const symbol = state?.symbol
-  
+
   const presetValue = typeof block.preset === 'number' ? block.preset : 10
 
   const x0 = x * ladder_block_width
@@ -784,12 +912,12 @@ const draw_counter = (editor, like, ctx, block) => {
     const offsets = ensureOffsets(editor.project?.offsets || {})
     const counterOffset = offsets.counter?.offset || 768
     const absoluteAddress = counterOffset + Math.floor(symbol.address) * 5 // Counters are 5 bytes per unit (4 bytes count + 1 byte flags)
-    
+
     // Look up live value
     const liveValues = editor.live_symbol_values
     if (liveValues) {
       let liveEntry = liveValues.get(symbol.name)
-      
+
       // For counter instances, we need the i32 count value
       if (!liveEntry || liveEntry.type === 'byte') {
         const counterLiveEntry = [...liveValues.values()].find(
@@ -799,7 +927,7 @@ const draw_counter = (editor, like, ctx, block) => {
           liveEntry = counterLiveEntry
         }
       }
-      
+
       if (liveEntry && typeof liveEntry.value === 'number') {
         currentCount = liveEntry.value
         // CTU: done when count >= preset
@@ -836,14 +964,14 @@ const draw_counter = (editor, like, ctx, block) => {
       ctx.lineTo(x1 - 2, y_mid + 12)
     }
     ctx.stroke()
-    
+
     // Draw active border outline when counter is done
     if (done) {
       ctx.strokeStyle = activeColor
       ctx.lineWidth = 4
       ctx.strokeRect(boxLeft - 2, boxTop - 2, boxWidth + 4, boxHeight + 4)
     }
-    
+
     // Draw progress bar highlight (only for CTU/CTUD, not CTD)
     if (state?.powered && currentCount > 0 && !done && type !== 'counter_d' && type !== 'counter_ctd') {
       const progress = Math.min(currentCount / presetValue, 1)
@@ -861,7 +989,7 @@ const draw_counter = (editor, like, ctx, block) => {
     const activeOnColor = isSimulation ? '#00ffff' : '#32cd32'
     const activeOffColor = '#c04040'
     const countingColor = isSimulation ? '#00cccc' : '#f0a020'
-    
+
     ctx.strokeStyle = color
     ctx.lineWidth = line_width
 
@@ -996,19 +1124,19 @@ const evaluate_ladder = (editor, ladder) => {
   const { blocks, connections } = ladder
   // Reset the state of all blocks and connections
   const blockHasInputConnection = (block) => connections.some(connection => connection.to.id === block.id)
-  
+
   // Helper function to get timer elapsed time from live_symbol_values (same as STL/ASM)
   const getTimerElapsed = (block) => {
     if (!['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)) return 0
     const symbol = block.state?.symbol
     if (!symbol) return 0
-    
+
     // Calculate the absolute address for the timer
     // Timer memory layout: 9 bytes per timer (same as WindowManager normalizeAddress)
     const offsets = ensureOffsets(editor.project?.offsets || {})
     const timerOffset = offsets.timer?.offset || 704
     const absoluteAddress = timerOffset + Math.floor(symbol.address) * 9 // Timers are 9 bytes per unit
-    
+
     // Look up live value by absoluteAddress and type u32/dint
     const liveValues = editor.live_symbol_values
     if (liveValues) {
@@ -1027,11 +1155,11 @@ const evaluate_ladder = (editor, ladder) => {
     }
     return 0
   }
-  
+
   // Helper function to get timer's Q (done) output state
   const getTimerDone = (block) => {
     if (!['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)) return false
-    
+
     // Get preset value
     let presetMs = 1000
     const presetStr = block.preset || 'T#1s'
@@ -1041,30 +1169,30 @@ const evaluate_ladder = (editor, ladder) => {
       const presetParsed = parseTimeDuration(presetStr)
       presetMs = presetParsed.valid ? presetParsed.ms : 1000
     }
-    
+
     // Get elapsed value from live_symbol_values
     const elapsed = getTimerElapsed(block)
     return elapsed >= presetMs
   }
-  
+
   // Helper function to get counter's Q (done) output state
   const getCounterDone = (block) => {
     if (!['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)) return false
-    
+
     const presetValue = typeof block.preset === 'number' ? block.preset : 10
     const symbol = block.state?.symbol
-    
+
     if (!symbol) return false
-    
+
     // Get current count from live values
     const liveValues = editor.live_symbol_values
     if (!liveValues) return false
-    
+
     let currentCount = 0
     const offsets = ensureOffsets(editor.project?.offsets || {})
     const counterOffset = offsets.counter?.offset || 768
     const absoluteAddress = counterOffset + Math.floor(symbol.address) * 5
-    
+
     let liveEntry = liveValues.get(symbol.name)
     if (!liveEntry || liveEntry.type === 'byte') {
       const counterLiveEntry = [...liveValues.values()].find(
@@ -1074,11 +1202,11 @@ const evaluate_ladder = (editor, ladder) => {
         liveEntry = counterLiveEntry
       }
     }
-    
+
     if (liveEntry && typeof liveEntry.value === 'number') {
       currentCount = liveEntry.value
     }
-    
+
     // CTU: done when count >= preset
     // CTD: done when count <= 0
     if (block.type === 'counter_d' || block.type === 'counter_ctd') {
@@ -1086,7 +1214,7 @@ const evaluate_ladder = (editor, ladder) => {
     }
     return currentCount >= presetValue
   }
-  
+
   blocks.forEach(block => {
     block = getBlockState(editor, block)
     if (!block.state) return // Block state not found, skip
@@ -1101,7 +1229,8 @@ const evaluate_ladder = (editor, ladder) => {
     state.evaluated = false
     block.state.terminated_input = false
     block.state.terminated_output = false
-    // Calculate and store timer/counter done state
+    // Calculate and store timer/counter done state and elapsed time
+    block.state.timerElapsed = getTimerElapsed(block)
     block.state.timerDone = getTimerDone(block)
     block.state.counterDone = getCounterDone(block)
   })
@@ -1127,8 +1256,8 @@ const evaluate_ladder = (editor, ladder) => {
     block.state.terminated_output = true
   })
 
-  /** @type {(block: PLC_LadderBlock, first: boolean) => void} */
-  const evaluate_powered_block = (block, first) => {
+  /** @type {(block: PLC_LadderBlock, first: boolean, inputPowered: boolean) => void} */
+  const evaluate_powered_block = (block, first, inputPowered = false) => {
     // if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
     if (!block.state) return // Block state not found, skip
     if (block.state.evaluated) return
@@ -1136,18 +1265,47 @@ const evaluate_ladder = (editor, ladder) => {
     const isContact = block.type === 'contact'
     const isCoil = ['coil', 'coil_set', 'coil_rset'].includes(block.type)
     const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)
+    const isTOF = block.type === 'timer_tof'
+    const isTP = block.type === 'timer_tp'
     const isCounter = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)
+
+    // Track the input power state for this block
+    state.powered_input = inputPowered
+    if (first && isContact && block.x === 0) {
+      state.powered_input = true
+      inputPowered = true
+    }
+
     const pass_through = isCoil && !first
-    const timer_pass_through = isTimer && !first && state.timerDone
+    // For TOF: output is ON when NOT done (timer still running after input off)
+    // For TP: output is ON when running (elapsed > 0) AND NOT done
+    // For TON: output is ON when done (timer finished)
+    const timerOutputOn = isTP
+      ? (state.timerElapsed > 0 && !state.timerDone)  // TP: ON only while pulse active
+      : (isTOF ? !state.timerDone : state.timerDone)  // TOF: !done, TON: done
+    const timer_pass_through = isTimer && !first && timerOutputOn
     const counter_pass_through = isCounter && !first && state.counterDone
-    state.powered = isContact || pass_through || timer_pass_through || counter_pass_through
+
+    // For timers/coils: powered = received input power
+    // For contacts: powered = input power AND contact is active (closed)
+    if (isTimer || isCoil || isCounter) {
+      state.powered = inputPowered
+    } else if (isContact) {
+      state.powered = inputPowered && state.active
+    } else {
+      state.powered = isContact || pass_through || timer_pass_through || counter_pass_through
+    }
+
     if (isCoil && first) return
     if (isTimer && first) return
     if (isCounter && first) return
     const momentary = block.trigger !== 'normal'
-    // For timers/counters, only propagate power if done (Q output is true)
-    const shouldPropagate = isTimer ? state.timerDone : isCounter ? state.counterDone : ((!momentary && state.active) || pass_through)
-    if (shouldPropagate) {
+    // For timers: propagate power based on Q output state
+    // For counters: only propagate power if done (Q output is true)
+    // For contacts: propagate if active AND received input power
+    const contactOutputPowered = isContact && state.active && inputPowered
+    const shouldPropagate = isTimer ? timerOutputOn : isCounter ? state.counterDone : (isContact ? contactOutputPowered : ((!momentary && state.active) || pass_through))
+    if (shouldPropagate || (isCoil && inputPowered)) {
       state.evaluated = true
       const outgoing_connections = connections.filter(con => con.from.id === block.id)
       outgoing_connections.forEach(con => {
@@ -1155,15 +1313,53 @@ const evaluate_ladder = (editor, ladder) => {
         const to_block = blocks.find(block => block.id === con.to.id)
         // if (!to_block) throw new Error(`Block not found: ${con.to.id}`)
         if (!to_block) return // Block not found, skip
-        con.state.powered = true
+        // Calculate output power to pass to next block
+        let outputPower = false
+        if (isContact) outputPower = inputPowered && state.active
+        else if (isCoil) outputPower = inputPowered
+        else if (isTimer) outputPower = timerOutputOn
+        else if (isCounter) outputPower = state.counterDone
+        else outputPower = true
+        con.state.powered = outputPower
         con.state.evaluated = true
-        evaluate_powered_block(to_block, false)
+        evaluate_powered_block(to_block, false, outputPower)
       })
     }
   }
 
   starting_blocks.forEach(block => {
-    evaluate_powered_block(block, true)
+    evaluate_powered_block(block, true, true)
+  })
+
+  // Special handling for TOF and TP timers: they need to propagate power even when input is OFF
+  // TOF holds the output ON after input turns off
+  // TP holds output ON for full pulse duration after rising edge trigger
+  // We need to start a second evaluation from these timers that have their output ON
+  // but weren't reached by the normal power chain
+  const holdingTimers = blocks.filter(block => block.type === 'timer_tof' || block.type === 'timer_tp')
+  holdingTimers.forEach(timerBlock => {
+    if (!timerBlock.state) return
+    // Check if timer output is ON
+    // TOF: ON when !done (still holding)
+    // TP: ON when elapsed > 0 AND !done (pulse active)
+    const isTP = timerBlock.type === 'timer_tp'
+    const timerOutputOn = isTP
+      ? (timerBlock.state.timerElapsed > 0 && !timerBlock.state.timerDone)
+      : !timerBlock.state.timerDone
+    if (timerOutputOn && !timerBlock.state.evaluated) {
+      // Timer is active but wasn't evaluated - propagate power from it
+      timerBlock.state.powered = true
+      timerBlock.state.evaluated = true
+      const outgoing_connections = connections.filter(con => con.from.id === timerBlock.id)
+      outgoing_connections.forEach(con => {
+        if (!con.state) return
+        const to_block = blocks.find(b => b.id === con.to.id)
+        if (!to_block) return
+        con.state.powered = true
+        con.state.evaluated = true
+        evaluate_powered_block(to_block, false, true)
+      })
+    }
   })
 }
 
@@ -1178,7 +1374,7 @@ export const ladderRenderer = {
     if (block.type !== 'ladder') return
     block.blocks = block.blocks || []
     block.connections = block.connections || []
-    
+
     const { div, props, blocks, connections } = block
     const ladderId = block.id
 
@@ -1200,7 +1396,7 @@ export const ladderRenderer = {
             try {
               // 1. Convert Ladder to IR
               const ir = toIR(block)
-              
+
               let finalOutput = ''
               let titleSuffix = ''
 
@@ -1216,7 +1412,7 @@ export const ladderRenderer = {
                 // The runtime expects { rungs: ... } JSON string
                 const ladderJson = JSON.stringify({ rungs: ir.rungs })
                 const ladderResult = await editor.runtime.compileLadder(ladderJson)
-                
+
                 if (!ladderResult || typeof ladderResult.output !== 'string') {
                   throw new Error('Ladder compilation failed to produce STL')
                 }
@@ -1228,7 +1424,7 @@ export const ladderRenderer = {
                 if (action === 'view_asm') {
                   const asmResult = await editor.runtime.compile(finalOutput, { language: 'stl' })
                   if (!asmResult || typeof asmResult.output !== 'string') {
-                     throw new Error('STL compilation failed to produce PLCASM')
+                    throw new Error('STL compilation failed to produce PLCASM')
                   }
                   finalOutput = asmResult.output
                   titleSuffix = 'PLCASM'
@@ -1238,7 +1434,7 @@ export const ladderRenderer = {
               // 4. Show Popup
               const pre = document.createElement('pre')
               Object.assign(pre.style, {
-                margin: '0', padding: '10px', background: '#1e1e1e', 
+                margin: '0', padding: '10px', background: '#1e1e1e',
                 color: '#d4d4d4', overflow: 'auto', maxHeight: '600px',
                 whiteSpace: 'pre-wrap', fontFamily: 'Consolas, monospace', fontSize: '12px'
               })
@@ -1413,7 +1609,7 @@ export const ladderRenderer = {
     connections.forEach(con => {
       // Prevent regenerating IDs for existing connections
       if (!con.id) con.id = editor._generateID()
-      
+
       const from = blocks.find(b => b.id === con.from.id)
       const to = blocks.find(b => b.id === con.to.id)
       if (from && to) links.push({ from, to, powered: !!con.state?.powered })
@@ -1657,7 +1853,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   const onRelease = () => {
     is_dragging = false
     was_dragging = true
-    
+
     // Update connections after moving blocks
     if (is_moving) {
       is_moving = false
@@ -1684,7 +1880,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     const scale = getScale()
     const x = Math.floor(event.offsetX * scale / getBlockWidth())
     const y = Math.floor(event.offsetY * scale / getBlockHeight())
-    
+
     const live = editor.device_manager.connected && !!editor.window_manager?.isMonitoringActive?.()
 
     // Pill click is read-only in live mode - no toggle on single click
@@ -1726,7 +1922,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     // Trigger redraw to show selection
     ladderRenderer.render(editor, ladder)
   }
-  
+
   /** @param { MouseEvent } event */
   const onDblClick = (event) => {
     const live = editor.device_manager.connected && !!editor.window_manager?.isMonitoringActive?.()
@@ -1734,7 +1930,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     const x = Math.floor(event.offsetX * scale / getBlockWidth())
     const y = Math.floor(event.offsetY * scale / getBlockHeight())
     const block = ladder.blocks.find(b => b.x === x && b.y === y)
-    
+
     if (live) {
       // Live Mode: Open context menu on double-click (like right-click)
       if (block) {
@@ -1853,7 +2049,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             { type: 'separator' }
           )
         }
-        
+
         // Add Focus to canvas so shortcuts work immediately after right click interaction
         canvas.focus()
 
@@ -1902,7 +2098,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           const isContact = blockAtPosition.type === 'contact'
           const isTimer = blockAtPosition.type === 'timer_ton' || blockAtPosition.type === 'timer_tof' || blockAtPosition.type === 'timer_tp'
           const isCounter = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(blockAtPosition.type)
-          
+
           // Show different edit option based on block type
           if (isTimer) {
             const timerTypeLabels = {
@@ -1931,7 +2127,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
               { type: 'item', name: 'edit_symbol', label: 'Edit Symbol...' }
             )
           }
-          
+
           // Contact-specific options
           if (isContact) {
             menuItems.push(
@@ -1946,7 +2142,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
               }
             )
           }
-          
+
           // Coil-specific options
           if (isCoil) {
             menuItems.push(
@@ -1959,7 +2155,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
               }
             )
           }
-          
+
           // Timer-specific options
           if (isTimer) {
             menuItems.push(
@@ -1972,7 +2168,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
               }
             )
           }
-          
+
           // Counter-specific options
           if (isCounter) {
             menuItems.push(
@@ -1984,7 +2180,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
               }
             )
           }
-          
+
           menuItems.push({ type: 'separator' })
         }
 
@@ -2200,7 +2396,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   // Keyboard shortcuts
   canvas.tabIndex = 0 // Allow focus
   canvas.style.outline = 'none' // Remove outline
-  
+
   canvas.addEventListener('blur', () => {
     // Clear selection on focus lost (click outside)
     if (editor.ladder_selection?.ladder_id === ladderId && editor.ladder_selection.selection.length > 0) {
@@ -2217,43 +2413,43 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
 
     // Handle Escape (Always) to deselect
     if (key === 'escape') {
-       if (editor.ladder_selection?.ladder_id === ladderId) {
-         editor.ladder_selection.selection = []
-         editor.ladder_selection.origin = { x: 0, y: 0 }
-         ladderRenderer.render(editor, ladder)
-       }
-       e.preventDefault()
-       e.stopPropagation()
-       return
+      if (editor.ladder_selection?.ladder_id === ladderId) {
+        editor.ladder_selection.selection = []
+        editor.ladder_selection.origin = { x: 0, y: 0 }
+        ladderRenderer.render(editor, ladder)
+      }
+      e.preventDefault()
+      e.stopPropagation()
+      return
     }
 
     if (live) {
-        // Live Mode Hotkeys for Toggle/Set
-        const selection = editor.ladder_selection?.selection || []
-        // Only toggle if single block selected and on this ladder
-        if (editor.ladder_selection?.ladder_id === ladderId && selection.length === 1 && selection[0].type === 'block') {
-             const {x, y} = selection[0]
-             const block = ladder.blocks.find(b => b.x === x && b.y === y)
-             if (block && block.symbol) {
-                 const symbol = getBlockState(editor, block).state?.symbol
-                 if (symbol && (symbol.type === 'bit' || symbol.type === 'bool')) {
-                     const val = !!getSymbolValue(editor, symbol)
-                     let newValue = val
-                     let handled = false
-                     
-                     if (key === '1') { newValue = true; handled = true }
-                     if (key === '0') { newValue = false; handled = true }
-                     if (key === 'enter' || key === ' ') { newValue = !val; handled = true }
-                     
-                     if (handled) {
-                         setSymbolBit(editor, symbol, newValue)
-                         ladderRenderer.render(editor, ladder)
-                         e.preventDefault()
-                     }
-                 }
-             }
+      // Live Mode Hotkeys for Toggle/Set
+      const selection = editor.ladder_selection?.selection || []
+      // Only toggle if single block selected and on this ladder
+      if (editor.ladder_selection?.ladder_id === ladderId && selection.length === 1 && selection[0].type === 'block') {
+        const { x, y } = selection[0]
+        const block = ladder.blocks.find(b => b.x === x && b.y === y)
+        if (block && block.symbol) {
+          const symbol = getBlockState(editor, block).state?.symbol
+          if (symbol && (symbol.type === 'bit' || symbol.type === 'bool')) {
+            const val = !!getSymbolValue(editor, symbol)
+            let newValue = val
+            let handled = false
+
+            if (key === '1') { newValue = true; handled = true }
+            if (key === '0') { newValue = false; handled = true }
+            if (key === 'enter' || key === ' ') { newValue = !val; handled = true }
+
+            if (handled) {
+              setSymbolBit(editor, symbol, newValue)
+              ladderRenderer.render(editor, ladder)
+              e.preventDefault()
+            }
+          }
         }
-        return // Don't allow editing shortcuts in live mode
+      }
+      return // Don't allow editing shortcuts in live mode
     }
 
     if (key === 'delete' || key === 'backspace') {
@@ -2263,7 +2459,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       ladderRenderer.render(editor, ladder)
       e.preventDefault()
     }
-    
+
     if (ctrl && key === 'c') {
       const origin = editor.ladder_selection?.origin || { x: 0, y: 0 }
       copySelection(editor, ladder, origin.x, origin.y)
@@ -2300,10 +2496,10 @@ function copySelection(editor, ladder, contextX, contextY) {
   const origin = editor.ladder_selection?.origin || { x: contextX, y: contextY }
   const originX = origin.x
   const originY = origin.y
-  
+
   /** @type {PLC_LadderBlock[]} */
   const blocksToCopy = []
-  
+
   // Collect blocks from selection
   sel.forEach(s => {
     if (s.type === 'block') {
@@ -2321,7 +2517,7 @@ function copySelection(editor, ladder, contextX, contextY) {
       })
     }
   })
-  
+
   // If no selection, use block at context menu position
   if (blocksToCopy.length === 0) {
     const blockAtPosition = ladder.blocks.find(b => b.x === contextX && b.y === contextY)
@@ -2329,9 +2525,9 @@ function copySelection(editor, ladder, contextX, contextY) {
       blocksToCopy.push(blockAtPosition)
     }
   }
-  
+
   if (blocksToCopy.length === 0) return
-  
+
   // Create copies with relative positions
   const copiedBlocks = blocksToCopy.map(block => {
     const copy = { ...block }
@@ -2340,13 +2536,13 @@ function copySelection(editor, ladder, contextX, contextY) {
     copy.y -= originY
     return copy
   })
-  
+
   // Find connections between copied blocks
   const blockIds = new Set(blocksToCopy.map(b => b.id))
   const copiedConnections = ladder.connections
     .filter(c => blockIds.has(c.from.id) && blockIds.has(c.to.id))
     .map(c => ({ ...c }))
-  
+
   // Store in editor clipboard
   editor.ladder_clipboard = {
     blocks: copiedBlocks,
@@ -2368,7 +2564,7 @@ function pasteSelection(editor, ladder, pasteX, pasteY) {
     console.log('No ladder blocks in clipboard')
     return
   }
-  
+
   // Create new blocks with new IDs and adjusted positions
   const idMap = new Map() // old id -> new id
   const newBlocks = clipboard.blocks.map(block => {
@@ -2382,21 +2578,21 @@ function pasteSelection(editor, ladder, pasteX, pasteY) {
       state: undefined
     }
   })
-  
+
   // Create new connections with new IDs
   const newConnections = clipboard.connections.map(conn => ({
     id: editor._generateID(),
     from: { id: idMap.get(conn.from.id), offset: conn.from.offset },
     to: { id: idMap.get(conn.to.id), offset: conn.to.offset }
   })).filter(c => c.from.id && c.to.id) // Only include if both blocks exist
-  
+
   // Add to ladder
   newBlocks.forEach(block => ladder.blocks.push(block))
   newConnections.forEach(conn => ladder.connections.push(conn))
-  
+
   // Auto-connect touching blocks
   connectTouchingBlocks(ladder)
-  
+
   // Select the pasted blocks
   editor.ladder_selection = {
     ladder_id: ladder.id,
@@ -2416,7 +2612,7 @@ function pasteSelection(editor, ladder, pasteX, pasteY) {
 function deleteSelection(editor, ladder, contextX, contextY) {
   /** @type {PLC_LadderBlock[]} */
   const blocksToDelete = []
-  
+
   // First check if there's a block at the context menu position
   if (typeof contextX === 'number' && typeof contextY === 'number') {
     const blockAtPosition = ladder.blocks.find(b => b.x === contextX && b.y === contextY)
@@ -2439,7 +2635,7 @@ function deleteSelection(editor, ladder, contextX, contextY) {
       })
     }
   })
-  
+
   // Delete the blocks and their connections
   blocksToDelete.forEach(block => {
     const idx = ladder.blocks.indexOf(block)
@@ -2449,7 +2645,7 @@ function deleteSelection(editor, ladder, contextX, contextY) {
       ladder.connections = ladder.connections.filter(c => c.from.id !== block.id && c.to.id !== block.id)
     }
   })
-  
+
   if (editor.ladder_selection && blocksToDelete.length > 0) {
     editor.ladder_selection.selection = []
   }
@@ -2490,7 +2686,7 @@ function initializeLiveMonitoring(editor, ladder, canvas) {
       // Find symbol from project or system symbols, or parse as direct address
       let symbol = system_symbols.find(s => s.name === block.symbol)
         || editor.project?.symbols?.find(s => s.name === block.symbol)
-      
+
       // If not found, try to parse as direct address (e.g., X0.0, Y0.0)
       if (!symbol) {
         symbol = parseAddressToSymbol(block.symbol)
@@ -2551,7 +2747,7 @@ function initializeLiveMonitoring(editor, ladder, canvas) {
     // Register each address range with a callback that updates editor.memory
     for (const [addr, entry] of addresses) {
       const listenerId = `ladder-${ladderId}-${addr}`
-      
+
       // Create callback that updates editor.memory and triggers re-render
       const onMemoryChange = (data) => {
         // Only process if visible and connected
@@ -2578,7 +2774,7 @@ function initializeLiveMonitoring(editor, ladder, canvas) {
         // Request re-render
         ladderRenderer.render(editor, ladder)
       }
-      
+
       // @ts-ignore - data_fetcher exists at runtime
       editor.data_fetcher.register(listenerId, addr, entry.size, onMemoryChange)
       monitor.registeredAddresses.set(addr, { size: entry.size, callback: onMemoryChange, listenerId })
@@ -2704,10 +2900,10 @@ async function promptForSymbol(editor, block, ladder) {
     title: `Edit ${blockTypeLabel}`,
     description: 'Enter symbol name or direct address (e.g. X0.0, Y0.0, M10.5)',
     inputs: [
-      { 
-        name: 'symbol', 
-        label: 'Symbol / Address', 
-        type: 'text', 
+      {
+        name: 'symbol',
+        label: 'Symbol / Address',
+        type: 'text',
         value: currentSymbol,
         placeholder: 'e.g. Start_Button or X0.0'
       }
@@ -2740,24 +2936,24 @@ function parseTimeDuration(input) {
   if (!input || typeof input !== 'string') {
     return { valid: false, ms: 0, error: 'Empty input' }
   }
-  
+
   let str = input.trim().toUpperCase()
-  
+
   // Check for T# prefix (optional for convenience)
   if (str.startsWith('T#')) {
     str = str.substring(2)
   }
-  
+
   if (!str) {
     return { valid: false, ms: 0, error: 'Empty duration' }
   }
-  
+
   // Pattern to match time components: number followed by unit (h, m, s, ms)
   const pattern = /^(\d+(?:\.\d+)?)(MS|S|M|H)(.*)$/i
   let remaining = str
   let totalMs = 0
   let hasMatch = false
-  
+
   while (remaining.length > 0) {
     const match = remaining.match(pattern)
     if (!match) {
@@ -2766,12 +2962,12 @@ function parseTimeDuration(input) {
       }
       break
     }
-    
+
     hasMatch = true
     const value = parseFloat(match[1])
     const unit = match[2].toUpperCase()
     remaining = match[3]
-    
+
     switch (unit) {
       case 'MS':
         totalMs += value
@@ -2789,15 +2985,15 @@ function parseTimeDuration(input) {
         return { valid: false, ms: 0, error: `Unknown unit: ${unit}` }
     }
   }
-  
+
   if (!hasMatch) {
     return { valid: false, ms: 0, error: 'No valid time components found' }
   }
-  
+
   if (totalMs < 1) {
     return { valid: false, ms: 0, error: 'Duration must be at least 1ms' }
   }
-  
+
   return { valid: true, ms: Math.round(totalMs) }
 }
 
@@ -2810,20 +3006,20 @@ function formatTimeDuration(ms) {
   if (ms < 1000) {
     return `T#${ms}ms`
   }
-  
+
   const hours = Math.floor(ms / 3600000)
   ms %= 3600000
   const minutes = Math.floor(ms / 60000)
   ms %= 60000
   const seconds = Math.floor(ms / 1000)
   const milliseconds = ms % 1000
-  
+
   let result = 'T#'
   if (hours > 0) result += `${hours}h`
   if (minutes > 0) result += `${minutes}m`
   if (seconds > 0) result += `${seconds}s`
   if (milliseconds > 0) result += `${milliseconds}ms`
-  
+
   return result || 'T#0ms'
 }
 
@@ -2841,7 +3037,7 @@ async function promptForTimerParameters(editor, block, ladder) {
   }
   const timerTypeLabel = timerTypeLabels[block.type] || 'Timer'
   const currentSymbol = block.symbol || ''
-  
+
   // Handle backward compatibility: convert number to T# string if needed
   let currentPreset = block.preset
   if (typeof currentPreset === 'number') {
@@ -2854,17 +3050,17 @@ async function promptForTimerParameters(editor, block, ladder) {
     title: `Edit ${timerTypeLabel}`,
     description: 'Use T#<value><unit> format (e.g. T#1s, T#500ms, T#1m30s)',
     inputs: [
-      { 
-        name: 'symbol', 
-        label: 'Timer Symbol', 
-        type: 'text', 
+      {
+        name: 'symbol',
+        label: 'Timer Symbol',
+        type: 'text',
         value: currentSymbol,
         placeholder: 'e.g. Timer_1 or T0'
       },
-      { 
-        name: 'preset', 
-        label: 'Preset Time (PT)', 
-        type: 'text', 
+      {
+        name: 'preset',
+        label: 'Preset Time (PT)',
+        type: 'text',
         value: currentPreset,
         placeholder: 'e.g. T#1s, T#500ms, T#1m30s'
       }
@@ -2892,7 +3088,7 @@ async function promptForTimerParameters(editor, block, ladder) {
       presetStr = 'T#' + presetStr
     }
     block.preset = presetStr
-    
+
     // Clear cached state so it gets re-resolved
     block.state = undefined
     // Re-render the ladder
@@ -2918,17 +3114,17 @@ async function promptForCounterParameters(editor, block, ladder) {
     title: `Edit ${counterTypeLabel}`,
     description: 'Configure counter symbol and preset value',
     inputs: [
-      { 
-        name: 'symbol', 
-        label: 'Counter Symbol', 
-        type: 'text', 
+      {
+        name: 'symbol',
+        label: 'Counter Symbol',
+        type: 'text',
         value: currentSymbol,
         placeholder: 'e.g. Counter_1 or C0'
       },
-      { 
-        name: 'preset', 
-        label: 'Preset Value (PV)', 
-        type: 'number', 
+      {
+        name: 'preset',
+        label: 'Preset Value (PV)',
+        type: 'number',
         value: currentPreset,
         placeholder: 'e.g. 10'
       }
@@ -2951,7 +3147,7 @@ async function promptForCounterParameters(editor, block, ladder) {
   if (result && result.symbol !== undefined) {
     block.symbol = result.symbol.trim()
     block.preset = parseInt(result.preset) || 10
-    
+
     // Clear cached state so it gets re-resolved
     block.state = undefined
     // Re-render the ladder

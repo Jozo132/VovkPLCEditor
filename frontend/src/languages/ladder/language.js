@@ -19,7 +19,7 @@ export let PLC_Trigger_Type
  *      trigger: PLC_Trigger_Type, 
  *      symbol: string, 
  *      preset?: number,
- *      state?: { active: boolean, powered: boolean, terminated_input: boolean, terminated_output: boolean, evaluated: boolean, symbol?: PLC_Symbol } 
+ *      state?: { active: boolean, powered: boolean, powered_input: boolean, terminated_input: boolean, terminated_output: boolean, evaluated: boolean, symbol?: PLC_Symbol } 
  * }} PLC_LadderBlock * @type { PLC_LadderBlock }
 **/
 export let PLC_LadderBlock
@@ -374,14 +374,28 @@ function ladderToIR(ladder) {
             return [orBlock, element]
         }
         
-        // Find all coils (outputs) in this network
-        const networkCoils = connectedBlocks.filter(b => 
-            network.has(b.id) && 
-            (b.type === 'coil' || b.type === 'coil_set' || b.type === 'coil_rset' ||
-             b.type === 'timer_ton' || b.type === 'timer_tof' || b.type === 'timer_tp' ||
-             b.type === 'counter_u' || b.type === 'counter_d' ||
-             b.type === 'counter_ctu' || b.type === 'counter_ctd' || b.type === 'counter_ctud')
-        )
+        // Find all terminal outputs in this network
+        // Coils are always terminal outputs (they never have outgoing connections)
+        // Timers/counters are only terminal outputs if they have NO outgoing connections
+        // (i.e., they're at the end of the chain, not in the middle of a sequence)
+        const networkCoils = connectedBlocks.filter(b => {
+            if (!network.has(b.id)) return false
+            
+            // Coils are always terminal outputs
+            if (b.type === 'coil' || b.type === 'coil_set' || b.type === 'coil_rset') {
+                return true
+            }
+            
+            // Timers and counters are only terminal if they have no outgoing connections
+            if (b.type === 'timer_ton' || b.type === 'timer_tof' || b.type === 'timer_tp' ||
+                b.type === 'counter_u' || b.type === 'counter_d' ||
+                b.type === 'counter_ctu' || b.type === 'counter_ctd' || b.type === 'counter_ctud') {
+                const outgoing = adjacencyMap.get(b.id) || []
+                return outgoing.length === 0 // Terminal only if no outgoing connections
+            }
+            
+            return false
+        })
         
         // Group coils that share the same input(s) - parallel coils
         // Key: sorted input IDs joined, Value: array of coils
