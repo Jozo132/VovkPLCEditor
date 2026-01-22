@@ -1529,8 +1529,23 @@ export const ladderRenderer = {
 
     const minX = ladder_blocks_per_row
     const minY = 2
-    const max_x = Math.max(minX, ...blocks.map(b => b.x), ...(edit && hasSelection ? [1] : [0]))
-    const max_y = Math.max(minY, ...blocks.map(b => b.y), ...(edit && hasSelection ? [1] : [0]))
+    
+    // Calculate max positions from blocks
+    const blockMaxX = blocks.length > 0 ? Math.max(...blocks.map(b => b.x)) : 0
+    const blockMaxY = blocks.length > 0 ? Math.max(...blocks.map(b => b.y)) : 0
+    
+    // In edit mode, always add a free column/row if any block is at the border
+    // This allows the grid to auto-expand as items are moved
+    let max_x = Math.max(minX, blockMaxX)
+    let max_y = Math.max(minY, blockMaxY)
+    
+    if (edit) {
+      // If any block is at the current max position, add one more column/row
+      const hasBlockAtMaxX = blocks.some(b => b.x === max_x)
+      const hasBlockAtMaxY = blocks.some(b => b.y === max_y)
+      if (hasBlockAtMaxX) max_x += 1
+      if (hasBlockAtMaxY) max_y += 1
+    }
 
     const width = Math.max(max_x + 1, ladder_blocks_per_row) * ladder_block_width
     const height = (max_y + 1) * ladder_block_height
