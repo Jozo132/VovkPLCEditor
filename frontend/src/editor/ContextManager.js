@@ -90,13 +90,43 @@ export default class Menu {
         submenu.style.display = 'none'
         document.body.appendChild(submenu)
         this.#submenus.push(submenu)
+        
+        // Track parent-child relationship for nested submenus
+        // Store reference to child submenus that are opened from this submenu
+        /** @type {HTMLDivElement[]} */
+        const childSubmenus = []
+        submenu._childSubmenus = childSubmenus
+        submenu._parentSubmenu = menu.classList.contains('submenu-container') ? menu : null
+        submenu._hideTimeout = null
+        submenu._triggerDiv = div
+        
+        // Register this submenu as a child of the parent
+        if (submenu._parentSubmenu && submenu._parentSubmenu._childSubmenus) {
+          submenu._parentSubmenu._childSubmenus.push(submenu)
+        }
 
         item.items.forEach(subitem => this.#addItem(subitem, submenu))
+        
+        // Check if any descendant submenu is being hovered
+        const isAnyDescendantHovered = (sub) => {
+          if (sub.matches(':hover')) return true
+          const children = sub._childSubmenus || []
+          return children.some(child => child.style.display !== 'none' && isAnyDescendantHovered(child))
+        }
+        
+        // Clear hide timeouts for this submenu and all ancestors
+        const clearAncestorTimeouts = (sub) => {
+          if (sub._hideTimeout) {
+            clearTimeout(sub._hideTimeout)
+            sub._hideTimeout = null
+          }
+          if (sub._parentSubmenu) {
+            clearAncestorTimeouts(sub._parentSubmenu)
+          }
+        }
 
-        let hideTimeout = null
-
-        const showSubmenu = () => { // @ts-ignore
-          clearTimeout(hideTimeout)
+        const showSubmenu = () => {
+          clearAncestorTimeouts(submenu)
           const rect = div.getBoundingClientRect()
           const subWidth = submenu.offsetWidth
           const spaceRight = window.innerWidth - rect.right
@@ -105,18 +135,29 @@ export default class Menu {
           submenu.style.display = 'block'
         }
 
-        const hideSubmenu = () => { // @ts-ignore
-          hideTimeout = setTimeout(() => {
-            if (!submenu.matches(':hover') && !Array.from(submenu.querySelectorAll('.submenu-container')).some(e => e.matches(':hover'))) {
+        const hideSubmenu = () => {
+          submenu._hideTimeout = setTimeout(() => {
+            // Don't hide if this submenu or any of its descendants are hovered
+            // Also don't hide if the trigger div is hovered
+            if (!isAnyDescendantHovered(submenu) && !div.matches(':hover')) {
               submenu.style.display = 'none'
+              // Also hide all child submenus
+              const hideChildren = (sub) => {
+                const children = sub._childSubmenus || []
+                children.forEach(child => {
+                  child.style.display = 'none'
+                  hideChildren(child)
+                })
+              }
+              hideChildren(submenu)
             }
-          }, 50)
+          }, 100)
         }
 
         div.addEventListener('mouseenter', showSubmenu)
         div.addEventListener('mouseleave', hideSubmenu)
         submenu.addEventListener('mouseenter', () => {
-          clearTimeout(hideTimeout)
+          clearAncestorTimeouts(submenu)
         })
         submenu.addEventListener('mouseleave', hideSubmenu)
       }
