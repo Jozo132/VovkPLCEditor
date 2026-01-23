@@ -515,25 +515,65 @@ function ladderToIR(ladder) {
                     }
                 }
                 
+                // Factor out common prefix from all branches to avoid redundant evaluation
+                // e.g. [A,B,C] and [A,B,D] -> common prefix [A,B], branches [[C], [D]]
+                const factorCommonPrefix = (branchList) => {
+                    if (branchList.length < 2) return { prefix: [], branches: branchList }
+                    
+                    let prefixLen = 0
+                    const minLen = Math.min(...branchList.map(b => b.elements.length))
+                    
+                    outer: for (let i = 0; i < minLen; i++) {
+                        const first = JSON.stringify(branchList[0].elements[i])
+                        for (let j = 1; j < branchList.length; j++) {
+                            if (JSON.stringify(branchList[j].elements[i]) !== first) {
+                                break outer
+                            }
+                        }
+                        prefixLen = i + 1
+                    }
+                    
+                    if (prefixLen === 0) {
+                        return { prefix: [], branches: branchList }
+                    }
+                    
+                    const prefix = branchList[0].elements.slice(0, prefixLen)
+                    const newBranches = branchList.map(b => ({
+                        elements: b.elements.slice(prefixLen)
+                    })).filter(b => b.elements.length > 0)
+                    
+                    return { prefix, branches: newBranches }
+                }
+                
+                const { prefix: commonPrefix, branches: factoredBranches } = factorCommonPrefix(branches)
+                
                 if (isPassThroughCoil) {
                     // Pass through - don't add this coil
                     if (branches.length === 0) {
                         result = []
-                    } else if (branches.length === 1) {
-                        result = [...branches[0].elements]
+                    } else if (factoredBranches.length === 0) {
+                        // All branches collapsed to just the common prefix
+                        result = [...commonPrefix]
+                    } else if (factoredBranches.length === 1) {
+                        result = [...commonPrefix, ...factoredBranches[0].elements]
                     } else {
-                        result = [{ type: 'or', branches }]
+                        result = [...commonPrefix, { type: 'or', branches: factoredBranches }]
                     }
                 } else if (branches.length === 0) {
                     result = needsTap ? [element, { type: 'tap' }] : [element]
-                } else if (branches.length === 1) {
+                } else if (factoredBranches.length === 0) {
+                    // All branches collapsed to just the common prefix
                     result = needsTap
-                        ? [...branches[0].elements, element, { type: 'tap' }]
-                        : [...branches[0].elements, element]
+                        ? [...commonPrefix, element, { type: 'tap' }]
+                        : [...commonPrefix, element]
+                } else if (factoredBranches.length === 1) {
+                    result = needsTap
+                        ? [...commonPrefix, ...factoredBranches[0].elements, element, { type: 'tap' }]
+                        : [...commonPrefix, ...factoredBranches[0].elements, element]
                 } else {
                     result = needsTap
-                        ? [{ type: 'or', branches }, element, { type: 'tap' }]
-                        : [{ type: 'or', branches }, element]
+                        ? [...commonPrefix, { type: 'or', branches: factoredBranches }, element, { type: 'tap' }]
+                        : [...commonPrefix, { type: 'or', branches: factoredBranches }, element]
                 }
             }
             
@@ -555,7 +595,7 @@ function ladderToIR(ladder) {
                 const expr = buildExprMemo(inputs[0], new Set())
                 conditionExpr = expr ? [...expr] : []
             } else {
-                // Multiple inputs to terminal - OR them
+                // Multiple inputs to terminal - OR them with common prefix factoring
                 const branches = []
                 for (const inputId of inputs) {
                     const branchExpr = buildExprMemo(inputId, new Set())
@@ -566,7 +606,45 @@ function ladderToIR(ladder) {
                 if (branches.length === 1) {
                     conditionExpr = branches[0].elements
                 } else if (branches.length > 1) {
-                    conditionExpr = [{ type: 'or', branches }]
+                    // Factor out common prefix from all branches
+                    const factorCommonPrefix = (branchList) => {
+                        if (branchList.length < 2) return { prefix: [], branches: branchList }
+                        
+                        let prefixLen = 0
+                        const minLen = Math.min(...branchList.map(b => b.elements.length))
+                        
+                        outer: for (let i = 0; i < minLen; i++) {
+                            const first = JSON.stringify(branchList[0].elements[i])
+                            for (let j = 1; j < branchList.length; j++) {
+                                if (JSON.stringify(branchList[j].elements[i]) !== first) {
+                                    break outer
+                                }
+                            }
+                            prefixLen = i + 1
+                        }
+                        
+                        if (prefixLen === 0) {
+                            return { prefix: [], branches: branchList }
+                        }
+                        
+                        const prefix = branchList[0].elements.slice(0, prefixLen)
+                        const newBranches = branchList.map(b => ({
+                            elements: b.elements.slice(prefixLen)
+                        })).filter(b => b.elements.length > 0)
+                        
+                        return { prefix, branches: newBranches }
+                    }
+                    
+                    const { prefix: commonPrefix, branches: factoredBranches } = factorCommonPrefix(branches)
+                    
+                    if (factoredBranches.length === 0) {
+                        // All branches collapsed to just the common prefix
+                        conditionExpr = [...commonPrefix]
+                    } else if (factoredBranches.length === 1) {
+                        conditionExpr = [...commonPrefix, ...factoredBranches[0].elements]
+                    } else {
+                        conditionExpr = [...commonPrefix, { type: 'or', branches: factoredBranches }]
+                    }
                 }
             }
             
