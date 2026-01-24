@@ -3,11 +3,14 @@ import { LanguageModule } from "../types.js"
 import { evaluateLadder } from "./evaluator.js"
 
 
-/** @typedef { 'contact' | 'coil' | 'coil_set' | 'coil_rset' | 'timer_ton' | 'timer_tof' | 'timer_tp' | 'counter_u' | 'counter_d' } PLC_Ladder_Block_Type * @type { PLC_Ladder_Block_Type } */
+/** @typedef { 'contact' | 'coil' | 'coil_set' | 'coil_rset' | 'timer_ton' | 'timer_tof' | 'timer_tp' | 'counter_u' | 'counter_d' | 'fb_move' | 'fb_add' | 'fb_sub' | 'fb_mul' | 'fb_div' | 'fb_mod' | 'fb_neg' | 'fb_abs' | 'fb_inc' | 'fb_dec' | 'fb_cmp_eq' | 'fb_cmp_neq' | 'fb_cmp_gt' | 'fb_cmp_lt' | 'fb_cmp_gte' | 'fb_cmp_lte' } PLC_Ladder_Block_Type * @type { PLC_Ladder_Block_Type } */
 export let PLC_Ladder_Block_Type
 
 /** @typedef { 'normal' | 'rising' | 'falling' | 'change' } PLC_Trigger_Type * @type { PLC_Trigger_Type } */
 export let PLC_Trigger_Type
+
+/** @typedef { 'i16' | 'i32' | 'i64' | 'u8' | 'u16' | 'u32' | 'u64' | 'f32' | 'f64' } PLC_DataType * @type { PLC_DataType } */
+export let PLC_DataType
 
 /**
  * @typedef {{ 
@@ -18,7 +21,11 @@ export let PLC_Trigger_Type
  *      inverted: boolean, 
  *      trigger: PLC_Trigger_Type, 
  *      symbol: string, 
- *      preset?: number,
+ *      preset?: number | string,
+ *      dataType?: PLC_DataType,
+ *      in1?: string,
+ *      in2?: string,
+ *      out?: string,
  *      state?: { active: boolean, powered: boolean, powered_input: boolean, terminated_input: boolean, terminated_output: boolean, evaluated: boolean, symbol?: PLC_Symbol } 
  * }} PLC_LadderBlock * @type { PLC_LadderBlock }
 **/
@@ -61,6 +68,115 @@ export let PLC_Ladder
  * @param {PLC_LadderBlock} block 
  * @returns {{ type: string, address: string, inverted?: boolean, trigger?: string, preset?: string }}
  */
+/**
+ * Check if a block type is an operation block (math, move, compare)
+ * @param {string} type 
+ * @returns {boolean}
+ */
+export function isFunctionBlock(type) {
+    return type?.startsWith('fb_')
+}
+
+/**
+ * Check if a block type is a math operation block
+ * @param {string} type 
+ * @returns {boolean}
+ */
+export function isMathBlock(type) {
+    return ['fb_add', 'fb_sub', 'fb_mul', 'fb_div', 'fb_mod', 'fb_neg', 'fb_abs', 'fb_inc', 'fb_dec'].includes(type)
+}
+
+/**
+ * Check if a block type is a compare operation block
+ * @param {string} type 
+ * @returns {boolean}
+ */
+export function isCompareBlock(type) {
+    return ['fb_cmp_eq', 'fb_cmp_neq', 'fb_cmp_gt', 'fb_cmp_lt', 'fb_cmp_gte', 'fb_cmp_lte'].includes(type)
+}
+
+/**
+ * Check if a block type is a move/transfer operation block
+ * @param {string} type 
+ * @returns {boolean}
+ */
+export function isMoveBlock(type) {
+    return type === 'fb_move'
+}
+
+/**
+ * Check if a math operation is unary (only needs one input)
+ * @param {string} type 
+ * @returns {boolean}
+ */
+export function isUnaryMathBlock(type) {
+    return ['fb_neg', 'fb_abs', 'fb_inc', 'fb_dec'].includes(type)
+}
+
+/**
+ * Check if block type is an increment/decrement operation
+ * INC/DEC blocks read from and write to the same address
+ * @param {string} type 
+ * @returns {boolean}
+ */
+export function isIncDecBlock(type) {
+    return ['fb_inc', 'fb_dec'].includes(type)
+}
+
+/**
+ * Get the display label for an operation block type
+ * @param {string} type 
+ * @returns {string}
+ */
+export function getFunctionBlockLabel(type) {
+    const labels = {
+        'fb_move': 'MOVE',
+        'fb_add': 'ADD',
+        'fb_sub': 'SUB',
+        'fb_mul': 'MUL',
+        'fb_div': 'DIV',
+        'fb_mod': 'MOD',
+        'fb_neg': 'NEG',
+        'fb_abs': 'ABS',
+        'fb_inc': 'INC',
+        'fb_dec': 'DEC',
+        'fb_cmp_eq': 'EQ',
+        'fb_cmp_neq': 'NEQ',
+        'fb_cmp_gt': 'GT',
+        'fb_cmp_lt': 'LT',
+        'fb_cmp_gte': 'GTE',
+        'fb_cmp_lte': 'LTE',
+    }
+    return labels[type] || type.replace('fb_', '').toUpperCase()
+}
+
+/**
+ * Map operation block type to Network IR element type
+ * @param {string} type 
+ * @returns {string}
+ */
+function mapFunctionBlockToIRType(type) {
+    const mapping = {
+        'fb_move': 'move',
+        'fb_add': 'math_add',
+        'fb_sub': 'math_sub',
+        'fb_mul': 'math_mul',
+        'fb_div': 'math_div',
+        'fb_mod': 'math_mod',
+        'fb_neg': 'math_neg',
+        'fb_abs': 'math_abs',
+        'fb_inc': 'inc',
+        'fb_dec': 'dec',
+        'fb_cmp_eq': 'compare_eq',
+        'fb_cmp_neq': 'compare_neq',
+        'fb_cmp_gt': 'compare_gt',
+        'fb_cmp_lt': 'compare_lt',
+        'fb_cmp_gte': 'compare_gte',
+        'fb_cmp_lte': 'compare_lte',
+    }
+    return mapping[type] || type
+}
+
 function blockToElement(block) {
     const element = {
         type: block.type,
@@ -81,6 +197,30 @@ function blockToElement(block) {
     if (['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)) {
         // @ts-ignore
         element.preset = block.preset || 10
+    }
+    // Handle operation blocks (math, move, compare)
+    if (isFunctionBlock(block.type)) {
+        element.type = mapFunctionBlockToIRType(block.type)
+        // @ts-ignore
+        element.dataType = block.dataType || 'i16'
+        
+        // INC/DEC: use single address parameter (reads and writes to same location)
+        if (isIncDecBlock(block.type)) {
+            // @ts-ignore
+            element.address = block.symbol || ''
+        } else {
+            // @ts-ignore
+            element.in1 = block.in1 || ''
+            if (!isUnaryMathBlock(block.type) && !isMoveBlock(block.type)) {
+                // @ts-ignore
+                element.in2 = block.in2 || ''
+            }
+            // Output for math and move operations (not for compare - compare sets RLO)
+            if (isMathBlock(block.type) || isMoveBlock(block.type)) {
+                // @ts-ignore
+                element.out = block.out || block.symbol || ''
+            }
+        }
     }
     return element
 }
@@ -374,7 +514,7 @@ function ladderToIR(ladder) {
             return [orBlock, element]
         }
         
-        // Helper to check if a block is a coil type
+        // Helper to check if a block is a coil type (output actions)
         const isCoilType = (type) => type === 'coil' || type === 'coil_set' || type === 'coil_rset'
         
         // Helper to check if a block is a timer type
@@ -384,32 +524,46 @@ function ladderToIR(ladder) {
         const isCounterType = (type) => type === 'counter_u' || type === 'counter_d' ||
             type === 'counter_ctu' || type === 'counter_ctd' || type === 'counter_ctud'
         
-        // Helper to check if a coil has non-coil downstream connections
-        const hasNonCoilDownstream = (blockId) => {
+        // Helper to check if a block is an operation block (math/move/compare - treated like coils)
+        const isFBType = (type) => type?.startsWith('fb_')
+        
+        // Helper to check if a block is a compare operation block (these feed into logic, not output)
+        const isCompareType = (type) => ['fb_cmp_eq', 'fb_cmp_neq', 'fb_cmp_gt', 'fb_cmp_lt', 'fb_cmp_gte', 'fb_cmp_lte'].includes(type)
+        
+        // Helper to check if a block is an action type (coil or non-compare operation block)
+        const isActionType = (type) => isCoilType(type) || (isFBType(type) && !isCompareType(type))
+        
+        // Helper to check if a coil/action has non-coil downstream connections
+        const hasNonActionDownstream = (blockId) => {
             const outgoing = adjacencyMap.get(blockId) || []
             return outgoing.some(targetId => {
                 const target = blocks.find(b => b.id === targetId)
-                return target && !isCoilType(target.type)
+                return target && !isActionType(target.type)
             })
         }
         
-        // Helper to check if a coil has ANY downstream connections (coil or not)
+        // Helper to check if a coil/action has ANY downstream connections (action or not)
         const hasAnyDownstream = (blockId) => {
             const outgoing = adjacencyMap.get(blockId) || []
             return outgoing.length > 0
         }
         
         // Find all terminal outputs in this network
-        // - Coils are terminals if they have NO downstream, or ONLY coil downstream
+        // - Coils/FBs are terminals if they have NO downstream, or ONLY coil/FB downstream
         //   (coils with non-coil downstream are mid-chain with TAP - not terminals)
         // - Timers/counters are terminal only if they have NO outgoing connections
+        // - Compare operation blocks are NOT terminals - they produce boolean output for logic
         const networkTerminals = connectedBlocks.filter(b => {
             if (!network.has(b.id)) return false
             
-            // Coils are terminals unless they have non-coil downstream (TAP coils)
-            // TAP coils are mid-chain and feed into other logic
-            if (isCoilType(b.type)) {
-                return !hasNonCoilDownstream(b.id)
+            // Coils and math/move FBs are terminals unless they have non-action downstream (TAP)
+            if (isActionType(b.type)) {
+                return !hasNonActionDownstream(b.id)
+            }
+            
+            // Compare operation blocks are NOT terminals - they're part of the condition
+            if (isCompareType(b.type)) {
+                return false
             }
             
             // Timers and counters are terminal only if they have no outgoing connections
@@ -458,8 +612,8 @@ function ladderToIR(ladder) {
                 if (!network.has(id)) return false
                 const inputBlock = blocks.find(b => b.id === id)
                 if (!inputBlock) return false
-                // Coils pass logic only if they have downstream (not terminals)
-                if (isCoilType(inputBlock.type)) {
+                // Coils/FBs pass logic only if they have downstream (not terminals)
+                if (isActionType(inputBlock.type)) {
                     return hasAnyDownstream(inputBlock.id)
                 }
                 return true
@@ -467,27 +621,27 @@ function ladderToIR(ladder) {
             
             const element = blockToElement(block)
             
-            // Check if this is a coil with non-coil downstream (needs TAP after it)
-            // TAP is needed when coil output feeds into contacts/timers/counters
-            const needsTap = isCoilType(block.type) && hasNonCoilDownstream(block.id)
+            // Check if this is an action block with non-action downstream (needs TAP after it)
+            // TAP is needed when coil/FB output feeds into contacts/timers/counters
+            const needsTap = isActionType(block.type) && hasNonActionDownstream(block.id)
             
-            // Check if this is a pass-through coil (coil with coil-only downstream)
+            // Check if this is a pass-through action (action with action-only downstream)
             // These should NOT be included in expressions - they just pass through
-            const isPassThroughCoil = isCoilType(block.type) && hasAnyDownstream(block.id) && !hasNonCoilDownstream(block.id)
+            const isPassThroughAction = isActionType(block.type) && hasAnyDownstream(block.id) && !hasNonActionDownstream(block.id)
             
             let result
             if (inputs.length === 0) {
                 // Start block
-                if (isPassThroughCoil) {
-                    result = [] // Pass-through coil with no inputs - empty
+                if (isPassThroughAction) {
+                    result = [] // Pass-through action with no inputs - empty
                 } else {
                     result = needsTap ? [element, { type: 'tap' }] : [element]
                 }
             } else if (inputs.length === 1) {
                 // Single input - series (AND)
                 const inputExpr = buildExprMemo(inputs[0], new Set(pathVisited))
-                if (isPassThroughCoil) {
-                    // Pass through - don't add this coil, just return input expression
+                if (isPassThroughAction) {
+                    // Pass through - don't add this action, just return input expression
                     result = inputExpr ? [...inputExpr] : []
                 } else if (inputExpr) {
                     result = needsTap 
@@ -547,8 +701,8 @@ function ladderToIR(ladder) {
                 
                 const { prefix: commonPrefix, branches: factoredBranches } = factorCommonPrefix(branches)
                 
-                if (isPassThroughCoil) {
-                    // Pass through - don't add this coil
+                if (isPassThroughAction) {
+                    // Pass through - don't add this action
                     if (branches.length === 0) {
                         result = []
                     } else if (factoredBranches.length === 0) {

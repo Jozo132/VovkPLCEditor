@@ -1,7 +1,7 @@
 import { getSymbolValue } from "../BlockLogic.js"
 import { VovkPLCEditor } from "../../editor/Editor.js"
 import { PLCEditor } from "../../utils/types.js"
-import { PLC_Ladder, PLC_LadderBlock } from "./language.js"
+import { PLC_Ladder, PLC_LadderBlock, isFunctionBlock, isCompareBlock } from "./language.js"
 
 
 /**
@@ -74,6 +74,8 @@ export function evaluateLadder(editor, ladder) {
     const isCoil = ['coil', 'coil_set', 'coil_rset'].includes(block.type)
     const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)
     const isCounter = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)
+    const isFB = isFunctionBlock(block.type)
+    const isCompareFB = isCompareBlock(block.type)
     
     // Track input power state for all blocks
     block.state.powered_input = inputPowered
@@ -147,6 +149,23 @@ export function evaluateLadder(editor, ladder) {
         c.state.evaluated = true
         const next = blocks.find(b => b.id === c.to.id)
         if (next) propagate(next, false, block.state.active)
+      })
+    } else if (isFB) {
+      // Operation blocks: math/move blocks consume RLO like coils
+      // Compare blocks produce boolean output for logic chain
+      block.state.powered = inputPowered
+      block.state.evaluated = true
+      
+      const outs = connections.filter(c => c.from.id === block.id)
+      outs.forEach(c => {
+        if (!c.state) throw new Error('Connection state not resolved')
+        // Compare blocks output based on comparison result (use active state if set by memory read)
+        // Math/Move blocks pass through input power like coils
+        const outputPower = isCompareFB ? block.state.active : inputPowered
+        c.state.powered = outputPower
+        c.state.evaluated = true
+        const next = blocks.find(b => b.id === c.to.id)
+        if (next) propagate(next, false, outputPower)
       })
     }
   }

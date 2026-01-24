@@ -326,7 +326,8 @@ export class Popup {
      * @typedef {InputCommon & { type: 'text', value?: string, placeholder?: string }} TextInput
      * @typedef {InputCommon & { type: 'number', value?: number }} NumberInput
      * @typedef {InputCommon & { type: 'integer', value?: number }} IntegerInput
-     * @typedef { TextInput | NumberInput | IntegerInput  } InputField
+     * @typedef {InputCommon & { type: 'select', value?: string, options: { value: string, label: string }[] }} SelectInput
+     * @typedef { TextInput | NumberInput | IntegerInput | SelectInput } InputField
      *
      * @typedef { PopupOptions & { inputs: InputField[] }} FormOptions
      */
@@ -350,9 +351,10 @@ export class Popup {
 
         inputs.forEach(input => {
             const {type, label, name, value, margin, readonly, onChange} = input
-            if (!['text', 'number', 'integer'].includes(type)) throw new Error(`Invalid input type: ${type}`)
+            if (!['text', 'number', 'integer', 'select'].includes(type)) throw new Error(`Invalid input type: ${type}`)
             if (!input.name) throw new Error(`Input name is required`)
             if (input.value && typeof input.value !== 'string' && type === 'text') throw new Error(`Invalid input value: ${input.value}`)
+            if (input.value && typeof input.value !== 'string' && type === 'select') throw new Error(`Invalid input value: ${input.value}`)
             if (input.value && typeof input.value !== 'number' && (type === 'number' || type === 'integer')) throw new Error(`Invalid input value: ${input.value}`)
             const placeholder = type === 'text' ? input.placeholder || '' : ''
 
@@ -360,7 +362,19 @@ export class Popup {
             if (type === 'integer') typeName = 'number'
 
             const label_element = readonly ? ElementSynthesis(/*HTML*/ `<div></div>`) : ElementSynthesis(/*HTML*/ `<label for="${name}">${typeof label !== 'undefined' ? label : label || toCapitalCase(name)}</label>`)
-            const input_element = readonly ? ElementSynthesis(/*HTML*/ `<div class="readonly" id="${name}" name="${name}" readonly style="background: none;" tabindex="-1" disabled></div>`) : ElementSynthesis(/*HTML*/ `<input type="${typeName}" id="${name}" name="${name}" value="${value || ''}" placeholder="${placeholder}" autocomplete="off">`)
+            
+            let input_element
+            if (type === 'select') {
+                const options = input.options || []
+                const optionsHtml = options.map(opt => 
+                    `<option value="${opt.value}"${opt.value === value ? ' selected' : ''}>${opt.label}</option>`
+                ).join('')
+                input_element = ElementSynthesis(/*HTML*/ `<select id="${name}" name="${name}">${optionsHtml}</select>`)
+            } else if (readonly) {
+                input_element = ElementSynthesis(/*HTML*/ `<div class="readonly" id="${name}" name="${name}" readonly style="background: none;" tabindex="-1" disabled></div>`)
+            } else {
+                input_element = ElementSynthesis(/*HTML*/ `<input type="${typeName}" id="${name}" name="${name}" value="${value || ''}" placeholder="${placeholder}" autocomplete="off">`)
+            }
             if (typeof margin !== 'undefined') {
                 // @ts-ignore
                 input_element.style.margin = margin
@@ -406,6 +420,7 @@ export class Popup {
                 } else if (type === 'integer') {
                     states[name].value_in = parseInt(value, 10)
                 } else {
+                    // text and select both use string values
                     states[name].value_in = value
                 }
                 if (onChange) onChange(states)

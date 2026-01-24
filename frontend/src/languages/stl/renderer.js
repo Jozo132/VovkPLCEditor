@@ -81,7 +81,7 @@ const STL_KEYWORDS = {
     // Load/Transfer
     loadTransfer: ['L', 'T', 'LD', 'LDN', 'ST'],
     // Math
-    math: ['+I', '-I', '*I', '/I', 'MOD', 'NEG', 'ABS'],
+    math: ['+I', '-I', '*I', '/I', 'MOD', 'NEG', 'ABS', 'INC', 'DEC'],
     // Compare
     compare: ['==I', '<>I', '>I', '>=I', '<I', '<=I'],
     // Jumps

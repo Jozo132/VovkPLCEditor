@@ -2,7 +2,7 @@ import { VovkPLCEditor } from "../../editor/Editor.js"
 import { PLC_Symbol } from "../../utils/types.js"
 import { RendererModule } from "../types.js"
 import { resolveBlockState } from "./evaluator.js"
-import { PLC_Ladder, PLC_LadderBlock, PLC_LadderConnection, toIR } from "./language.js"
+import { PLC_Ladder, PLC_LadderBlock, PLC_LadderConnection, toIR, isFunctionBlock, isMathBlock, isCompareBlock, isMoveBlock, isUnaryMathBlock, isIncDecBlock, getFunctionBlockLabel } from "./language.js"
 import { getSymbolValue, setSymbolBit } from "../BlockLogic.js"
 import { ensureOffsets } from "../../utils/offsets.js"
 import { Popup } from "../../editor/UI/Elements/components/popup.js"
@@ -101,7 +101,7 @@ const system_symbols = [
 
 
 /**
- * Parse address string like X0.0, Y0.0, M10.5 into a synthetic symbol object
+ * Parse address string like X0.0, Y0.0, M10.5, MW14, MD0 into a synthetic symbol object
  * @param {string} addressStr 
  * @returns {PLC_Symbol | null}
  */
@@ -109,14 +109,6 @@ const parseAddressToSymbol = (addressStr) => {
   if (!addressStr || typeof addressStr !== 'string') return null
 
   const trimmed = addressStr.trim()
-
-  // Pattern: Letter + Number (e.g., X0.0, Y0, M100.2)
-  const match = trimmed.match(/^([kKcCtTxXyYsSmM])([0-9]+(?:\.[0-9]+)?)$/i)
-  if (!match) return null
-
-  const code = match[1].toUpperCase()
-  const valStr = match[2]
-  const val = parseFloat(valStr)
 
   // Map letter to location
   const locationMap = {
@@ -129,28 +121,67 @@ const parseAddressToSymbol = (addressStr) => {
     'M': 'marker'
   }
 
-  const location = locationMap[code] || 'marker'
-  const hasBit = valStr.includes('.')
+  // Pattern 1: Typed address - Letter + Type + Number (e.g., MW14, MD0, MB5, MR8)
+  // Type suffixes: B=byte, W=word(2), D=dword(4), R=real(4)
+  const typedMatch = trimmed.match(/^([kKcCtTxXyYsSmM])([bBwWdDrR])([0-9]+)$/i)
+  if (typedMatch) {
+    const code = typedMatch[1].toUpperCase()
+    const typeCode = typedMatch[2].toUpperCase()
+    const val = parseFloat(typedMatch[3])
 
-  // Determine type based on location:
-  // - Timers store u32 elapsed time values (4 bytes)
-  // - Counters store u16 count values (2 bytes)
-  // - Others use bit or byte based on address format
-  let type = hasBit ? 'bit' : 'byte'
-  if (location === 'timer') {
-    type = 'u32' // Timers are 4-byte elapsed time values
-  } else if (location === 'counter') {
-    type = 'u16' // Counters are 2-byte count values
+    const location = locationMap[code] || 'marker'
+
+    // Map type code to type
+    const typeCodeMap = {
+      'B': 'u8',   // Byte
+      'W': 'i16',  // Word (16-bit signed int, standard for PLC)
+      'D': 'i32',  // Double word (32-bit signed int)
+      'R': 'f32'   // Real (32-bit float)
+    }
+    const type = typeCodeMap[typeCode] || 'i16'
+
+    return {
+      name: addressStr,
+      location,
+      type,
+      address: val,
+      initial_value: 0,
+      comment: `Direct address ${addressStr}`
+    }
   }
 
-  return {
-    name: addressStr,
-    location,
-    type,
-    address: val,
-    initial_value: 0,
-    comment: `Direct address ${addressStr}`
+  // Pattern 2: Simple address - Letter + Number (e.g., X0.0, Y0, M100.2)
+  const simpleMatch = trimmed.match(/^([kKcCtTxXyYsSmM])([0-9]+(?:\.[0-9]+)?)$/i)
+  if (simpleMatch) {
+    const code = simpleMatch[1].toUpperCase()
+    const valStr = simpleMatch[2]
+    const val = parseFloat(valStr)
+
+    const location = locationMap[code] || 'marker'
+    const hasBit = valStr.includes('.')
+
+    // Determine type based on location:
+    // - Timers store u32 elapsed time values (4 bytes)
+    // - Counters store u16 count values (2 bytes)
+    // - Others use bit or byte based on address format
+    let type = hasBit ? 'bit' : 'byte'
+    if (location === 'timer') {
+      type = 'u32' // Timers are 4-byte elapsed time values
+    } else if (location === 'counter') {
+      type = 'u16' // Counters are 2-byte count values
+    }
+
+    return {
+      name: addressStr,
+      location,
+      type,
+      address: val,
+      initial_value: 0,
+      comment: `Direct address ${addressStr}`
+    }
   }
+
+  return null
 }
 
 /**
@@ -522,6 +553,355 @@ const draw_coil = (editor, like, ctx, block) => {
 
 
 /** @type {(editor: VovkPLCEditor, like: 'symbol' | 'highlight', ctx: CanvasRenderingContext2D, block: PLC_LadderBlock) => void} */
+const draw_function_block = (editor, like, ctx, block) => {
+  const { ladder_block_width, ladder_block_height, style } = editor.properties
+  const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color, font_error_color } = style
+  block = getBlockState(editor, block)
+  if (!block.state) return // Block state not found, skip
+  const { x, y, type, state, dataType, in1, in2, out } = block
+
+  const x0 = x * ladder_block_width
+  const y0 = y * ladder_block_height
+  const x1 = x0 + ladder_block_width
+  const y1 = y0 + ladder_block_height
+
+  const x_mid = x0 + ladder_block_width / 2
+  const y_mid = y0 + ladder_block_height / 2
+
+  // Box dimensions (similar to timer/counter)
+  const boxLeft = x0 + 8
+  const boxRight = x1 - 8
+  const boxTop = y0 + 12
+  const boxBottom = y1 - 8
+  const boxWidth = boxRight - boxLeft
+  const boxHeight = boxBottom - boxTop
+
+  // Get operation block label
+  const fbLabel = getFunctionBlockLabel(type)
+  const isUnary = isUnaryMathBlock(type)
+  const isMove = isMoveBlock(type)
+  const isCompare = isCompareBlock(type)
+  const isIncDec = isIncDecBlock(type)
+
+  // Input/output states
+  const inputPowered = !!state?.powered_input
+  const blockPowered = !!state?.powered
+
+  if (like === 'highlight') {
+    // Draw solid background first to cover any transparent areas
+    ctx.fillStyle = '#2a2a2a'
+    ctx.fillRect(boxLeft, boxTop, boxWidth, boxHeight)
+
+    // Use cyan for simulation, lime green for device/serial mode
+    const isSimulation = editor.window_manager.active_device === 'simulation'
+    const activeColor = isSimulation ? '#00ffff' : '#32cd32' // cyan : lime green
+
+    // Draw input wire highlight when input is powered
+    if (inputPowered) {
+      ctx.strokeStyle = activeColor
+      ctx.lineWidth = 8
+      ctx.beginPath()
+      ctx.moveTo(x0, y_mid)
+      ctx.lineTo(boxLeft, y_mid)
+      ctx.stroke()
+    }
+
+    // Draw left border of block (input indicator) when block is powered
+    if (blockPowered) {
+      ctx.strokeStyle = activeColor
+      ctx.lineWidth = 6
+      ctx.beginPath()
+      ctx.moveTo(boxLeft - 2, boxTop - 2)
+      ctx.lineTo(boxLeft - 2, boxBottom + 2)
+      ctx.stroke()
+    }
+
+    // For operation blocks, output is active when block is powered (pass-through)
+    // Compare blocks may have different output logic based on comparison result
+    const outputOn = isCompare ? !!state?.active : blockPowered
+
+    // Draw output wire highlight when output is on
+    if (outputOn) {
+      ctx.strokeStyle = activeColor
+      ctx.lineWidth = 8
+      ctx.beginPath()
+      ctx.moveTo(boxRight, y_mid)
+      ctx.lineTo(x1, y_mid)
+      ctx.stroke()
+    }
+
+    // Draw terminated output indicator (only when output is on)
+    if (state?.terminated_output && outputOn) {
+      ctx.strokeStyle = activeColor
+      ctx.lineWidth = 8
+      ctx.beginPath()
+      ctx.moveTo(x1 - 2, y_mid - 12)
+      ctx.lineTo(x1 - 2, y_mid + 12)
+      ctx.stroke()
+    }
+
+    // Draw box border highlight when output is on
+    if (outputOn) {
+      ctx.strokeStyle = activeColor
+      ctx.lineWidth = 6
+      ctx.beginPath()
+      // Right edge
+      ctx.moveTo(boxRight + 2, boxTop - 2)
+      ctx.lineTo(boxRight + 2, boxBottom + 2)
+      // Top edge
+      ctx.moveTo(boxLeft - 4, boxTop - 4)
+      ctx.lineTo(boxRight + 4, boxTop - 4)
+      // Bottom edge
+      ctx.moveTo(boxLeft - 4, boxBottom + 4)
+      ctx.lineTo(boxRight + 4, boxBottom + 4)
+      ctx.stroke()
+    }
+    return
+  }
+
+  if (like === 'symbol') {
+    // Draw solid background first
+    ctx.fillStyle = '#2a2a2a'
+    ctx.fillRect(boxLeft, boxTop, boxWidth, boxHeight)
+
+    // Draw input line
+    ctx.strokeStyle = color
+    ctx.lineWidth = line_width
+    ctx.beginPath()
+    ctx.moveTo(x0, y_mid)
+    ctx.lineTo(boxLeft, y_mid)
+    ctx.stroke()
+
+    // Draw output line
+    ctx.beginPath()
+    ctx.moveTo(boxRight, y_mid)
+    ctx.lineTo(x1, y_mid)
+    ctx.stroke()
+
+    // Draw box outline
+    ctx.strokeRect(boxLeft, boxTop, boxWidth, boxHeight)
+
+    // Draw operation label at top left
+    ctx.fillStyle = font_color
+    ctx.font = 'bold 10px Arial'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+    ctx.fillText(fbLabel, boxLeft + 3, boxTop + 2)
+
+    // Draw data type at top right
+    const dtLabel = (dataType || 'I16').toUpperCase()
+    ctx.font = '9px Arial'
+    ctx.textAlign = 'right'
+    ctx.fillText(dtLabel, boxRight - 3, boxTop + 3)
+
+    // Draw separator line (moved higher)
+    ctx.beginPath()
+    ctx.moveTo(boxLeft + 4, boxTop + 16)
+    ctx.lineTo(boxRight - 4, boxTop + 16)
+    ctx.stroke()
+
+    // Draw parameters section (moved higher)
+    ctx.font = '9px Arial'
+    ctx.textAlign = 'left'
+    const paramY = boxTop + 22
+
+    // Determine output address for live value display
+    let outputAddress = ''
+    
+    // For compare operations: show condition symbol
+    if (isCompare) {
+      const condSymbols = {
+        'fb_cmp_eq': '==',
+        'fb_cmp_neq': '<>',
+        'fb_cmp_gt': '>',
+        'fb_cmp_lt': '<',
+        'fb_cmp_gte': '>=',
+        'fb_cmp_lte': '<=',
+      }
+      ctx.textAlign = 'center'
+      ctx.font = 'bold 12px Arial'
+      ctx.fillText(condSymbols[type] || '?', x_mid, paramY + 2)
+      
+      // Show operands
+      ctx.font = '8px Arial'
+      ctx.fillText(in1 || '?', x_mid, paramY + 12)
+      ctx.fillText(in2 || '?', x_mid, paramY + 22)
+      // Compare blocks don't have an output address, they set RLO
+    } else if (isMove) {
+      // MOVE: IN -> OUT
+      ctx.textAlign = 'center'
+      ctx.fillText('IN:', boxLeft + boxWidth * 0.3, paramY)
+      ctx.fillText(in1 || '?', boxLeft + boxWidth * 0.3, paramY + 10)
+      ctx.fillText('OUT:', boxLeft + boxWidth * 0.7, paramY)
+      ctx.fillText(out || block.symbol || '?', boxLeft + boxWidth * 0.7, paramY + 10)
+      outputAddress = out || block.symbol || ''
+    } else if (isIncDec) {
+      // INC/DEC: single address (read and write to same location)
+      ctx.textAlign = 'center'
+      ctx.fillText('ADDR:', x_mid, paramY)
+      ctx.fillText(block.symbol || '?', x_mid, paramY + 10)
+      outputAddress = block.symbol || ''
+    } else if (isUnary) {
+      // Unary (NEG, ABS): IN -> OUT
+      ctx.textAlign = 'center'
+      ctx.fillText('IN:', boxLeft + boxWidth * 0.3, paramY)
+      ctx.fillText(in1 || '?', boxLeft + boxWidth * 0.3, paramY + 10)
+      ctx.fillText('OUT:', boxLeft + boxWidth * 0.7, paramY)
+      ctx.fillText(out || block.symbol || '?', boxLeft + boxWidth * 0.7, paramY + 10)
+      outputAddress = out || block.symbol || ''
+    } else {
+      // Binary math: IN1 op IN2 -> OUT
+      ctx.textAlign = 'center'
+      const col1 = boxLeft + boxWidth * 0.25
+      const col2 = boxLeft + boxWidth * 0.5
+      const col3 = boxLeft + boxWidth * 0.75
+      ctx.fillText('IN1', col1, paramY)
+      ctx.fillText(in1 || '?', col1, paramY + 10)
+      ctx.fillText('IN2', col2, paramY)
+      ctx.fillText(in2 || '?', col2, paramY + 10)
+      ctx.fillText('OUT', col3, paramY)
+      ctx.fillText(out || block.symbol || '?', col3, paramY + 10)
+      outputAddress = out || block.symbol || ''
+    }
+
+    // Draw live value preview at the bottom when connected
+    if (editor.device_manager.connected && outputAddress) {
+      const isSimulation = editor.window_manager.active_device === 'simulation'
+      const activeColor = isSimulation ? '#00ffff' : '#32cd32'
+      
+      // Try to get the live value for the output address
+      const liveValues = editor.live_symbol_values
+      let liveValue = null
+      
+      // First try live_symbol_values (populated by code monitor)
+      if (liveValues) {
+        // Try to find by address name (Map key) - try both exact and case-insensitive
+        let liveEntry = liveValues.get(outputAddress)
+        if (!liveEntry) {
+          liveEntry = liveValues.get(outputAddress.toUpperCase())
+        }
+        if (!liveEntry) {
+          liveEntry = liveValues.get(outputAddress.toLowerCase())
+        }
+        if (liveEntry && liveEntry.value !== undefined) {
+          liveValue = liveEntry.value
+        }
+      }
+
+      // Fallback: read directly from editor.memory using the parsed address
+      if (liveValue === null && editor.memory && editor.memory.length > 0) {
+        const parsedSymbol = parseAddressToSymbol(outputAddress)
+        if (parsedSymbol) {
+          const offsets = ensureOffsets(editor.project?.offsets || {})
+          const locationKey = parsedSymbol.location === 'memory' ? 'marker' : parsedSymbol.location
+          const baseOffset = offsets[locationKey]?.offset || 0
+          const byteAddr = Math.floor(parsedSymbol.address)
+          const absoluteAddr = baseOffset + byteAddr
+
+          // Determine actual type from block's dataType
+          const effectiveType = dataType || parsedSymbol.type || 'i16'
+          
+          if (absoluteAddr >= 0 && absoluteAddr < editor.memory.length) {
+            const view = new DataView(editor.memory.buffer, editor.memory.byteOffset, editor.memory.byteLength)
+            try {
+              switch (effectiveType) {
+                case 'i8':
+                  liveValue = view.getInt8(absoluteAddr)
+                  break
+                case 'u8':
+                  liveValue = view.getUint8(absoluteAddr)
+                  break
+                case 'i16':
+                  if (absoluteAddr + 2 <= editor.memory.length)
+                    liveValue = view.getInt16(absoluteAddr, true)
+                  break
+                case 'u16':
+                  if (absoluteAddr + 2 <= editor.memory.length)
+                    liveValue = view.getUint16(absoluteAddr, true)
+                  break
+                case 'i32':
+                  if (absoluteAddr + 4 <= editor.memory.length)
+                    liveValue = view.getInt32(absoluteAddr, true)
+                  break
+                case 'u32':
+                  if (absoluteAddr + 4 <= editor.memory.length)
+                    liveValue = view.getUint32(absoluteAddr, true)
+                  break
+                case 'f32':
+                  if (absoluteAddr + 4 <= editor.memory.length)
+                    liveValue = view.getFloat32(absoluteAddr, true)
+                  break
+                case 'f64':
+                  if (absoluteAddr + 8 <= editor.memory.length)
+                    liveValue = view.getFloat64(absoluteAddr, true)
+                  break
+                default:
+                  // Default to i16 for word operations
+                  if (absoluteAddr + 2 <= editor.memory.length)
+                    liveValue = view.getInt16(absoluteAddr, true)
+              }
+            } catch (e) {
+              // Ignore read errors
+            }
+          }
+        }
+      }
+
+      // Draw the value pill at the bottom
+      const pillY = boxBottom - 10
+      ctx.font = 'bold 11px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      
+      if (liveValue !== null) {
+        // Format the value based on data type
+        let displayValue = ''
+        if (dataType === 'f32' || dataType === 'f64') {
+          displayValue = typeof liveValue === 'number' ? liveValue.toFixed(2) : String(liveValue)
+        } else {
+          displayValue = String(liveValue)
+        }
+        
+        // Draw pill background - auto-size to fit content
+        const textWidth = ctx.measureText(displayValue).width
+        const pillPadding = 8
+        const pillWidth = textWidth + pillPadding * 2
+        const pillHeight = 14
+        const pillX = x_mid - pillWidth / 2
+        
+        ctx.fillStyle = blockPowered ? activeColor : '#444'
+        ctx.beginPath()
+        ctx.roundRect(pillX, pillY - pillHeight / 2, pillWidth, pillHeight, 3)
+        ctx.fill()
+        
+        // Draw value text
+        ctx.fillStyle = blockPowered ? '#000' : '#ddd'
+        ctx.fillText(displayValue, x_mid, pillY)
+      } else {
+        // No live value available - show placeholder
+        ctx.fillStyle = '#666'
+        ctx.fillText('---', x_mid, pillY)
+      }
+    }
+
+    // Draw terminated output indicator (vertical line at end)
+    if (state?.terminated_output) {
+      ctx.strokeStyle = color
+      ctx.lineWidth = line_width
+      ctx.beginPath()
+      ctx.moveTo(x1 - 2, y_mid - 8)
+      ctx.lineTo(x1 - 2, y_mid + 8)
+      ctx.stroke()
+    }
+
+    return
+  }
+
+  throw new Error(`Invalid style: ${style}`)
+}
+
+
+/** @type {(editor: VovkPLCEditor, like: 'symbol' | 'highlight', ctx: CanvasRenderingContext2D, block: PLC_LadderBlock) => void} */
 const draw_timer = (editor, like, ctx, block) => {
   const { ladder_block_width, ladder_block_height, style } = editor.properties
   const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color, font_error_color } = style
@@ -653,6 +1033,10 @@ const draw_timer = (editor, like, ctx, block) => {
   // console.log(`Timer ${symbol?.name}: liveInputOn=${liveInputOn}, powered=${state?.powered}, powered_input=${state?.powered_input}, inputPowered=${inputPowered}`)
 
   if (like === 'highlight') {
+    // Draw solid background first
+    ctx.fillStyle = '#2a2a2a'
+    ctx.fillRect(boxLeft, boxTop, boxWidth, boxHeight)
+
     // Use cyan for simulation, lime green for device/serial mode
     const isSimulation = editor.window_manager.active_device === 'simulation'
     const activeColor = isSimulation ? '#00ffff' : '#32cd32' // cyan : lime green
@@ -757,6 +1141,10 @@ const draw_timer = (editor, like, ctx, block) => {
   }
 
   if (like === 'symbol') {
+    // Draw solid background first
+    ctx.fillStyle = '#2a2a2a'
+    ctx.fillRect(boxLeft, boxTop, boxWidth, boxHeight)
+
     // Determine active color based on mode: cyan for simulation, lime green for device
     const isSimulation = editor.window_manager.active_device === 'simulation'
     const activeColor = isSimulation ? '#00ffff' : '#32cd32' // cyan : lime green
@@ -943,6 +1331,10 @@ const draw_counter = (editor, like, ctx, block) => {
   }
 
   if (like === 'highlight') {
+    // Draw solid background first
+    ctx.fillStyle = '#2a2a2a'
+    ctx.fillRect(boxLeft, boxTop, boxWidth, boxHeight)
+
     // Use cyan for simulation, lime green for device/serial mode
     const isSimulation = editor.window_manager.active_device === 'simulation'
     const activeColor = isSimulation ? '#00ffff' : '#32cd32'
@@ -985,6 +1377,10 @@ const draw_counter = (editor, like, ctx, block) => {
   }
 
   if (like === 'symbol') {
+    // Draw solid background first
+    ctx.fillStyle = '#2a2a2a'
+    ctx.fillRect(boxLeft, boxTop, boxWidth, boxHeight)
+
     const isSimulation = editor.window_manager.active_device === 'simulation'
     const activeOnColor = isSimulation ? '#00ffff' : '#32cd32'
     const activeOffColor = '#c04040'
@@ -1268,6 +1664,8 @@ const evaluate_ladder = (editor, ladder) => {
     const isTOF = block.type === 'timer_tof'
     const isTP = block.type === 'timer_tp'
     const isCounter = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)
+    const isFB = isFunctionBlock(block.type)
+    const isCompareFB = isCompareBlock(block.type)
 
     // Track the input power state for this block
     state.powered_input = inputPowered
@@ -1285,26 +1683,30 @@ const evaluate_ladder = (editor, ladder) => {
       : (isTOF ? !state.timerDone : state.timerDone)  // TOF: !done, TON: done
     const timer_pass_through = isTimer && !first && timerOutputOn
     const counter_pass_through = isCounter && !first && state.counterDone
+    const fb_pass_through = isFB && !first && inputPowered
 
-    // For timers/coils: powered = received input power
+    // For timers/coils/operation blocks: powered = received input power
     // For contacts: powered = input power AND contact is active (closed)
-    if (isTimer || isCoil || isCounter) {
+    if (isTimer || isCoil || isCounter || isFB) {
       state.powered = inputPowered
     } else if (isContact) {
       state.powered = inputPowered && state.active
     } else {
-      state.powered = isContact || pass_through || timer_pass_through || counter_pass_through
+      state.powered = isContact || pass_through || timer_pass_through || counter_pass_through || fb_pass_through
     }
 
     if (isCoil && first) return
     if (isTimer && first) return
     if (isCounter && first) return
+    if (isFB && first) return
     const momentary = block.trigger !== 'normal'
     // For timers: propagate power based on Q output state
     // For counters: only propagate power if done (Q output is true)
     // For contacts: propagate if active AND received input power
+    // For operation blocks: pass through input power (compare blocks may differ)
     const contactOutputPowered = isContact && state.active && inputPowered
-    const shouldPropagate = isTimer ? timerOutputOn : isCounter ? state.counterDone : (isContact ? contactOutputPowered : ((!momentary && state.active) || pass_through))
+    const fbOutputPowered = isFB && inputPowered  // Operation blocks pass through power when input is powered
+    const shouldPropagate = isTimer ? timerOutputOn : isCounter ? state.counterDone : isFB ? fbOutputPowered : (isContact ? contactOutputPowered : ((!momentary && state.active) || pass_through))
     if (shouldPropagate || (isCoil && inputPowered)) {
       state.evaluated = true
       const outgoing_connections = connections.filter(con => con.from.id === block.id)
@@ -1319,6 +1721,7 @@ const evaluate_ladder = (editor, ladder) => {
         else if (isCoil) outputPower = inputPowered
         else if (isTimer) outputPower = timerOutputOn
         else if (isCounter) outputPower = state.counterDone
+        else if (isFB) outputPower = isCompareFB ? state.active : inputPowered  // Compare uses comparison result, others pass through
         else outputPower = true
         con.state.powered = outputPower
         con.state.evaluated = true
@@ -1616,6 +2019,7 @@ export const ladderRenderer = {
         if (['coil', 'coil_set', 'coil_rset'].includes(b.type)) draw_coil(editor, 'highlight', ctx, b)
         if (['timer_ton', 'timer_tof', 'timer_tp'].includes(b.type)) draw_timer(editor, 'highlight', ctx, b)
         if (['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(b.type)) draw_counter(editor, 'highlight', ctx, b)
+        if (isFunctionBlock(b.type)) draw_function_block(editor, 'highlight', ctx, b)
       }
     })
 
@@ -1642,6 +2046,7 @@ export const ladderRenderer = {
       if (['coil', 'coil_set', 'coil_rset'].includes(b.type)) draw_coil(editor, 'symbol', ctx, b)
       if (['timer_ton', 'timer_tof', 'timer_tp'].includes(b.type)) draw_timer(editor, 'symbol', ctx, b)
       if (['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(b.type)) draw_counter(editor, 'symbol', ctx, b)
+      if (isFunctionBlock(b.type)) draw_function_block(editor, 'symbol', ctx, b)
     })
     links.forEach(link => {
       draw_connection(editor, 'symbol', ctx, link)
@@ -2279,10 +2684,13 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       if (block) {
         const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)
         const isCounter = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)
+        const isFB = isFunctionBlock(block.type)
         if (isTimer) {
           promptForTimerParameters(editor, block, ladder)
         } else if (isCounter) {
           promptForCounterParameters(editor, block, ladder)
+        } else if (isFB) {
+          promptForFunctionBlockParameters(editor, block, ladder)
         } else {
           promptForSymbol(editor, block, ladder)
         }
@@ -2429,6 +2837,35 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
                     { type: 'item', name: 'insert_counter_d', label: 'CTD (Count Down)' },
                   ]
                 },
+                {
+                  type: 'submenu', name: 'insert_math', label: 'Math Operations', items: [
+                    { type: 'item', name: 'insert_fb_add', label: 'ADD (Addition)' },
+                    { type: 'item', name: 'insert_fb_sub', label: 'SUB (Subtraction)' },
+                    { type: 'item', name: 'insert_fb_mul', label: 'MUL (Multiply)' },
+                    { type: 'item', name: 'insert_fb_div', label: 'DIV (Divide)' },
+                    { type: 'item', name: 'insert_fb_mod', label: 'MOD (Modulo)' },
+                    { type: 'separator' },
+                    { type: 'item', name: 'insert_fb_neg', label: 'NEG (Negate)' },
+                    { type: 'item', name: 'insert_fb_abs', label: 'ABS (Absolute)' },
+                    { type: 'item', name: 'insert_fb_inc', label: 'INC (Increment)' },
+                    { type: 'item', name: 'insert_fb_dec', label: 'DEC (Decrement)' },
+                  ]
+                },
+                {
+                  type: 'submenu', name: 'insert_compare', label: 'Compare Operations', items: [
+                    { type: 'item', name: 'insert_fb_cmp_eq', label: 'EQ (Equal)' },
+                    { type: 'item', name: 'insert_fb_cmp_neq', label: 'NEQ (Not Equal)' },
+                    { type: 'item', name: 'insert_fb_cmp_gt', label: 'GT (Greater Than)' },
+                    { type: 'item', name: 'insert_fb_cmp_lt', label: 'LT (Less Than)' },
+                    { type: 'item', name: 'insert_fb_cmp_gte', label: 'GTE (Greater or Equal)' },
+                    { type: 'item', name: 'insert_fb_cmp_lte', label: 'LTE (Less or Equal)' },
+                  ]
+                },
+                {
+                  type: 'submenu', name: 'insert_move', label: 'Move/Transfer', items: [
+                    { type: 'item', name: 'insert_fb_move', label: 'MOVE (Transfer)' },
+                  ]
+                },
               ]
             },
             { type: 'separator' }
@@ -2441,6 +2878,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           const isContact = blockAtPosition.type === 'contact'
           const isTimer = blockAtPosition.type === 'timer_ton' || blockAtPosition.type === 'timer_tof' || blockAtPosition.type === 'timer_tp'
           const isCounter = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(blockAtPosition.type)
+          const isFB = isFunctionBlock(blockAtPosition.type)
 
           // Show different edit option based on block type
           if (isTimer) {
@@ -2464,6 +2902,11 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             const counterLabel = counterTypeLabels[blockAtPosition.type] || 'Counter'
             menuItems.push(
               { type: 'item', name: 'edit_counter', label: `Edit ${counterLabel}...` }
+            )
+          } else if (isFB) {
+            const fbLabel = getFunctionBlockLabel(blockAtPosition.type)
+            menuItems.push(
+              { type: 'item', name: 'edit_function_block', label: `Edit ${fbLabel}...` }
             )
           } else {
             menuItems.push(
@@ -2600,6 +3043,54 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             newBlock.type = 'counter_u'
           } else if (selected_action === 'insert_counter_d') {
             newBlock.type = 'counter_d'
+          } else if (selected_action === 'insert_fb_add') {
+            newBlock.type = 'fb_add'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_sub') {
+            newBlock.type = 'fb_sub'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_mul') {
+            newBlock.type = 'fb_mul'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_div') {
+            newBlock.type = 'fb_div'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_mod') {
+            newBlock.type = 'fb_mod'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_neg') {
+            newBlock.type = 'fb_neg'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_abs') {
+            newBlock.type = 'fb_abs'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_inc') {
+            newBlock.type = 'fb_inc'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_dec') {
+            newBlock.type = 'fb_dec'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_cmp_eq') {
+            newBlock.type = 'fb_cmp_eq'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_cmp_neq') {
+            newBlock.type = 'fb_cmp_neq'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_cmp_gt') {
+            newBlock.type = 'fb_cmp_gt'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_cmp_lt') {
+            newBlock.type = 'fb_cmp_lt'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_cmp_gte') {
+            newBlock.type = 'fb_cmp_gte'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_cmp_lte') {
+            newBlock.type = 'fb_cmp_lte'
+            newBlock.dataType = 'i16'
+          } else if (selected_action === 'insert_fb_move') {
+            newBlock.type = 'fb_move'
+            newBlock.dataType = 'i16'
           }
 
           ladder.blocks.push(newBlock)
@@ -2615,12 +3106,16 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           // Prompt for symbol/parameters based on block type
           const isTimerBlock = ['timer_ton', 'timer_tof', 'timer_tp'].includes(newBlock.type)
           const isCounterBlock = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(newBlock.type)
+          const isFB = isFunctionBlock(newBlock.type)
           if (isTimerBlock) {
             // @ts-ignore - newBlock type is correct at runtime
             promptForTimerParameters(editor, newBlock, ladder)
           } else if (isCounterBlock) {
             // @ts-ignore - newBlock type is correct at runtime
             promptForCounterParameters(editor, newBlock, ladder)
+          } else if (isFB) {
+            // @ts-ignore - newBlock type is correct at runtime
+            promptForFunctionBlockParameters(editor, newBlock, ladder)
           } else {
             // @ts-ignore - newBlock type is correct at runtime
             promptForSymbol(editor, newBlock, ladder)
@@ -2690,6 +3185,14 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
           if (blockAtPosition) {
             promptForCounterParameters(editor, blockAtPosition, ladder)
+          }
+        }
+
+        // Handle edit operation block parameters
+        if (selected_action === 'edit_function_block') {
+          const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+          if (blockAtPosition) {
+            promptForFunctionBlockParameters(editor, blockAtPosition, ladder)
           }
         }
 
@@ -3022,20 +3525,44 @@ function initializeLiveMonitoring(editor, ladder, canvas) {
     const addresses = new Map() // Map<baseAddress, { size, symbols: Set<symbol> }>
     const offsets = ensureOffsets(editor.project?.offsets || {})
 
-    const blocks = ladder.blocks || []
-    for (const block of blocks) {
-      if (!block.symbol) continue
+    // Type size mapping
+    const typeSizes = {
+      bit: 1, bool: 1, byte: 1, u8: 1, i8: 1,
+      int: 2, u16: 2, i16: 2, word: 2,
+      dint: 4, u32: 4, i32: 4, real: 4, float: 4, f32: 4, dword: 4,
+      u64: 8, i64: 8, f64: 8, lword: 8
+    }
+
+    // Map dataType to symbol type for operation blocks
+    const dataTypeToSymbolType = {
+      'i8': 'i8', 'u8': 'u8', 'i16': 'i16', 'u16': 'u16',
+      'i32': 'i32', 'u32': 'u32', 'i64': 'i64', 'u64': 'u64',
+      'f32': 'f32', 'f64': 'f64'
+    }
+
+    /**
+     * Add an address to the monitoring map
+     * @param {string} addressName - The name/address string (e.g., "MW14", "M10")
+     * @param {string} [typeOverride] - Optional type override
+     */
+    const addAddressToMap = (addressName, typeOverride) => {
+      if (!addressName) return
 
       // Find symbol from project or system symbols, or parse as direct address
-      let symbol = system_symbols.find(s => s.name === block.symbol)
-        || editor.project?.symbols?.find(s => s.name === block.symbol)
+      let symbol = system_symbols.find(s => s.name === addressName)
+        || editor.project?.symbols?.find(s => s.name === addressName)
 
-      // If not found, try to parse as direct address (e.g., X0.0, Y0.0)
+      // If not found, try to parse as direct address (e.g., X0.0, Y0.0, MW14)
       if (!symbol) {
-        symbol = parseAddressToSymbol(block.symbol)
+        symbol = parseAddressToSymbol(addressName)
       }
 
-      if (!symbol) continue
+      if (!symbol) return
+
+      // Override type if specified (for operation blocks with dataType)
+      if (typeOverride && symbol) {
+        symbol = { ...symbol, type: typeOverride }
+      }
 
       // Calculate absolute address
       const locationKey = symbol.location === 'memory' ? 'marker' : symbol.location
@@ -3045,12 +3572,6 @@ function initializeLiveMonitoring(editor, ladder, canvas) {
       const absoluteAddr = baseOffset + byteAddr
 
       // Determine size based on type
-      const typeSizes = {
-        bit: 1, bool: 1, byte: 1, u8: 1, i8: 1,
-        int: 2, u16: 2, i16: 2, word: 2,
-        dint: 4, u32: 4, i32: 4, real: 4, float: 4, dword: 4,
-        u64: 8, i64: 8, f64: 8, lword: 8
-      }
       const size = typeSizes[symbol.type || 'bit'] || 1
 
       // Group nearby addresses for efficient fetching
@@ -3059,7 +3580,33 @@ function initializeLiveMonitoring(editor, ladder, canvas) {
       }
       const entry = addresses.get(absoluteAddr)
       entry.size = Math.max(entry.size, size)
-      entry.symbols.add(symbol.name)
+      entry.symbols.add(addressName)
+    }
+
+    const blocks = ladder.blocks || []
+    for (const block of blocks) {
+      // For regular blocks, collect the main symbol
+      if (block.symbol) {
+        addAddressToMap(block.symbol)
+      }
+
+      // For operation blocks (function blocks), also collect in1, in2, out addresses
+      if (isFunctionBlock(block.type)) {
+        const symbolType = dataTypeToSymbolType[block.dataType] || 'i16'
+        
+        // Collect output address
+        if (block.out) {
+          addAddressToMap(block.out, symbolType)
+        }
+        // Collect input addresses (for display purposes)
+        if (block.in1) {
+          addAddressToMap(block.in1, symbolType)
+        }
+        if (block.in2) {
+          addAddressToMap(block.in2, symbolType)
+        }
+        // For INC/DEC, the address is in block.symbol (already collected above)
+      }
     }
 
     return addresses
@@ -3070,7 +3617,17 @@ function initializeLiveMonitoring(editor, ladder, canvas) {
    */
   const getSymbolsHash = () => {
     const blocks = ladder.blocks || []
-    return blocks.map(b => b.symbol || '').sort().join('|')
+    const symbols = []
+    for (const b of blocks) {
+      if (b.symbol) symbols.push(b.symbol)
+      // Include operation block addresses in hash
+      if (isFunctionBlock(b.type)) {
+        if (b.out) symbols.push(b.out)
+        if (b.in1) symbols.push(b.in1)
+        if (b.in2) symbols.push(b.in2)
+      }
+    }
+    return symbols.sort().join('|')
   }
 
   /**
@@ -3499,4 +4056,167 @@ async function promptForCounterParameters(editor, block, ladder) {
     }
   }
 }
+
+/**
+ * Prompt user to enter operation block parameters (math, move, compare)
+ * @param {VovkPLCEditor} editor
+ * @param {PLC_LadderBlock} block
+ * @param {any} ladder - The ladder block to re-render after parameter change
+ */
+async function promptForFunctionBlockParameters(editor, block, ladder) {
+  const fbLabel = getFunctionBlockLabel(block.type)
+  const isUnary = isUnaryMathBlock(block.type)
+  const isMove = isMoveBlock(block.type)
+  const isCompare = isCompareBlock(block.type)
+  const isMath = isMathBlock(block.type)
+  const isIncDec = isIncDecBlock(block.type)
+
+  const currentDataType = block.dataType || 'i16'
+  const currentIn1 = block.in1 || ''
+  const currentIn2 = block.in2 || ''
+  const currentOut = block.out || block.symbol || ''
+
+  // Build inputs based on block type
+  const inputs = [
+    {
+      name: 'dataType',
+      label: 'Data Type',
+      type: 'select',
+      value: currentDataType,
+      options: [
+        { value: 'u8', label: 'U8 (Byte)' },
+        { value: 'u16', label: 'U16 (Word)' },
+        { value: 'u32', label: 'U32 (DWord)' },
+        { value: 'i8', label: 'I8 (Signed Byte)' },
+        { value: 'i16', label: 'I16 (INT)' },
+        { value: 'i32', label: 'I32 (DINT)' },
+        { value: 'f32', label: 'F32 (REAL)' },
+        { value: 'f64', label: 'F64 (LREAL)' },
+      ]
+    }
+  ]
+
+  // INC/DEC only need a single address parameter
+  if (isIncDec) {
+    inputs.push({
+      name: 'address',
+      label: 'Address',
+      type: 'text',
+      value: block.symbol || '',
+      placeholder: 'e.g. MB0, MW2, MD4, MR8'
+    })
+  } else {
+    inputs.push({
+      name: 'in1',
+      label: isMove ? 'Source (IN)' : 'Input 1 (IN1)',
+      type: 'text',
+      value: currentIn1,
+      placeholder: 'e.g. MW0, #100, MD4'
+    })
+
+    // Add IN2 for binary operations
+    if (!isUnary && !isMove) {
+      inputs.push({
+        name: 'in2',
+        label: 'Input 2 (IN2)',
+        type: 'text',
+        value: currentIn2,
+        placeholder: 'e.g. MW2, #50'
+      })
+    }
+
+    // Add output for math and move (not for compare - it sets RLO)
+    if (isMath || isMove) {
+      inputs.push({
+        name: 'out',
+        label: 'Output (OUT)',
+        type: 'text',
+        value: currentOut,
+        placeholder: 'e.g. MW10, MD8'
+      })
+    }
+  }
+
+  let description = ''
+  if (isIncDec) {
+    description = `${fbLabel} the value at the specified address by 1 when RLO is true`
+  } else if (isCompare) {
+    description = 'Compare operation sets RLO (Result of Logic Operation) based on comparison result'
+  } else if (isMove) {
+    description = 'Move value from source to destination when RLO is true'
+  } else if (isUnary) {
+    description = `Apply ${fbLabel} operation to input and store result when RLO is true`
+  } else {
+    description = `Perform ${fbLabel} operation (IN1 ${fbLabel} IN2 -> OUT) when RLO is true`
+  }
+
+  const result = await Popup.form({
+    title: `Edit ${fbLabel} Operation`,
+    description,
+    inputs,
+    verify: values => {
+      if (isIncDec) {
+        // INC/DEC only needs address
+        if (!values.address.value.trim()) {
+          return values.address.setError('Address is required')
+        }
+        values.address.clearError()
+        return true
+      }
+      
+      // Basic validation - at least IN1 is required
+      if (!values.in1.value.trim()) {
+        return values.in1.setError('Input 1 is required')
+      }
+      values.in1.clearError()
+      
+      // IN2 required for binary ops
+      if (!isUnary && !isMove && values.in2 && !values.in2.value.trim()) {
+        return values.in2.setError('Input 2 is required')
+      }
+      if (values.in2) values.in2.clearError()
+      
+      // Output required for math/move
+      if ((isMath || isMove) && values.out && !values.out.value.trim()) {
+        return values.out.setError('Output is required')
+      }
+      if (values.out) values.out.clearError()
+      
+      return true
+    },
+    buttons: [
+      { text: 'OK', value: 'ok' },
+      { text: 'Cancel', value: 'cancel' }
+    ]
+  })
+
+  if (result) {
+    block.dataType = result.dataType || 'i16'
+    
+    if (isIncDec) {
+      // INC/DEC uses symbol as the address
+      block.symbol = result.address?.trim() || ''
+      // Clear any legacy in1/out fields
+      delete block.in1
+      delete block.out
+    } else {
+      block.in1 = result.in1?.trim() || ''
+      if (!isUnary && !isMove) {
+        block.in2 = result.in2?.trim() || ''
+      }
+      if (isMath || isMove) {
+        block.out = result.out?.trim() || ''
+        block.symbol = result.out?.trim() || '' // Use output as symbol for display
+      }
+    }
+
+    // Clear cached state so it gets re-resolved
+    block.state = undefined
+    // Re-render the ladder
+    if (ladder) {
+      ladderRenderer.render(editor, ladder)
+    }
+  }
+}
+
 export default ladderRenderer
