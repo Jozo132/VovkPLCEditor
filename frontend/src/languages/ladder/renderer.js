@@ -552,6 +552,12 @@ const draw_coil = (editor, like, ctx, block) => {
     // Draw circle for the coil
     ctx.arc(x_mid, y_mid, (cr - cl) / 2, 0, Math.PI * 2)
 
+    // Draw slash for inverted coil
+    if (inverted) {
+      const slashOffset = (cr - cl) / 2 * 0.7 // Slightly inside the circle
+      ctx.moveTo(x_mid - slashOffset, y_mid + slashOffset)
+      ctx.lineTo(x_mid + slashOffset, y_mid - slashOffset)
+    }
 
     if (state?.terminated_output) {
       ctx.moveTo(x1 - 2, y_mid - 8)
@@ -2910,6 +2916,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
                 {
                   type: 'submenu', name: 'insert_coils', label: 'Coils', items: [
                     { type: 'item', name: 'insert_coil', label: 'Coil (=)' },
+                    { type: 'item', name: 'insert_coil_inverted', label: 'Inverted Coil (/)' },
                     { type: 'item', name: 'insert_coil_set', label: 'Set Coil (S)' },
                     { type: 'item', name: 'insert_coil_reset', label: 'Reset Coil (R)' },
                   ]
@@ -3022,6 +3029,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           // Coil-specific options
           if (isCoil) {
             menuItems.push(
+              { type: 'item', name: 'toggle_inverted', label: blockAtPosition.inverted ? 'Make Normal' : 'Make Inverted (/)' },
               {
                 type: 'submenu', name: 'change_coil_type', label: 'Coil Type', items: [
                   { type: 'item', name: 'coil_type_assign', label: 'Assign (=)', className: blockAtPosition.type === 'coil' ? 'selected' : '' },
@@ -3119,6 +3127,9 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             newBlock.trigger = 'falling'
           } else if (selected_action === 'insert_coil') {
             newBlock.type = 'coil'
+          } else if (selected_action === 'insert_coil_inverted') {
+            newBlock.type = 'coil'
+            newBlock.inverted = true
           } else if (selected_action === 'insert_coil_set') {
             newBlock.type = 'coil_set'
           } else if (selected_action === 'insert_coil_reset') {
@@ -3286,7 +3297,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           }
         }
 
-        // Handle toggle inverted
+        // Handle toggle inverted (for contacts and coils)
         if (selected_action === 'toggle_inverted') {
           const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
           if (blockAtPosition) {
