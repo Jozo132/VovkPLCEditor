@@ -2179,7 +2179,7 @@ MiniCodeEditor.registerLanguage('asm', {
         {regex: /\b[CXYMS]\d+(?:\.\d+)?\b/gi, className: 'addr'},
         {regex: /\b(ptr|u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\b/g, className: 'dt'},
         // BR (Binary Result) stack operations
-        {regex: /\b(br)\.(save|read|copy|drop)\b/gim, className: 'kw'},
+        {regex: /\b(br)\.(save|read|copy|drop)\b/gim, className: 'type-keyword'},
         // Timer and Counter instructions
         {regex: /\b(ton|tof|tp|ctu|ctd|ctud)\b/gim, className: 'type-keyword'},
         // Top level Keywords and method calls
