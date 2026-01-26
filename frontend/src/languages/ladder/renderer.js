@@ -2,11 +2,68 @@ import { VovkPLCEditor } from "../../editor/Editor.js"
 import { PLC_Symbol } from "../../utils/types.js"
 import { RendererModule } from "../types.js"
 import { resolveBlockState } from "./evaluator.js"
-import { PLC_Ladder, PLC_LadderBlock, PLC_LadderConnection, toIR, isFunctionBlock, isMathBlock, isCompareBlock, isMoveBlock, isUnaryMathBlock, isIncDecBlock, getFunctionBlockLabel } from "./language.js"
+import { PLC_Ladder, PLC_LadderBlock, PLC_LadderNode, PLC_LadderConnection, toGraph, isFunctionBlock, isMathBlock, isCompareBlock, isMoveBlock, isUnaryMathBlock, isIncDecBlock, getFunctionBlockLabel, migrateLadderBlock } from "./language.js"
 import { getSymbolValue, setSymbolBit } from "../BlockLogic.js"
 import { ensureOffsets } from "../../utils/offsets.js"
 import { Popup } from "../../editor/UI/Elements/components/popup.js"
 
+
+/**
+ * Ensures ladder is in correct format and provides backward-compatible accessors.
+ * Call this at the start of render functions to ensure ladder.blocks works as alias for ladder.nodes.
+ * @param {PLC_Ladder} ladder 
+ */
+function ensureLadderFormat(ladder) {
+  // Migrate to new format if needed
+  migrateLadderBlock(ladder)
+  
+  // Create backward-compatible 'blocks' alias if not present
+  // This allows existing code to use ladder.blocks while data is stored in ladder.nodes
+  if (!ladder.blocks && ladder.nodes) {
+    Object.defineProperty(ladder, 'blocks', {
+      get() { return this.nodes },
+      set(val) { this.nodes = val },
+      configurable: true,
+      enumerable: false
+    })
+  }
+}
+
+/**
+ * Expand grouped connections to legacy format for rendering compatibility.
+ * Creates individual { from: {id}, to: {id} } connections from grouped { sources, destinations } connections.
+ * @param {PLC_Ladder} ladder 
+ * @returns {{ from: { id: string }, to: { id: string }, state?: any }[]}
+ */
+function getLegacyConnections(ladder) {
+  const connections = ladder.connections || []
+  const legacy = []
+  
+  for (const conn of connections) {
+    // Check if already in legacy format
+    if (conn.from && conn.to) {
+      legacy.push(conn)
+      continue
+    }
+    
+    // Expand grouped format to individual connections
+    const sources = conn.sources || []
+    const destinations = conn.destinations || []
+    
+    for (const srcId of sources) {
+      for (const destId of destinations) {
+        legacy.push({
+          id: `${srcId}_to_${destId}`,
+          from: { id: srcId },
+          to: { id: destId },
+          state: conn.state
+        })
+      }
+    }
+  }
+  
+  return legacy
+}
 
 /**
  * Auto-connect adjacent blocks based on their positions.
@@ -15,21 +72,40 @@ import { Popup } from "../../editor/UI/Elements/components/popup.js"
  * @param {PLC_Ladder} ladder 
  */
 export function connectTouchingBlocks(ladder) {
-  const { blocks, connections } = ladder
-  if (!blocks || blocks.length === 0) return
+  ensureLadderFormat(ladder)
+  const nodes = ladder.nodes || []
+  if (nodes.length === 0) return
+  
+  // Get existing connection pairs
+  const existingPairs = new Set()
+  for (const conn of ladder.connections || []) {
+    if (conn.from && conn.to) {
+      // Legacy format
+      existingPairs.add(`${conn.from.id}->${conn.to.id}`)
+    } else if (conn.sources && conn.destinations) {
+      // New grouped format
+      for (const src of conn.sources) {
+        for (const dest of conn.destinations) {
+          existingPairs.add(`${src}->${dest}`)
+        }
+      }
+    }
+  }
 
-  // Only add new connections for adjacent blocks - never remove existing ones
-  for (const block of blocks) {
-    const x = block.x + 1
-    const neighbors_right = blocks.filter(b => b.x === x && b.y === block.y)
+  // Only add new connections for adjacent nodes
+  for (const node of nodes) {
+    const x = node.x + 1
+    const neighbors_right = nodes.filter(n => n.x === x && n.y === node.y)
     for (const neighbor of neighbors_right) {
-      const exists = connections.find(c => c.from.id === block.id && c.to.id === neighbor.id)
-      if (!exists) {
-        connections.push({
-          id: `conn_${block.id}_${neighbor.id}`,
-          from: { id: block.id },
-          to: { id: neighbor.id }
+      const pairKey = `${node.id}->${neighbor.id}`
+      if (!existingPairs.has(pairKey)) {
+        // Add in new grouped format (single source, single destination)
+        ladder.connections.push({
+          id: `conn_${node.id}_${neighbor.id}`,
+          sources: [node.id],
+          destinations: [neighbor.id]
         })
+        existingPairs.add(pairKey)
       }
     }
   }
@@ -1517,7 +1593,10 @@ const draw_connection = (editor, like, ctx, link) => {
 
 /** @type {(editor: VovkPLCEditor, ladder: PLC_Ladder) => void} */
 const evaluate_ladder = (editor, ladder) => {
-  const { blocks, connections } = ladder
+  ensureLadderFormat(ladder)
+  const blocks = ladder.nodes || []
+  const connections = getLegacyConnections(ladder)
+  
   // Reset the state of all blocks and connections
   const blockHasInputConnection = (block) => connections.some(connection => connection.to.id === block.id)
 
@@ -1775,10 +1854,19 @@ export const ladderRenderer = {
 
   render(editor, block) {
     if (block.type !== 'ladder') return
-    block.blocks = block.blocks || []
+    
+    // Ensure ladder is in correct format with backward-compatible accessors
+    ensureLadderFormat(block)
+    
+    // Initialize arrays if not present
+    block.nodes = block.nodes || []
     block.connections = block.connections || []
 
-    const { div, props, blocks, connections } = block
+    // For backward compatibility, also expose 'blocks' alias
+    const blocks = block.nodes
+    const connections = getLegacyConnections(block)
+    
+    const { div, props } = block
     const ladderId = block.id
 
     // Add Context Menu to Header for viewing compiled code (STL/PLCASM)
@@ -1789,7 +1877,7 @@ export const ladderRenderer = {
         e.stopImmediatePropagation()
 
         const items = [
-          { label: 'View Logic as IR', name: 'view_ir', icon: 'json', type: 'item' },
+          { label: 'View Logic as Graph', name: 'view_graph', icon: 'json', type: 'item' },
           { label: 'View Logic as STL', name: 'view_stl', icon: 'code', type: 'item' },
           { label: 'View Logic as PLCASM', name: 'view_asm', icon: 'server', type: 'item' }
         ]
@@ -1797,24 +1885,24 @@ export const ladderRenderer = {
         if (editor.context_manager) {
           editor.context_manager.show(e, items, async (action) => {
             try {
-              // 1. Convert Ladder to IR
-              const ir = toIR(block)
+              // 1. Convert Ladder to Graph format
+              const graph = toGraph(block)
 
               let finalOutput = ''
               let titleSuffix = ''
 
-              if (action === 'view_ir') {
-                finalOutput = JSON.stringify({ rungs: ir.rungs, errors: ir.errors }, null, 2)
-                titleSuffix = 'IR'
+              if (action === 'view_graph') {
+                finalOutput = JSON.stringify(graph, null, 2)
+                titleSuffix = 'Graph'
               } else {
                 if (!editor.runtime || !editor.runtime.compileLadder) {
                   throw new Error("Runtime compiler not available")
                 }
 
-                // 2. Compile IR to STL
-                // The runtime expects { rungs: ... } JSON string
-                const ladderJson = JSON.stringify({ rungs: ir.rungs })
-                const ladderResult = await editor.runtime.compileLadder(ladderJson)
+                // 2. Compile Graph to STL
+                // The runtime expects graph JSON string
+                const graphJson = JSON.stringify(graph)
+                const ladderResult = await editor.runtime.compileLadder(graphJson)
 
                 if (!ladderResult || typeof ladderResult.output !== 'string') {
                   throw new Error('Ladder compilation failed to produce STL')
@@ -2448,9 +2536,10 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       // Check connection constraints - connections cannot go backwards
       // If a moving block connects TO a non-moving block, moving block must stay to the left (X < target X)
       // If a non-moving block connects TO a moving block, moving block must stay to the right (X > source X)
+      const legacyConns = getLegacyConnections(ladder)
       const hasConnectionViolation = proposedPositions.some(pos => {
         // Find connections where this moving block is the source (connects TO something)
-        const outgoingToNonMoving = ladder.connections.filter(c => 
+        const outgoingToNonMoving = legacyConns.filter(c => 
           c.from.id === pos.id && !movingIds.has(c.to.id)
         )
         // Moving block must have X < target's X (stay to the left)
@@ -2460,7 +2549,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         }
         
         // Find connections where this moving block is the target (something connects TO it)
-        const incomingFromNonMoving = ladder.connections.filter(c => 
+        const incomingFromNonMoving = legacyConns.filter(c => 
           c.to.id === pos.id && !movingIds.has(c.from.id)
         )
         // Moving block must have X > source's X (stay to the right)
@@ -2562,17 +2651,18 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         }
         
         if (fromBlock && toBlock && fromBlock.x < toBlock.x) {
-          // Check if connection already exists
-          const exists = ladder.connections.find(c => 
+          // Check if connection already exists (handle both formats)
+          const legacyConns = getLegacyConnections(ladder)
+          const exists = legacyConns.some(c => 
             c.from.id === fromBlock.id && c.to.id === toBlock.id
           )
           
           if (!exists) {
-            // Create new connection
+            // Create new connection in grouped format
             ladder.connections.push({
               id: editor._generateID(),
-              from: { id: fromBlock.id },
-              to: { id: toBlock.id }
+              sources: [fromBlock.id],
+              destinations: [toBlock.id]
             })
           }
         }
@@ -3093,7 +3183,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             newBlock.dataType = 'i16'
           }
 
-          ladder.blocks.push(newBlock)
+          ladder.nodes.push(newBlock)
 
           // Select the new block
           editor.ladder_selection = {
@@ -3338,25 +3428,27 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
  * @param {number} contextY
  */
 function copySelection(editor, ladder, contextX, contextY) {
+  ensureLadderFormat(ladder)
+  const nodes = ladder.nodes || []
   const sel = editor.ladder_selection?.selection || []
   const origin = editor.ladder_selection?.origin || { x: contextX, y: contextY }
   const originX = origin.x
   const originY = origin.y
 
-  /** @type {PLC_LadderBlock[]} */
+  /** @type {PLC_LadderNode[]} */
   const blocksToCopy = []
 
   // Collect blocks from selection
   sel.forEach(s => {
     if (s.type === 'block') {
-      const block = ladder.blocks.find(b => b.x === s.x && b.y === s.y)
+      const block = nodes.find(b => b.x === s.x && b.y === s.y)
       if (block && !blocksToCopy.find(b => b.id === block.id)) {
         blocksToCopy.push(block)
       }
     }
     if (s.type === 'area') {
-      const blocks = ladder.blocks.filter(b => b.x >= s.x && b.x < s.x + s.width && b.y >= s.y && b.y < s.y + s.height)
-      blocks.forEach(block => {
+      const areaBlocks = nodes.filter(b => b.x >= s.x && b.x < s.x + s.width && b.y >= s.y && b.y < s.y + s.height)
+      areaBlocks.forEach(block => {
         if (!blocksToCopy.find(b => b.id === block.id)) {
           blocksToCopy.push(block)
         }
@@ -3366,7 +3458,7 @@ function copySelection(editor, ladder, contextX, contextY) {
 
   // If no selection, use block at context menu position
   if (blocksToCopy.length === 0) {
-    const blockAtPosition = ladder.blocks.find(b => b.x === contextX && b.y === contextY)
+    const blockAtPosition = nodes.find(b => b.x === contextX && b.y === contextY)
     if (blockAtPosition) {
       blocksToCopy.push(blockAtPosition)
     }
@@ -3383,9 +3475,10 @@ function copySelection(editor, ladder, contextX, contextY) {
     return copy
   })
 
-  // Find connections between copied blocks
+  // Find connections between copied blocks (use legacy format for clipboard compatibility)
   const blockIds = new Set(blocksToCopy.map(b => b.id))
-  const copiedConnections = ladder.connections
+  const legacyConnections = getLegacyConnections(ladder)
+  const copiedConnections = legacyConnections
     .filter(c => blockIds.has(c.from.id) && blockIds.has(c.to.id))
     .map(c => ({ ...c }))
 
@@ -3425,15 +3518,32 @@ function pasteSelection(editor, ladder, pasteX, pasteY) {
     }
   })
 
-  // Create new connections with new IDs
-  const newConnections = clipboard.connections.map(conn => ({
-    id: editor._generateID(),
-    from: { id: idMap.get(conn.from.id), offset: conn.from.offset },
-    to: { id: idMap.get(conn.to.id), offset: conn.to.offset }
-  })).filter(c => c.from.id && c.to.id) // Only include if both blocks exist
+  // Create new connections in the new grouped format
+  // First, convert clipboard's legacy connections to new format
+  const connectionPairs = clipboard.connections.map(conn => ({
+    from: idMap.get(conn.from?.id),
+    to: idMap.get(conn.to?.id)
+  })).filter(c => c.from && c.to)
+  
+  // Group connections by source -> destinations pattern
+  const sourceToDestinations = new Map()
+  for (const { from, to } of connectionPairs) {
+    if (!sourceToDestinations.has(from)) sourceToDestinations.set(from, new Set())
+    sourceToDestinations.get(from).add(to)
+  }
+  
+  // Create grouped connections
+  const newConnections = []
+  for (const [source, destinations] of sourceToDestinations) {
+    newConnections.push({
+      id: editor._generateID(),
+      sources: [source],
+      destinations: [...destinations]
+    })
+  }
 
   // Add to ladder
-  newBlocks.forEach(block => ladder.blocks.push(block))
+  newBlocks.forEach(block => ladder.nodes.push(block))
   newConnections.forEach(conn => ladder.connections.push(conn))
 
   // Auto-connect touching blocks
@@ -3456,12 +3566,15 @@ function pasteSelection(editor, ladder, pasteX, pasteY) {
  * @param {number} [contextY]
  */
 function deleteSelection(editor, ladder, contextX, contextY) {
-  /** @type {PLC_LadderBlock[]} */
+  ensureLadderFormat(ladder)
+  const nodes = ladder.nodes || []
+  
+  /** @type {PLC_LadderNode[]} */
   const blocksToDelete = []
 
   // First check if there's a block at the context menu position
   if (typeof contextX === 'number' && typeof contextY === 'number') {
-    const blockAtPosition = ladder.blocks.find(b => b.x === contextX && b.y === contextY)
+    const blockAtPosition = nodes.find(b => b.x === contextX && b.y === contextY)
     if (blockAtPosition) {
       blocksToDelete.push(blockAtPosition)
     }
@@ -3471,12 +3584,12 @@ function deleteSelection(editor, ladder, contextX, contextY) {
   const sel = editor.ladder_selection?.selection || []
   sel.forEach(s => {
     if (s.type === 'block') {
-      const block = ladder.blocks.find(b => b.x === s.x && b.y === s.y)
+      const block = nodes.find(b => b.x === s.x && b.y === s.y)
       if (block && !blocksToDelete.includes(block)) blocksToDelete.push(block)
     }
     if (s.type === 'area') {
-      const blocks = ladder.blocks.filter(b => b.x >= s.x && b.x < s.x + s.width && b.y >= s.y && b.y < s.y + s.height)
-      blocks.forEach(block => {
+      const areaBlocks = nodes.filter(b => b.x >= s.x && b.x < s.x + s.width && b.y >= s.y && b.y < s.y + s.height)
+      areaBlocks.forEach(block => {
         if (!blocksToDelete.includes(block)) blocksToDelete.push(block)
       })
     }
@@ -3484,11 +3597,26 @@ function deleteSelection(editor, ladder, contextX, contextY) {
 
   // Delete the blocks and their connections
   blocksToDelete.forEach(block => {
-    const idx = ladder.blocks.indexOf(block)
+    const idx = ladder.nodes.indexOf(block)
     if (idx >= 0) {
-      ladder.blocks.splice(idx, 1)
-      // Remove connections involving this block
-      ladder.connections = ladder.connections.filter(c => c.from.id !== block.id && c.to.id !== block.id)
+      ladder.nodes.splice(idx, 1)
+      // Remove connections involving this block (handle both legacy and new format)
+      ladder.connections = ladder.connections.filter(c => {
+        // Legacy format
+        if (c.from && c.to) {
+          return c.from.id !== block.id && c.to.id !== block.id
+        }
+        // New grouped format - remove block from sources/destinations
+        if (c.sources || c.destinations) {
+          const sources = (c.sources || []).filter(id => id !== block.id)
+          const destinations = (c.destinations || []).filter(id => id !== block.id)
+          c.sources = sources
+          c.destinations = destinations
+          // Remove connection if either array is empty
+          return sources.length > 0 && destinations.length > 0
+        }
+        return true
+      })
     }
   })
 

@@ -1471,48 +1471,40 @@ export class VovkPLCEditor {
     }
 
     async _transpileLadderForLinting(assembly) {
-        // Transpile Ladder blocks to PLCASM via Ladder -> STL -> PLCASM chain
-        const ladderBlockRegex = /\/\/ ladder_block_start\n([\s\S]*?)\/\/ ladder_block_end\n/g
+        // Transpile Ladder Graph blocks to PLCASM via Ladder Graph -> STL -> PLCASM chain
+        const ladderGraphRegex = /\/\/ ladder_graph_start\n([\s\S]*?)\/\/ ladder_graph_end\n/g
         let result = assembly
         let match
         const replacements = []
 
-        while ((match = ladderBlockRegex.exec(assembly)) !== null) {
-            const ladderJson = match[1].trim()
+        while ((match = ladderGraphRegex.exec(assembly)) !== null) {
+            const graphJson = match[1].trim()
             const fullMatch = match[0]
             const startIndex = match.index
 
             try {
-                // Parse the JSON to check for embedded errors
-                let parsedLadder = null
+                // Parse the graph JSON
+                let parsedGraph = null
                 try {
-                    parsedLadder = JSON.parse(ladderJson)
+                    parsedGraph = JSON.parse(graphJson)
                 } catch (parseErr) {
-                    throw new Error('Invalid ladder JSON')
+                    throw new Error('Invalid ladder graph JSON')
                 }
                 
-                // If there are errors in the ladder structure, skip compilation
-                if (parsedLadder.errors && parsedLadder.errors.some(e => e.type === 'error')) {
-                    throw new Error('Ladder has structural errors')
-                }
-                
-                // Skip if no rungs
-                if (!parsedLadder.rungs || parsedLadder.rungs.length === 0) {
-                    throw new Error('No valid rungs')
+                // Skip if no nodes
+                if (!parsedGraph.nodes || parsedGraph.nodes.length === 0) {
+                    throw new Error('No nodes in graph')
                 }
                 
                 // Check if compileLadder is available
                 if (typeof this.runtime.compileLadder !== 'function') {
-                    throw new Error('Ladder compiler not available')
+                    throw new Error('Ladder Graph compiler not available')
                 }
                 
-                // Only send rungs to runtime (not errors)
-                const rungsOnlyJson = JSON.stringify({ rungs: parsedLadder.rungs })
-                
-                // Step 1: Ladder JSON -> STL
-                const ladderResult = await this.runtime.compileLadder(rungsOnlyJson)
+                // Step 1: Ladder Graph JSON -> STL
+                const ladderResult = await this.runtime.compileLadder(graphJson)
                 if (!ladderResult || !ladderResult.output) {
-                    throw new Error('Ladder compilation returned no output')
+                    throw new Error('Ladder Graph compilation returned no output')
                 }
                 
                 // Step 2: STL -> PLCASM
@@ -1529,7 +1521,7 @@ export class VovkPLCEditor {
                 replacements.push({
                     start: startIndex,
                     end: startIndex + fullMatch.length,
-                    replacement: '// Ladder block with errors\n'
+                    replacement: '// Ladder graph with errors\n'
                 })
             }
         }

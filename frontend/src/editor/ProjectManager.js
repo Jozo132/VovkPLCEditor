@@ -399,9 +399,9 @@ end:                      // Label to jump to
   }
 
   /**
-   * Transpiles Ladder JSON blocks to PLCASM assembly.
-   * Looks for markers: // ladder_block_start ... // ladder_block_end
-   * The transpilation chain: LADDER JSON -> STL -> PLCASM
+   * Transpiles Ladder Graph blocks to PLCASM assembly.
+   * Looks for markers: // ladder_graph_start ... // ladder_graph_end
+   * The transpilation chain: LADDER GRAPH JSON -> STL -> PLCASM
    * @param {string} asm - Assembly code with potential Ladder blocks
    * @param {object} runtime - VovkPLC runtime instance
    * @returns {Promise<string>} - Assembly code with Ladder transpiled to PLCASM
@@ -410,15 +410,15 @@ end:                      // Label to jump to
     // Check if runtime has compileLadder method
     const hasLadderCompiler = runtime && typeof runtime.compileLadder === 'function'
     
-    // Find all Ladder blocks
-    const ladderBlockRegex = /\/\/ ladder_block_start\n([\s\S]*?)\/\/ ladder_block_end\n/g
+    // Find all Ladder Graph blocks (new format with nodes/connections)
+    const ladderGraphRegex = /\/\/ ladder_graph_start\n([\s\S]*?)\/\/ ladder_graph_end\n/g
     let match
     const replacements = []
     /** @type {Array<{type: string, message: string, blockName?: string, programName?: string, programPath?: string}>} */
     const allErrors = []
     
-    while ((match = ladderBlockRegex.exec(asm)) !== null) {
-        const ladderJson = match[1].trim()
+    while ((match = ladderGraphRegex.exec(asm)) !== null) {
+        const graphJson = match[1].trim()
         const fullMatch = match[0]
         const startIndex = match.index
         
@@ -442,19 +442,15 @@ end:                      // Label to jump to
             }
         }
         
-        // Parse the JSON to extract any embedded errors from ladderToIR
-        let parsedLadder = null
-        let ladderErrors = []
+        // Parse the graph JSON
+        let parsedGraph = null
         try {
-            parsedLadder = JSON.parse(ladderJson)
-            if (parsedLadder.errors && Array.isArray(parsedLadder.errors)) {
-                ladderErrors = parsedLadder.errors
-            }
+            parsedGraph = JSON.parse(graphJson)
         } catch (parseErr) {
             // JSON parse error
             allErrors.push({
                 type: 'error',
-                message: `Invalid ladder JSON: ${parseErr.message}`,
+                message: `Invalid ladder graph JSON: ${parseErr.message}`,
                 blockName: blockInfo?.name || 'Unknown',
                 programName: programInfo?.name || '',
                 programPath: programInfo?.full_path || programInfo?.path || ''
@@ -462,64 +458,39 @@ end:                      // Label to jump to
             replacements.push({
                 start: startIndex,
                 end: startIndex + fullMatch.length,
-                replacement: `// Ladder block error: Invalid JSON\n`
+                replacement: `// Ladder graph error: Invalid JSON\n`
             })
             continue
         }
         
-        // Report any ladder structure errors (disconnected blocks, etc.)
-        for (const err of ladderErrors) {
-            allErrors.push({
-                type: err.type || 'error',
-                message: err.message,
-                blockName: blockInfo?.name || 'Unknown',
-                programName: programInfo?.name || '',
-                programPath: programInfo?.full_path || programInfo?.path || ''
-            })
-        }
-        
-        // If there are errors, skip compilation but still report them
-        if (ladderErrors.some(e => e.type === 'error')) {
-            const errorMsgs = ladderErrors.filter(e => e.type === 'error').map(e => e.message).join('; ')
+        // Check if there are any nodes to compile
+        if (!parsedGraph.nodes || parsedGraph.nodes.length === 0) {
             replacements.push({
                 start: startIndex,
                 end: startIndex + fullMatch.length,
-                replacement: `// Ladder block has errors: ${errorMsgs}\n`
-            })
-            continue
-        }
-        
-        // Check if there are any rungs to compile
-        if (!parsedLadder.rungs || parsedLadder.rungs.length === 0) {
-            replacements.push({
-                start: startIndex,
-                end: startIndex + fullMatch.length,
-                replacement: `// Ladder block is empty or has no valid rungs\n`
+                replacement: `// Ladder graph is empty (no nodes)\n`
             })
             continue
         }
         
         if (!hasLadderCompiler) {
             // No Ladder compiler - emit warning comment
-            this.#editor.window_manager.logToConsole('Ladder compiler not available in runtime. Ladder blocks will be skipped.', 'warning')
+            this.#editor.window_manager.logToConsole('Ladder Graph compiler not available in runtime. Ladder blocks will be skipped.', 'warning')
             replacements.push({
                 start: startIndex,
                 end: startIndex + fullMatch.length,
-                replacement: `// Ladder block skipped - compiler not available\n`
+                replacement: `// Ladder graph skipped - compiler not available\n`
             })
             continue
         }
         
         try {
-            // Only send the rungs to the runtime (not the errors)
-            const rungsOnlyJson = JSON.stringify({ rungs: parsedLadder.rungs })
-            
-            // Step 1: Transpile Ladder JSON to STL using runtime's compileLadder
-            // This returns { type: 'stl', size: number, output: string }
-            const ladderResult = await runtime.compileLadder(rungsOnlyJson)
+            // Step 1: Transpile Ladder Graph JSON to STL using runtime's compileLadder
+            // The runtime expects the graph format: { nodes: [...], connections: [...], comment?: string }
+            const ladderResult = await runtime.compileLadder(graphJson)
             
             if (!ladderResult || !ladderResult.output) {
-                throw new Error('Ladder compilation returned no output')
+                throw new Error('Ladder Graph compilation returned no output')
             }
             
             const stlCode = ladderResult.output
@@ -538,14 +509,14 @@ end:                      // Label to jump to
             replacements.push({
                 start: startIndex,
                 end: startIndex + fullMatch.length,
-                replacement: `// Ladder -> STL -> PLCASM transpiled\n${plcasm}\n`
+                replacement: `// Ladder Graph -> STL -> PLCASM transpiled\n${plcasm}\n`
             })
         } catch (e) {
             // Transpilation failed - emit error
             const errorMsg = e.message || 'Unknown error'
             allErrors.push({
                 type: 'error',
-                message: `Ladder transpilation failed: ${errorMsg}`,
+                message: `Ladder Graph transpilation failed: ${errorMsg}`,
                 blockName: blockInfo?.name || 'Unknown',
                 programName: programInfo?.name || '',
                 programPath: programInfo?.full_path || programInfo?.path || ''
@@ -553,7 +524,7 @@ end:                      // Label to jump to
             replacements.push({
                 start: startIndex,
                 end: startIndex + fullMatch.length,
-                replacement: `// Ladder transpilation error: ${errorMsg}\n`
+                replacement: `// Ladder Graph transpilation error: ${errorMsg}\n`
             })
         }
     }
