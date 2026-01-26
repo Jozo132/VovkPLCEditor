@@ -1597,7 +1597,7 @@ const draw_connection = (editor, like, ctx, link) => {
   throw new Error(`Invalid style: ${style}`)
 }
 
-/** @type {(editor: VovkPLCEditor, ladder: PLC_Ladder) => void} */
+/** @type {(editor: VovkPLCEditor, ladder: PLC_Ladder) => { from: { id: string }, to: { id: string }, state?: any }[]} */
 const evaluate_ladder = (editor, ladder) => {
   ensureLadderFormat(ladder)
   const blocks = ladder.nodes || []
@@ -1849,6 +1849,8 @@ const evaluate_ladder = (editor, ladder) => {
       })
     }
   })
+  
+  return connections
 }
 
 
@@ -2103,7 +2105,7 @@ export const ladderRenderer = {
     ctx.setLineDash([])
 
     // Draw the ladder blocks and connections
-    evaluate_ladder(editor, block)
+    const evaluatedConnections = evaluate_ladder(editor, block)
 
     // Draw the ladder highlights (for live values)
     blocks.forEach(b => {
@@ -2119,7 +2121,7 @@ export const ladderRenderer = {
 
     /** @type { LadderLink[] } */
     const links = []
-    connections.forEach(con => {
+    evaluatedConnections.forEach(con => {
       // Prevent regenerating IDs for existing connections
       if (!con.id) con.id = editor._generateID()
 
