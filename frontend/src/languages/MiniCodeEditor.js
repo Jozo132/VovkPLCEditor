@@ -2171,15 +2171,19 @@ MiniCodeEditor.registerLanguage('asm', {
         {regex: /#(?:\s*\d+)?/g, className: 'num'},
         {regex: /^\s*([A-Za-z_]\w*):/gm, className: 'function'}, // Labels
         {
-            regex: /(\b(?:jmp|jump|call)(?:_if(?:_not)?)?\b)(\s+)([A-Za-z_]\w*)/gi,
+            regex: /(\b(?:jmp|jump|call)(?:_if(?:_not)?)?(?:_rel)?\b)(\s+)([A-Za-z_]\w*)/gi,
             replace: (match, instr, ws, label) => `${instr}${ws}<span class="function">${label}</span>`
         }, // Label references in jumps/calls
         {regex: /^\b(const)\b/gm, className: 'kw'}, // Const declaration
         // Specific types (Datatypes)
         {regex: /\b[CXYMS]\d+(?:\.\d+)?\b/gi, className: 'addr'},
         {regex: /\b(ptr|u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\b/g, className: 'dt'},
+        // BR (Binary Result) stack operations
+        {regex: /\b(br)\.(save|read|copy|drop)\b/gim, className: 'kw'},
+        // Timer and Counter instructions
+        {regex: /\b(ton|tof|tp|ctu|ctd|ctud)\b/gim, className: 'type-keyword'},
         // Top level Keywords and method calls
-        {regex: /\b(add|sub|mul|div|mod|pow|sqrt|neg|abs|sin|cos|cmp_eq|cmp_neq|cmp_gt|cmp_lt|cmp_gte|cmp_lte|and|or|xor|not|lshift|rshift|move|move_to|move_copy|load|load_from|copy|swap|drop|clear|set|get|rset|readBit|writeBit|writeBitInv|writeBitOn|writeBitOff|readBitDU|readBitDD|readBitInvDU|readBitInvDD|writeBitDU|writeBitDD|writeBitInvDU|writeBitInvDD|writeBitOnDU|writeBitOnDD|writeBitOffDU|writeBitOffDD|du|jmp(?:_if(?:_not)?)?|jump(?:_if(?:_not)?)?|call(?:_if(?:_not)?)?|ret(?:_if(?:_not)?)?|exit|loop|cvt|nop)\b/gim, className: 'kw'},
+        {regex: /\b(add|sub|mul|div|mod|pow|sqrt|neg|abs|sin|cos|cmp_eq|cmp_neq|cmp_gt|cmp_lt|cmp_gte|cmp_lte|and|or|xor|not|lshift|rshift|move|move_to|move_copy|load|load_from|copy|swap|drop|clear|set|get|rset|readBit|writeBit|writeBitInv|writeBitOn|writeBitOff|readBitDU|readBitDD|readBitInvDU|readBitInvDD|writeBitDU|writeBitDD|writeBitInvDU|writeBitInvDD|writeBitOnDU|writeBitOnDD|writeBitOffDU|writeBitOffDD|du|jmp(?:_if(?:_not)?)?(?:_rel)?|jump(?:_if(?:_not)?)?|call(?:_if(?:_not)?)?|ret(?:_if(?:_not)?)?|exit|loop|cvt|nop)\b/gim, className: 'kw'},
         {regex: /\./g, className: 'dot'},
         
         {regex: /\b(u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\b/g, className: 'type-keyword'},
@@ -2205,8 +2209,8 @@ MiniCodeEditor.registerLanguage('stl', {
         {regex: /T#[A-Za-z0-9_]+/gi, className: 'num'},
         // Immediate values #123
         {regex: /#-?\d+/g, className: 'num'},
-        // STL Instructions - Bit Logic
-        {regex: /\b(A|AN|O|ON|NOT|SET|CLR|CLEAR)\b(?![:\(])/gi, className: 'kw'},
+        // STL Instructions - Bit Logic (allow A( and O( for nesting)
+        {regex: /\b(A|AN|O|ON|NOT|SET|CLR|CLEAR)\b(?!:)/gi, className: 'kw'},
         // XOR - separate to avoid matching X address prefix
         {regex: /\b(XN?)\b(?=\s+[A-Za-z])/gi, className: 'kw'},
         // Assign instruction (= at start of line or after whitespace)
@@ -2273,6 +2277,29 @@ MiniCodeEditor.registerLanguage('stl', {
         // Other
         'NETWORK', 'NOP',
     ],
+})
+
+/* JSON */
+MiniCodeEditor.registerLanguage('json', {
+    definitions: {},
+    rules: [
+        // Property names (string followed by colon) - must come before general strings
+        {
+            regex: /("(?:[^"\\]|\\.)*")(\s*:)/g,
+            replace: (match, key, colon) => `<span class="variable">${key}</span>${colon}`
+        },
+        // String values (double-quoted)
+        {regex: /"(?:[^"\\]|\\.)*"/g, className: 'str'},
+        // Keywords
+        {regex: /\b(true|false|null)\b/g, className: 'kw'},
+        // Numbers
+        {regex: /-?\b\d+\.?\d*(?:[eE][+-]?\d+)?\b/g, className: 'num'},
+        // Braces and brackets
+        {regex: /[\[\]{}]/g, className: 'dot'},
+        // Commas
+        {regex: /,/g, className: 'dot'},
+    ],
+    words: ['true', 'false', 'null'],
 })
 
 export default MiniCodeEditor

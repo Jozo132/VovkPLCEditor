@@ -6,6 +6,7 @@ import { PLC_Ladder, PLC_LadderBlock, PLC_LadderNode, PLC_LadderConnection, toGr
 import { getSymbolValue, setSymbolBit } from "../BlockLogic.js"
 import { ensureOffsets } from "../../utils/offsets.js"
 import { Popup } from "../../editor/UI/Elements/components/popup.js"
+import { MiniCodeEditor } from "../MiniCodeEditor.js"
 
 
 /**
@@ -1885,7 +1886,7 @@ export const ladderRenderer = {
         e.stopImmediatePropagation()
 
         const items = [
-          { label: 'View Logic as Graph', name: 'view_graph', icon: 'json', type: 'item' },
+          { label: 'View Logic as Ladder Graph', name: 'view_graph', icon: 'json', type: 'item' },
           { label: 'View Logic as STL', name: 'view_stl', icon: 'code', type: 'item' },
           { label: 'View Logic as PLCASM', name: 'view_asm', icon: 'server', type: 'item' }
         ]
@@ -1901,7 +1902,7 @@ export const ladderRenderer = {
 
               if (action === 'view_graph') {
                 finalOutput = JSON.stringify(graph, null, 2)
-                titleSuffix = 'Graph'
+                titleSuffix = 'Ladder Graph'
               } else {
                 if (!editor.runtime || !editor.runtime.compileLadder) {
                   throw new Error("Runtime compiler not available")
@@ -1930,20 +1931,30 @@ export const ladderRenderer = {
                 }
               }
 
-              // 4. Show Popup
-              const pre = document.createElement('pre')
-              Object.assign(pre.style, {
-                margin: '0', padding: '10px', background: '#1e1e1e',
-                color: '#d4d4d4', overflow: 'auto', maxHeight: '600px',
-                whiteSpace: 'pre-wrap', fontFamily: 'Consolas, monospace', fontSize: '12px'
+              // 4. Show Popup with MiniCodeEditor for syntax highlighting
+              const container = document.createElement('div')
+              Object.assign(container.style, {
+                width: '100%',
+                height: '500px',
+                position: 'relative'
               })
-              pre.textContent = finalOutput
+
+              // Determine language for syntax highlighting
+              const editorLanguage = action === 'view_graph' ? 'json' : (action === 'view_asm' ? 'asm' : 'stl')
 
               new Popup({
                 title: `Compiled ${titleSuffix} (${block.name})`,
-                width: '600px',
-                content: pre,
+                width: '700px',
+                content: container,
                 buttons: [{ text: 'Close', value: 'close' }]
+              })
+
+              // Create MiniCodeEditor after popup is in DOM
+              new MiniCodeEditor(container, {
+                value: finalOutput,
+                language: editorLanguage,
+                readOnly: true,
+                lintProvider: async () => [] // Disable error checking
               })
 
             } catch (err) {
