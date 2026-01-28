@@ -498,11 +498,11 @@ export default class EditorUI {
             typeLabel.style.color = '#333'
             typeContainer.appendChild(typeLabel)
             
-            // New Button Group (Radio-like behavior)
+            // Button Grid (2 columns, auto-expanding rows)
             const buttonGroup = document.createElement('div')
-            buttonGroup.style.display = 'flex'
+            buttonGroup.style.display = 'grid'
+            buttonGroup.style.gridTemplateColumns = 'repeat(2, 1fr)'
             buttonGroup.style.gap = '10px'
-            buttonGroup.style.justifyContent = 'center'
             
             let selectedType = 'ladder' // Default selection
             const typeButtons = []
@@ -512,17 +512,16 @@ export default class EditorUI {
                     const isSelected = b.dataset.type === selectedType
                     // Reset to base styles
                     b.className = 'plc-btn' 
-                    b.style.flex = '1'
                     b.style.userSelect = 'none' // Disable text select
                     b.style.display = 'flex'
                     b.style.alignItems = 'center'
-                    b.style.justifyContent = 'center'
+                    b.style.justifyContent = 'flex-start'
                     b.style.gap = '8px'
                     
                      // Compensate for border width difference to prevent layout shift
                     // Selected: 2px border + 9px padding = 11px
                     // Unselected: 1px border + 10px padding = 11px
-                    b.style.padding = isSelected ? '9px 19px' : '10px 20px'
+                    b.style.padding = isSelected ? '9px 14px' : '10px 15px'
                     b.style.border = isSelected ? '2px solid #007bff' : '1px solid #ccc' 
                     b.style.backgroundColor = isSelected ? '#e6f0ff' : '#f9f9f9'
                     b.style.color = isSelected ? '#0056b3' : '#333'
@@ -556,15 +555,15 @@ export default class EditorUI {
             }
             
             const btnLadder = createTypeBtn('ladder', 'Ladder Diagram (LAD)')
-            const btnAsm = createTypeBtn('asm', 'Assembly (ASM)')
             const btnStl = createTypeBtn('stl', 'Siemens STL')
+            const btnAsm = createTypeBtn('asm', 'Assembly (ASM)')
             
-            typeButtons.push(btnLadder, btnAsm, btnStl)
+            typeButtons.push(btnLadder, btnStl, btnAsm)
             updateButtonVisuals() // Initial state
             
             buttonGroup.appendChild(btnLadder)
-            buttonGroup.appendChild(btnAsm)
             buttonGroup.appendChild(btnStl)
+            buttonGroup.appendChild(btnAsm)
             typeContainer.appendChild(buttonGroup)
 
             /*

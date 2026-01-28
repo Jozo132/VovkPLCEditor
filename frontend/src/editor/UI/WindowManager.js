@@ -2290,7 +2290,7 @@ export default class WindowManager {
         const deviceInfo = this.#editor.device_manager.deviceInfo
         const projectInfo = this.#editor.project.info
 
-        if (deviceInfo && projectInfo) {
+        if (deviceInfo && typeof deviceInfo === 'object' && projectInfo) {
             const mismatches = []
 
             if (deviceInfo.arch && projectInfo.arch && deviceInfo.arch !== projectInfo.arch) {
