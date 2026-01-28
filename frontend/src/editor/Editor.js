@@ -1594,10 +1594,7 @@ export class VovkPLCEditor {
         } catch (e) {
             console.warn('Failed to build project text for linting:', e)
             this._lint_state = {assembly: '', projectText: '', diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0}
-            this._applyLintDiagnostics(
-                blocks.map(b => ({...b, code: '', codeStart: 0, codeEnd: 0})),
-                emptyByBlock,
-            )
+            this._applyLintDiagnostics(blocks, emptyByBlock)
             if (this.window_manager?.setConsoleProblems) {
                 this.window_manager.setConsoleProblems([])
             }
@@ -1606,10 +1603,7 @@ export class VovkPLCEditor {
 
         if (!projectText.trim()) {
             this._lint_state = {assembly: '', projectText: '', diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0}
-            this._applyLintDiagnostics(
-                blocks.map(b => ({...b, code: '', codeStart: 0, codeEnd: 0})),
-                emptyByBlock,
-            )
+            this._applyLintDiagnostics(blocks, emptyByBlock)
             if (this.window_manager?.setConsoleProblems) {
                 this.window_manager.setConsoleProblems([])
             }
@@ -1618,10 +1612,7 @@ export class VovkPLCEditor {
 
         // Check if we already have results for this project text
         if (this._lint_state.projectText === projectText && this._lint_state.diagnosticsByBlock) {
-            this._applyLintDiagnostics(
-                blocks.map(b => ({...b, code: '', codeStart: 0, codeEnd: 0})),
-                this._lint_state.diagnosticsByBlock,
-            )
+            this._applyLintDiagnostics(blocks, this._lint_state.diagnosticsByBlock)
             return this._lint_state
         }
 
@@ -1751,10 +1742,7 @@ export class VovkPLCEditor {
             if (this._lint_state.runId !== runId) return this._lint_state
 
             this._lint_state = {assembly: '', projectText, diagnosticsByBlock, inFlight: null, runId}
-            this._applyLintDiagnostics(
-                blocks.map(b => ({...b, code: '', codeStart: 0, codeEnd: 0})),
-                diagnosticsByBlock,
-            )
+            this._applyLintDiagnostics(blocks, diagnosticsByBlock)
             if (this.window_manager?.setConsoleProblems) {
                 this.window_manager.setConsoleProblems(problemsList)
             }

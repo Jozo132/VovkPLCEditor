@@ -70,6 +70,9 @@ export const ladderRenderer = {
 
     render(editor, block, ctx) {
         if (block.type !== 'asm') return
+        
+        // Ensure props exists
+        if (!block.props) block.props = {}
         const {div, id, type, name, props} = block
 
         if (!div) throw new Error('Block div not found')

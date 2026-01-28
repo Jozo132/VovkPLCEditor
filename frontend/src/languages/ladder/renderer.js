@@ -1954,7 +1954,7 @@ export const ladderRenderer = {
                 value: finalOutput,
                 language: editorLanguage,
                 readOnly: true,
-                lintProvider: async () => [] // Disable error checking
+                preview: true // Disable squiggly lines and diagnostic tooltips
               })
 
             } catch (err) {

@@ -293,18 +293,12 @@ export default class ProjectManager {
     // Build the VOVKPLCPROJECT text format
     const projectText = this.buildProjectText()
 
-    // Set up console output callbacks
-    const cleanup = async () => {
-        await runtime.setSilent(true)
-    }
-    await runtime.setSilent(false)
-    await runtime.onStdout((msg) => this.#editor.window_manager.logToConsole(msg, 'info'))
-    await runtime.onStderr((msg) => this.#editor.window_manager.logToConsole(msg, 'error'))
+    // Keep silent during compilation to avoid console spam
+    await runtime.setSilent(true)
 
     try {
         // Use the new compileProject API
         const result = await runtime.compileProject(projectText)
-        cleanup()
 
         if (result.problem) {
             // Return error in a compatible format
@@ -482,10 +476,10 @@ export default class ProjectManager {
                 content = codeBlock.code || ''
             }
             
-            // Indent content
+            // Output content lines without indentation
             const contentLines = content.split('\n')
             for (const line of contentLines) {
-                lines.push(`        ${line}`)
+                lines.push(line)
             }
             
             lines.push(`    END_BLOCK`)

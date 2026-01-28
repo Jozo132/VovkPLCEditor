@@ -20,7 +20,8 @@ export class MiniCodeEditor {
      *          onPreviewClick?:(entry:any, event:MouseEvent)=>void,
      *          onPreviewAction?:(entry:any, action:'set'|'reset'|'toggle'|'edit')=>void,
      *          onScroll?:(pos:{top:number,left:number})=>void,
-     *          onChange?:(value:string)=>void}} options
+     *          onChange?:(value:string)=>void,
+     *          preview?:boolean}} options
      */
     constructor(mountElement, options = {}) {
         if (!(mountElement instanceof Element)) throw Error('mountElement')
@@ -67,9 +68,9 @@ export class MiniCodeEditor {
 .type-keyword{color:#569cd6}.variable{color:#9cdcfe}.function{color:#dcdcaa}.dt{color:#4ec9b0}.addr{color:#d7ba7d}
 .dot{color:#fff}
 .mce>div.overlay{position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;pointer-events:none;z-index:4}
-.mce-marker { position: absolute; pointer-events: none; z-index: 5; color: transparent !important; }
-.mce-marker.err { text-decoration: underline wavy #f48771; }
-.mce-marker.warn { text-decoration: underline wavy #cca700; }
+.mce-marker { position: absolute; pointer-events: none; z-index: 5; }
+.mce-marker.err { background: linear-gradient(135deg, transparent 40%, #f48771 40%, #f48771 60%, transparent 60%) 0 100% / 4px 3px repeat-x; }
+.mce-marker.warn { background: linear-gradient(135deg, transparent 40%, #cca700 40%, #cca700 60%, transparent 60%) 0 100% / 4px 3px repeat-x; }
 .mce-hover-highlight { position: absolute; pointer-events: none; z-index: 4; background: rgba(216, 90, 112, 0.3); border-radius: 2px; }
 .mce-link-highlight { position: absolute; pointer-events: none; z-index: 4; height: 2px; background: #4daafc; border-radius: 1px; opacity: 0.9; }
 .mce-selection-highlight { position: absolute; pointer-events: none; z-index: 3; background: rgba(76, 141, 255, 0.28); border-radius: 2px; }
@@ -1217,6 +1218,8 @@ export class MiniCodeEditor {
             lintDiagnostics = Array.isArray(diagnostics) ? diagnostics : []
             lintHoverActive = false
 
+            // Skip rendering markers in preview mode
+            if (o.preview) return
             if (!ta.value.length) return
     
             lintDiagnostics.forEach((d, idx) => {
@@ -1246,7 +1249,6 @@ export class MiniCodeEditor {
                 } else {
                      m.style.width = '100px'
                 }
-                m.textContent = ta.value.slice(start, end)
 
                 m.addEventListener('mouseenter', () => {
                     lintHoverActive = true
@@ -1826,6 +1828,7 @@ export class MiniCodeEditor {
 
         /* Public API */
         this.setDiagnostics = (diagnostics = []) => {
+            if (o.preview) return // Skip diagnostics in preview mode
             renderMarkers(diagnostics)
             if (o.onDiagnosticsChange) o.onDiagnosticsChange(diagnostics)
         }
