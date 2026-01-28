@@ -16,6 +16,7 @@ export let RendererModule
  *    evaluate(editor: PLCEditor, block: PLC_ProgramBlock): void;
  *    compile(block: PLC_ProgramBlock): string;
  *    toString(block: PLC_ProgramBlock): string;
+ *    toGraph?(block: PLC_ProgramBlock): any;
  * }} LanguageModule
  * @type { LanguageModule }
 **/

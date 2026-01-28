@@ -71,7 +71,13 @@ export let PLC_LadderConnection
  *      div?: Element, 
  *      ctx?: CanvasRenderingContext2D, 
  *      mode?: PLC_ContextState,
- *      program_id?: string
+ *      program_id?: string,
+ *      cached_asm?: string,
+ *      cached_checksum?: string,
+ *      cached_symbols_checksum?: string,
+ *      cached_asm_map?: any,
+ *      cached_symbol_refs?: any,
+ *      programId?: string
  * }} PLC_Ladder * @type { PLC_Ladder }
 **/
 export let PLC_Ladder

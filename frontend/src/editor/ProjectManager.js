@@ -1,7 +1,11 @@
 import { ensureOffsets } from '../utils/offsets.js'
-import { PLC_Program, PLC_Project, PLCEditor } from '../utils/types.js'
+import { PLC_Program, PLC_Project, PLC_Symbol, PLCEditor } from '../utils/types.js'
+import { PLC_Ladder, toGraph as ladderToGraph } from '../languages/ladder/language.js'
+import { PLC_STL } from '../languages/stl/language.js'
+import { PLC_Assembly } from '../languages/asm/language.js'
 
-const SYSTEM_SYMBOLS = [
+/** @type {PLC_Symbol[]} */
+const SYSTEM_SYMBOLS = /** @type {PLC_Symbol[]} */ ([
     { name: 'P_100ms', location: 'control', type: 'bit', address: 2.0, initial_value: 0, comment: '100ms pulse' },
     { name: 'P_200ms', location: 'control', type: 'bit', address: 2.1, initial_value: 0, comment: '200ms pulse' },
     { name: 'P_300ms', location: 'control', type: 'bit', address: 2.2, initial_value: 0, comment: '300ms pulse' },
@@ -49,7 +53,7 @@ const SYSTEM_SYMBOLS = [
     { name: 'elapsed_days', location: 'control', type: 'byte', address: 11.0, initial_value: 0, comment: 'Elapsed days' },
 
     { name: 'system_uptime', location: 'control', type: 'dint', address: 12.0, initial_value: 0, comment: 'System uptime in seconds' },
-].map(s => ({ ...s, readonly: true }))
+].map(s => ({ ...s, readonly: true })))
 
 const LOCAL_STORAGE_KEY = 'vovk_plc_project_autosave'
 
@@ -276,122 +280,51 @@ export default class ProjectManager {
   }
 
   /**
-   * Compiles the current project
-   * @returns {Promise<{size: number, output: string}>}
+   * Compiles the current project using the VOVKPLCPROJECT format
+   * @returns {Promise<{size: number, output: string, bytecode?: string, problem?: any, compileTime?: number, memory?: any, flash?: any, execution?: any}>}
    */
   async compile() {
     // Ensure project state is up to date before compiling
     this.checkAndSave()
 
-    // Build symbol definitions from symbol table
-    // Format: $$ name | type | address
-    let symbolDefs = ''
-    const symbols = this.#editor.project?.symbols || []
-    
-    // Map PLC symbol types to PLCASM compiler types
-    // Valid PLCASM types: i8, i16, i32, i64, u8, u16, u32, u64, f32, f64, bool, string, bit, byte, ptr, pointer, *
-    const typeMap = {
-        'bit': 'bit',
-        'bool': 'bool',
-        'byte': 'byte',
-        'int': 'i16',      // 16-bit signed integer
-        'dint': 'i32',     // 32-bit signed integer (double int)
-        'real': 'f32',     // 32-bit float
-        'word': 'u16',     // 16-bit unsigned
-        'dword': 'u32',    // 32-bit unsigned
-    }
-    
-    for (const sym of symbols) {
-        if (sym.name && sym.type && sym.address !== undefined) {
-            // Map location to prefix: control=C, input=X, output=Y, system=S, marker=M
-            const locationPrefix = {
-                'control': 'C',
-                'input': 'X',
-                'output': 'Y',
-                'system': 'S',
-                'marker': 'M'
-            }[sym.location] || 'M'
-            // Ensure bit addresses always have the .bit portion (2.0 not just 2)
-            let addrStr = String(sym.address)
-            const mappedType = typeMap[sym.type] || sym.type
-            if ((mappedType === 'bit' || mappedType === 'bool') && !addrStr.includes('.')) {
-                addrStr += '.0'
-            }
-            const fullAddress = `${locationPrefix}${addrStr}`
-            symbolDefs += `$$ ${sym.name} | ${mappedType} | ${fullAddress}\n`
-        }
-    }
-
-    let asm = ''
-    try {
-        const { assembly } = this.#editor._buildAsmAssembly({
-            includeHeaders: false,
-            onUnsupported: (file, block) => {
-                const msg = `${file.full_path} -> ${block.name || '?'}: Block type '${block.type}' not yet supported for compilation`
-                console.log(msg)
-                this.#editor.window_manager.logToConsole(msg, 'warning')
-            }
-        })
-        asm = assembly
-    } catch(e) { console.warn('Could not extract ASM from project', e) }
-
-    if (!asm) {
-        // Fallback or empty?
-        // Reuse the fallback logic if desired, or throw error
-         asm = `
-    u8.readBit     2.4    // Read bit 2.4 which is 1s pulse
-    jump_if_not    end    // Jump to the label 'end' if the bit is OFF
-    u8.writeBitInv 32.0   // Invert bit 32.0
-end:                      // Label to jump to
-`
-    }
-    
-    // Hook up console locally to capture WASM output
     const runtime = this.#editor.runtime
     if (!runtime) throw new Error('Runtime not initialized')
-    
-    // Transpile any Ladder blocks to PLCASM first (Ladder -> STL -> PLCASM)
-    asm = await this.transpileLadderBlocks(asm, runtime)
-    
-    // Transpile any STL blocks to PLCASM before compilation
-    asm = await this.transpileSTLBlocks(asm, runtime)
-    
-    const offsets = this.#editor.project?.offsets
-    if (offsets && typeof runtime.setRuntimeOffsets === 'function') {        
-        /*
-            // Updated Layout based on new default sizes in plcasm-compiler.h
-            // C: 0 (Size 64)
-            // X: 64 (Size 64)
-            // Y: 128 (Size 64)
-            // S: 192 (Size 256)
-            // M: 448 (Size 256)
-            await runtime.callExport('setRuntimeOffsets', 0, 64, 128, 192, 448)
-        */
-        const C = offsets?.control?.offset || 0
-        const X = offsets?.input?.offset || 0
-        const Y = offsets?.output?.offset || 0
-        const S = offsets?.system?.offset || 0
-        const M = offsets?.marker?.offset || 0
-        await this.#editor.runtime.setRuntimeOffsets(C, X, Y, S, M)
-    }
-    const cleanup = async() => {
+
+    // Build the VOVKPLCPROJECT text format
+    const projectText = this.buildProjectText()
+
+    // Set up console output callbacks
+    const cleanup = async () => {
         await runtime.setSilent(true)
     }
     await runtime.setSilent(false)
     await runtime.onStdout((msg) => this.#editor.window_manager.logToConsole(msg, 'info'))
     await runtime.onStderr((msg) => this.#editor.window_manager.logToConsole(msg, 'error'))
 
-    // Prepend symbol definitions to the assembly
-    const finalAsm = symbolDefs + asm
-
     try {
-        // console.log('=== Final PLCASM before compilation ===')
-        // console.log(finalAsm)
-        // console.log('=== End PLCASM ===')
-        const result = await runtime.compile(finalAsm)
-        // console.log('Compilation result:', result)
+        // Use the new compileProject API
+        const result = await runtime.compileProject(projectText)
         cleanup()
-        return result
+
+        if (result.problem) {
+            // Return error in a compatible format
+            return {
+                size: 0,
+                output: '',
+                bytecode: null,
+                problem: result.problem
+            }
+        }
+
+        return {
+            size: result.output?.flash?.used || 0,
+            output: result.bytecode || '',
+            bytecode: result.bytecode,
+            compileTime: result.compileTime,
+            memory: result.output?.memory,
+            flash: result.output?.flash,
+            execution: result.output?.execution
+        }
     } catch (e) {
         cleanup()
         throw e
@@ -399,241 +332,170 @@ end:                      // Label to jump to
   }
 
   /**
-   * Transpiles Ladder Graph blocks to PLCASM assembly.
-   * Looks for markers: // ladder_graph_start ... // ladder_graph_end
-   * The transpilation chain: LADDER GRAPH JSON -> STL -> PLCASM
-   * @param {string} asm - Assembly code with potential Ladder blocks
-   * @param {object} runtime - VovkPLC runtime instance
-   * @returns {Promise<string>} - Assembly code with Ladder transpiled to PLCASM
+   * Builds a VOVKPLCPROJECT format string from the current project
+   * @returns {string}
    */
-  async transpileLadderBlocks(asm, runtime) {
-    // Check if runtime has compileLadder method
-    const hasLadderCompiler = runtime && typeof runtime.compileLadder === 'function'
-    
-    // Find all Ladder Graph blocks (new format with nodes/connections)
-    const ladderGraphRegex = /\/\/ ladder_graph_start\n([\s\S]*?)\/\/ ladder_graph_end\n/g
-    let match
-    const replacements = []
-    /** @type {Array<{type: string, message: string, blockName?: string, programName?: string, programPath?: string}>} */
-    const allErrors = []
-    
-    while ((match = ladderGraphRegex.exec(asm)) !== null) {
-        const graphJson = match[1].trim()
-        const fullMatch = match[0]
-        const startIndex = match.index
-        
-        // Try to extract block info from preceding comment (// block:xxx)
-        const beforeMatch = asm.substring(0, startIndex)
-        const blockIdMatch = beforeMatch.match(/\/\/ block:([^\n]+)\n[^\n]*$/)
-        let blockId = blockIdMatch ? blockIdMatch[1].trim() : null
-        
-        // Find the block and program for this ladder
-        let blockInfo = null
-        let programInfo = null
-        if (blockId) {
-            const programs = this.#editor._getLintPrograms?.() || []
-            for (const prog of programs) {
-                const foundBlock = prog.blocks?.find(b => b.id === blockId)
-                if (foundBlock) {
-                    blockInfo = foundBlock
-                    programInfo = prog
-                    break
-                }
-            }
-        }
-        
-        // Parse the graph JSON
-        let parsedGraph = null
-        try {
-            parsedGraph = JSON.parse(graphJson)
-        } catch (parseErr) {
-            // JSON parse error
-            allErrors.push({
-                type: 'error',
-                message: `Invalid ladder graph JSON: ${parseErr.message}`,
-                blockName: blockInfo?.name || 'Unknown',
-                programName: programInfo?.name || '',
-                programPath: programInfo?.full_path || programInfo?.path || ''
-            })
-            replacements.push({
-                start: startIndex,
-                end: startIndex + fullMatch.length,
-                replacement: `// Ladder graph error: Invalid JSON\n`
-            })
-            continue
-        }
-        
-        // Check if there are any nodes to compile
-        if (!parsedGraph.nodes || parsedGraph.nodes.length === 0) {
-            replacements.push({
-                start: startIndex,
-                end: startIndex + fullMatch.length,
-                replacement: `// Ladder graph is empty (no nodes)\n`
-            })
-            continue
-        }
-        
-        if (!hasLadderCompiler) {
-            // No Ladder compiler - emit warning comment
-            this.#editor.window_manager.logToConsole('Ladder Graph compiler not available in runtime. Ladder blocks will be skipped.', 'warning')
-            replacements.push({
-                start: startIndex,
-                end: startIndex + fullMatch.length,
-                replacement: `// Ladder graph skipped - compiler not available\n`
-            })
-            continue
-        }
-        
-        try {
-            // Step 1: Transpile Ladder Graph JSON to STL using runtime's compileLadder
-            // The runtime expects the graph format: { nodes: [...], connections: [...], comment?: string }
-            const ladderResult = await runtime.compileLadder(graphJson)
-            
-            if (!ladderResult || !ladderResult.output) {
-                throw new Error('Ladder Graph compilation returned no output')
-            }
-            
-            const stlCode = ladderResult.output
-            
-            // Step 2: Transpile STL to PLCASM using runtime's compile with language: 'stl'
-            // This returns { type: 'plcasm', size: number, output: string }
-            const stlResult = await runtime.compile(stlCode, { language: 'stl' })
-            
-            if (!stlResult || !stlResult.output) {
-                throw new Error('STL compilation returned no output')
-            }
-            
-            const plcasm = stlResult.output
-            
-            // Successfully transpiled
-            replacements.push({
-                start: startIndex,
-                end: startIndex + fullMatch.length,
-                replacement: `// Ladder Graph -> STL -> PLCASM transpiled\n${plcasm}\n`
-            })
-        } catch (e) {
-            // Transpilation failed - emit error
-            const errorMsg = e.message || 'Unknown error'
-            allErrors.push({
-                type: 'error',
-                message: `Ladder Graph transpilation failed: ${errorMsg}`,
-                blockName: blockInfo?.name || 'Unknown',
-                programName: programInfo?.name || '',
-                programPath: programInfo?.full_path || programInfo?.path || ''
-            })
-            replacements.push({
-                start: startIndex,
-                end: startIndex + fullMatch.length,
-                replacement: `// Ladder Graph transpilation error: ${errorMsg}\n`
-            })
-        }
-    }
-    
-    // Report all errors to the problems panel
-    if (allErrors.length > 0) {
-        const problemsList = allErrors.map(err => ({
-            type: err.type,
-            message: err.message,
-            line: 1,
-            column: 1,
-            blockName: err.blockName,
-            blockType: 'ladder',
-            language: 'ladder',
-            languageStack: ['ladder'],
-            programName: err.programName,
-            programPath: err.programPath,
-        }))
-        
-        // Get existing problems and add ladder problems
-        if (this.#editor.window_manager?.setConsoleProblems) {
-            // We'll log to console for now - the lint system will pick these up too
-            for (const err of allErrors) {
-                const location = err.programName ? `${err.programName} -> ${err.blockName}` : err.blockName
-                this.#editor.window_manager.logToConsole(`[Ladder] ${location}: ${err.message}`, err.type)
-            }
-        }
-    }
-    
-    // Apply replacements in reverse order to maintain indices
-    if (replacements.length > 0) {
-        replacements.sort((a, b) => b.start - a.start)
-        for (const r of replacements) {
-            asm = asm.substring(0, r.start) + r.replacement + asm.substring(r.end)
-        }
-    }
-    
-    return asm
-  }
+  buildProjectText() {
+    const project = this.#editor.project
+    if (!project) throw new Error('No project loaded')
 
-  /**
-   * Transpiles STL code blocks to PLCASM assembly.
-   * Looks for markers: // stl_block_start ... // stl_block_end
-   * @param {string} asm - Assembly code with potential STL blocks
-   * @param {object} runtime - VovkPLC runtime instance
-   * @returns {Promise<string>} - Assembly code with STL transpiled to PLCASM
-   */
-  async transpileSTLBlocks(asm, runtime) {
-    // Check if runtime has compile method (which supports STL via language option)
-    const hasSTLCompiler = runtime && typeof runtime.compile === 'function'
+    const lines = []
     
-    // Find all STL blocks
-    const stlBlockRegex = /\/\/ stl_block_start\n([\s\S]*?)\/\/ stl_block_end\n/g
-    let match
-    const replacements = []
+    // Project header
+    const projectName = project.info?.name || 'PLCProject'
+    const projectVersion = project.info?.version || '1.0'
+    lines.push(`VOVKPLCPROJECT ${projectName}`)
+    lines.push(`VERSION ${projectVersion}`)
+    lines.push('')
+
+    // Memory configuration
+    const offsets = ensureOffsets(project.offsets)
     
-    while ((match = stlBlockRegex.exec(asm)) !== null) {
-        const stlCode = match[1]
-        const fullMatch = match[0]
-        const startIndex = match.index
+    // Calculate sizes for each area
+    const kSize = offsets.control?.size || 64
+    const xSize = offsets.input?.size || 64
+    const ySize = offsets.output?.size || 64
+    const sSize = offsets.system?.size || 256
+    const mSize = offsets.marker?.size || 256
+    const tSize = offsets.timer?.size || 16
+    const cSize = offsets.counter?.size || 16
+    
+    // Total memory is sum of all areas
+    const totalMemory = kSize + xSize + ySize + sSize + mSize + tSize + cSize
+    
+    lines.push('MEMORY')
+    lines.push(`    OFFSET 0`)
+    lines.push(`    AVAILABLE ${totalMemory}`)
+    lines.push(`    K ${kSize}`)
+    lines.push(`    X ${xSize}`)
+    lines.push(`    Y ${ySize}`)
+    lines.push(`    S ${sSize}`)
+    lines.push(`    M ${mSize}`)
+    lines.push(`    T ${tSize}`)
+    lines.push(`    C ${cSize}`)
+    lines.push('END_MEMORY')
+    lines.push('')
+
+    // Symbols section
+    const symbols = project.symbols || []
+    const userSymbols = symbols.filter(s => !s.readonly)
+    if (userSymbols.length > 0) {
+        lines.push('SYMBOLS')
         
-        if (!hasSTLCompiler) {
-            // No STL compiler - emit warning comment
-            this.#editor.window_manager.logToConsole('STL compiler not available in runtime. STL blocks will be skipped.', 'warning')
-            replacements.push({
-                start: startIndex,
-                end: startIndex + fullMatch.length,
-                replacement: `// STL block skipped - compiler not available\n// Original STL code:\n${stlCode.split('\n').map(l => '// ' + l).join('\n')}\n`
-            })
-            continue
+        // Map PLC symbol types to project compiler types
+        const typeMap = {
+            'bit': 'BOOL',
+            'bool': 'BOOL',
+            'byte': 'BYTE',
+            'int': 'INT',
+            'dint': 'DINT',
+            'real': 'REAL',
+            'word': 'WORD',
+            'dword': 'DWORD',
         }
         
-        try {
-            // Transpile STL to PLCASM using runtime's compile method with language: 'stl'
-            // This returns { type: 'plcasm', size: number, output: string }
-            const result = await runtime.compile(stlCode, { language: 'stl' })
-            
-            if (result && result.output) {
-                // Successfully transpiled
-                const plcasm = result.output
-                replacements.push({
-                    start: startIndex,
-                    end: startIndex + fullMatch.length,
-                    replacement: `// STL transpiled to PLCASM\n${plcasm}\n`
-                })
-            } else {
-                throw new Error('STL compilation returned no output')
+        // Map location to prefix
+        const locationPrefix = {
+            'control': 'K',
+            'input': 'X',
+            'output': 'Y',
+            'system': 'S',
+            'marker': 'M'
+        }
+        
+        for (const sym of userSymbols) {
+            if (sym.name && sym.type && sym.address !== undefined) {
+                const prefix = locationPrefix[sym.location] || 'M'
+                const mappedType = typeMap[sym.type] || sym.type.toUpperCase()
+                let addrStr = String(sym.address)
+                // Ensure bit addresses have the .bit portion
+                if ((mappedType === 'BOOL' || sym.type === 'bit') && !addrStr.includes('.')) {
+                    addrStr += '.0'
+                }
+                const fullAddress = `${prefix}${addrStr}`
+                const comment = sym.comment ? ` : ${sym.comment}` : ''
+                lines.push(`    ${sym.name} : ${mappedType} : ${fullAddress}${comment}`)
             }
-        } catch (e) {
-            // Transpilation failed - emit error
-            const errorMsg = e.message || 'Unknown error'
-            this.#editor.window_manager.logToConsole(`STL transpilation failed: ${errorMsg}`, 'error')
-            replacements.push({
-                start: startIndex,
-                end: startIndex + fullMatch.length,
-                replacement: `// STL transpilation error: ${errorMsg}\n// Original STL code:\n${stlCode.split('\n').map(l => '// ' + l).join('\n')}\n`
-            })
         }
+        lines.push('END_SYMBOLS')
+        lines.push('')
     }
-    
-    // Apply replacements in reverse order to maintain indices
-    if (replacements.length > 0) {
-        replacements.sort((a, b) => b.start - a.start)
-        for (const r of replacements) {
-            asm = asm.substring(0, r.start) + r.replacement + asm.substring(r.end)
+
+    // Program files - get from tree manager for up-to-date block references
+    const treeRoot = this.#editor.window_manager?.tree_manager?.root
+    let files = []
+    if (Array.isArray(treeRoot) && treeRoot.length) {
+        files = treeRoot.filter(node => node.type === 'file' && node.item?.item?.type === 'program').map(node => node.item.item)
+    }
+    if (!files.length) {
+        files = (project.files || []).filter(file => file.type === 'program')
+    }
+    for (const file of files) {
+        
+        let filePath = file.full_path || file.path || file.name || 'main'
+        // Remove leading slash if present (FILE paths should not start with /)
+        if (filePath.startsWith('/')) filePath = filePath.substring(1)
+        lines.push(`FILE ${filePath}`)
+        
+        const blocks = file.blocks || []
+        for (const block of blocks) {
+            const blockName = block.name || 'Code'
+            const blockType = block.type || 'asm'
+            
+            // Map block type to language
+            const langMap = {
+                'asm': 'PLCASM',
+                'plcasm': 'PLCASM',
+                'stl': 'STL',
+                'ladder': 'LADDER'
+            }
+            const lang = langMap[blockType.toLowerCase()] || 'PLCASM'
+            
+            lines.push(`    BLOCK LANG=${lang} ${blockName}`)
+            
+            // Get block content
+            let content = ''
+            if (blockType === 'ladder') {
+                // For ladder blocks, export the graph as JSON using the imported function
+                /** @type {PLC_Ladder} */
+                const ladderBlock = /** @type {any} */ (block)
+                try {
+                    const graph = ladderToGraph(ladderBlock)
+                    content = JSON.stringify(graph)
+                } catch (e) {
+                    // Fallback: block itself might have the graph structure
+                    if (ladderBlock.nodes || ladderBlock.blocks) {
+                        const graph = {
+                            comment: ladderBlock.comment || ladderBlock.name || '',
+                            nodes: ladderBlock.nodes || ladderBlock.blocks || [],
+                            connections: ladderBlock.connections || []
+                        }
+                        content = JSON.stringify(graph)
+                    } else {
+                        console.warn('[ProjectManager] Could not serialize ladder block:', e)
+                    }
+                }
+            } else {
+                // For STL and PLCASM, use the code directly
+                /** @type {PLC_STL | PLC_Assembly} */
+                const codeBlock = /** @type {any} */ (block)
+                content = codeBlock.code || ''
+            }
+            
+            // Indent content
+            const contentLines = content.split('\n')
+            for (const line of contentLines) {
+                lines.push(`        ${line}`)
+            }
+            
+            lines.push(`    END_BLOCK`)
         }
+        
+        lines.push(`END_FILE`)
+        lines.push('')
     }
-    
-    return asm
+
+    return lines.join('\n')
   }
 
   /** Create a new empty project structure */
@@ -642,10 +504,12 @@ end:                      // Label to jump to
     return {
       offsets: {
         control: { offset: 0, size: 16 },
-        input: { offset: 16, size: 16 },
-        output: { offset: 32, size: 16 },
-        system: { offset: 48, size: 16 },
-        marker: { offset: 64, size: 16 }
+        counter: { offset: 16, size: 64 },
+        timer: { offset: 80, size: 64 },
+        input: { offset: 144, size: 16 },
+        output: { offset: 160, size: 16 },
+        system: { offset: 176, size: 16 },
+        marker: { offset: 192, size: 64 }
       },
       symbols: [...SYSTEM_SYMBOLS],
       info: {

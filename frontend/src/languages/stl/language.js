@@ -9,7 +9,13 @@ import { LanguageModule } from "../types.js"
  *      comment: string, 
  *      code: string, 
  *      div?: Element, 
- *      mode?: PLC_ContextState
+ *      mode?: PLC_ContextState,
+ *      cached_asm?: string,
+ *      cached_checksum?: string,
+ *      cached_symbols_checksum?: string,
+ *      cached_asm_map?: any,
+ *      cached_symbol_refs?: any,
+ *      programId?: string
  * }} PLC_STL
  * @type { PLC_STL }
 **/

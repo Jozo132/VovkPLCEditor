@@ -26,7 +26,8 @@ export let PLC_Symbol_Type
  *     type: PLC_Symbol_Type,
  *     address: number,
  *     initial_value: number,
- *     comment: string
+ *     comment: string,
+ *     readonly?: boolean
  * }} PLC_Symbol * @type { PLC_Symbol } 
 **/
 export let PLC_Symbol
@@ -35,7 +36,7 @@ export let PLC_Symbol
 /** @typedef { import('../languages/index.js').PLC_ProgramBlock } PLC_ProgramBlock * @type { PLC_ProgramBlock } */
 export let PLC_ProgramBlock
 
-/** @typedef {{ id?: string, path: string, full_path: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], host?: EditorUI, tab?: Element }} PLC_Program * @type { PLC_Program } */
+/** @typedef {{ id?: string, path: string, full_path: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], host?: EditorUI, tab?: Element, scrollTop?: number }} PLC_Program * @type { PLC_Program } */
 export let PLC_Program
 
 /** @typedef { PLC_Program } PLC_ProjectItem * @type { PLC_ProjectItem } */
@@ -44,6 +45,8 @@ export let PLC_ProjectItem
 
 /**
  * @typedef {{ 
+*     info?: { name?: string, version?: string, type?: string, arch?: string, capacity?: number }
+*     _ui_state?: any
 *     offsets: {
 *         control: { offset: number, size: number }
 *         counter: { offset: number, size: number }

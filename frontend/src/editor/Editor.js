@@ -316,6 +316,7 @@ export class VovkPLCEditor {
     runtime_ready = false
     _lint_state = {
         assembly: '',
+        projectText: '',
         diagnosticsByBlock: new Map(),
         inFlight: null,
         runId: 0,
@@ -356,8 +357,8 @@ export class VovkPLCEditor {
     ladder_selection = {
         ladder_id: null,
         program_id: null,
-        origin: { x: 0, y: 0 },
-        selection: []
+        origin: {x: 0, y: 0},
+        selection: [],
     }
 
     /** @type {{ blocks: any[], connections: any[], ladder_id: string | null } | null} */
@@ -661,7 +662,8 @@ export class VovkPLCEditor {
             if (this.project.files) {
                 this.project.files.forEach(file => {
                     if (file.type === 'program' && Array.isArray(file.blocks)) {
-                        file.blocks.forEach(block => { // @ts-ignore
+                        file.blocks.forEach(block => {
+                            // @ts-ignore
                             delete block.cached_asm // @ts-ignore
                             delete block.cached_checksum // @ts-ignore
                             delete block.cached_symbols_checksum // @ts-ignore
@@ -753,32 +755,32 @@ export class VovkPLCEditor {
                 baseOffset = offsets[symbol.location].offset || 0
             }
             // Timer uses 9 bytes per unit, Counter uses 5 bytes per unit
-            const structSize = (symbol.location === 'timer') ? 9 : (symbol.location === 'counter') ? 5 : 1
+            const structSize = symbol.location === 'timer' ? 9 : symbol.location === 'counter' ? 5 : 1
 
             let addressStr = ''
             const rawVal = parseFloat(symbol.address) || 0
             if (symbol.type === 'bit') {
                 const byte = Math.floor(rawVal)
                 const bit = Math.round((rawVal - byte) * 10)
-                addressStr = `${baseOffset + (byte * structSize)}.${bit}`
+                addressStr = `${baseOffset + byte * structSize}.${bit}`
                 details.set(name, {
                     name,
                     type: symbol.type || 'bit',
                     location: symbol.location || '',
                     address: symbol.address,
                     addressLabel: addressStr,
-                    absoluteAddress: baseOffset + (byte * structSize),
+                    absoluteAddress: baseOffset + byte * structSize,
                     bit,
                 })
             } else {
-                addressStr = (baseOffset + (Math.floor(rawVal) * structSize)).toString()
+                addressStr = (baseOffset + Math.floor(rawVal) * structSize).toString()
                 details.set(name, {
                     name,
                     type: symbol.type || 'byte',
                     location: symbol.location || '',
                     address: symbol.address,
                     addressLabel: addressStr,
-                    absoluteAddress: baseOffset + (Math.floor(rawVal) * structSize),
+                    absoluteAddress: baseOffset + Math.floor(rawVal) * structSize,
                     bit: null,
                 })
             }
@@ -892,7 +894,7 @@ export class VovkPLCEditor {
 
             const addressLabel = bit !== null ? `${byte}.${bit}` : `${byte}`
             const canonicalName = `${prefix}${byte}${bit !== null ? '.' + bit : ''}`
-            const absoluteAddress = baseOffset + (byte * structSize)
+            const absoluteAddress = baseOffset + byte * structSize
 
             refs.push({
                 name: canonicalName,
@@ -961,34 +963,34 @@ export class VovkPLCEditor {
         // Preset can be #123 (raw ms) or T#... (IEC style, e.g. T#5s, T#1h30m)
         // Supports both ASM space separation (TON T0 T#5s) and STL comma separation (TON T0, T#5s)
         const timerRegex = /\b(?:u8\.)?(ton|tof|tp)\b\s+([A-Za-z_]\w*(?:\.\d+)?|[KCTXYMS]\d+(?:\.\d+)?)\s*(?:,|\s)\s*((?:T#[A-Za-z0-9_]+|#\d+)|[A-Za-z_]\w*(?:\.\d+)?|[KCTXYMS]\d+(?:\.\d+)?)\b/gi
-        
+
         let match = null
         while ((match = timerRegex.exec(masked))) {
             const instr = match[1].toLowerCase()
             const storageToken = match[2]
             const presetToken = match[3]
-            
+
             const storageStart = match.index + match[0].indexOf(storageToken)
             const presetStart = match.index + match[0].lastIndexOf(presetToken)
-            
+
             let storageAddr = -1
-            
+
             const addrMatch = /^(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(storageToken)
             if (addrMatch) {
                 let prefix = addrMatch[1] ? addrMatch[1].toUpperCase() : ''
                 let byte = parseInt(addrMatch[2] || addrMatch[4], 10)
-                let loc = prefix ? ({K:'control', C:'counter', T:'timer', X:'input', Y:'output', M:'marker', S:'system'}[prefix] || 'marker') : 'memory'
-                let base = loc === 'memory' ? 0 : (normalizedOffsets[loc]?.offset || 0)
+                let loc = prefix ? {K: 'control', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}[prefix] || 'marker' : 'memory'
+                let base = loc === 'memory' ? 0 : normalizedOffsets[loc]?.offset || 0
                 // Timer (T) uses 9 bytes per unit, Counter (C) uses 5 bytes per unit
-                let structSize = (prefix === 'T') ? 9 : (prefix === 'C') ? 5 : 1
-                storageAddr = base + (byte * structSize)
+                let structSize = prefix === 'T' ? 9 : prefix === 'C' ? 5 : 1
+                storageAddr = base + byte * structSize
             } else if (symbolDetails && symbolDetails.has(storageToken)) {
                 const sym = symbolDetails.get(storageToken)
                 storageAddr = sym.absoluteAddress
             }
-            
+
             // Helper to parse preset value
-            const parsePreset = (token) => {
+            const parsePreset = token => {
                 if (token.startsWith('#')) return parseInt(token.substring(1), 10)
                 if (token.toUpperCase().startsWith('T#')) {
                     const content = token.substring(2)
@@ -997,7 +999,7 @@ export class VovkPLCEditor {
                     let totalMs = 0
                     let hasMatch = false
                     let pMatch
-                    
+
                     while ((pMatch = partRegex.exec(content))) {
                         hasMatch = true
                         const val = parseInt(pMatch[1], 10)
@@ -1008,34 +1010,34 @@ export class VovkPLCEditor {
                         else if (unit === 'd') totalMs += val * 86400000
                         else totalMs += val // ms
                     }
-                    
+
                     if (hasMatch) return totalMs
-                    
+
                     // Fallback for just numbers (technically invalid IEC but good to handle)
-                     const simple = parseInt(content, 10)
-                     return isNaN(simple) ? null : simple
+                    const simple = parseInt(content, 10)
+                    return isNaN(simple) ? null : simple
                 }
                 return null
             }
 
             const parsedVal = parsePreset(presetToken)
             const isConstant = parsedVal !== null
-            
+
             let presetAddr = -1
             if (!isConstant) {
-                 const pAddrMatch = /^(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(presetToken)
-                 if (pAddrMatch) {
+                const pAddrMatch = /^(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(presetToken)
+                if (pAddrMatch) {
                     let prefix = pAddrMatch[1] ? pAddrMatch[1].toUpperCase() : ''
                     let byte = parseInt(pAddrMatch[2] || pAddrMatch[4], 10)
-                    let loc = prefix ? ({K:'control', C:'counter', T:'timer', X:'input', Y:'output', M:'marker', S:'system'}[prefix] || 'marker') : 'memory'
-                    let base = loc === 'memory' ? 0 : (normalizedOffsets[loc]?.offset || 0)
+                    let loc = prefix ? {K: 'control', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}[prefix] || 'marker' : 'memory'
+                    let base = loc === 'memory' ? 0 : normalizedOffsets[loc]?.offset || 0
                     // Timer (T) uses 9 bytes per unit, Counter (C) uses 5 bytes per unit
-                    let structSize = (prefix === 'T') ? 9 : (prefix === 'C') ? 5 : 1
-                    presetAddr = base + (byte * structSize)
-                 } else if (symbolDetails && symbolDetails.has(presetToken)) {
+                    let structSize = prefix === 'T' ? 9 : prefix === 'C' ? 5 : 1
+                    presetAddr = base + byte * structSize
+                } else if (symbolDetails && symbolDetails.has(presetToken)) {
                     const sym = symbolDetails.get(presetToken)
                     presetAddr = sym.absoluteAddress
-                 }
+                }
             }
 
             if (storageAddr !== -1) {
@@ -1043,13 +1045,13 @@ export class VovkPLCEditor {
                 const storageRef = {
                     name: `tim_storage_M${storageAddr}`,
                     originalName: storageToken,
-                    type: 'u32', 
+                    type: 'u32',
                     absoluteAddress: storageAddr,
                     start: storageStart,
                     end: storageStart + storageToken.length,
                     isTimerStorage: true,
                     timerType: instr,
-                    storageAddress: storageAddr
+                    storageAddress: storageAddr,
                 }
                 if (isConstant) {
                     storageRef.presetValue = parsedVal
@@ -1058,22 +1060,22 @@ export class VovkPLCEditor {
                     if (presetAddr !== -1) storageRef.presetAddress = presetAddr
                 }
                 refs.push(storageRef)
-                
+
                 // Add timer Q output state pill (flags byte at offset +8, bit 0)
                 refs.push({
                     name: `tim_output_M${storageAddr}`,
                     originalName: 'Q',
                     type: 'bit',
-                    absoluteAddress: storageAddr + 8,  // Flags byte at offset +8
-                    bitOffset: 0,  // TIMER_FLAG_Q is bit 0
-                    start: storageStart,  // Position before storage token
-                    end: storageStart,    // Zero-width, rendered as pill
+                    absoluteAddress: storageAddr + 8, // Flags byte at offset +8
+                    bitOffset: 0, // TIMER_FLAG_Q is bit 0
+                    start: storageStart, // Position before storage token
+                    end: storageStart, // Zero-width, rendered as pill
                     isTimerOutput: true,
                     timerType: instr,
-                    storageAddress: storageAddr
+                    storageAddress: storageAddr,
                 })
             }
-            
+
             if (isConstant) {
                 const val = parsedVal
                 // Use stable name based on timer storage address instead of text position
@@ -1089,12 +1091,12 @@ export class VovkPLCEditor {
                     end: presetStart + presetToken.length,
                     isTimerPT: true,
                     storageAddress: storageAddr,
-                    presetValue: val
+                    presetValue: val,
                 })
             } else {
-                 if (presetAddr !== -1) {
-                     // Use stable name based on preset memory address
-                     refs.push({
+                if (presetAddr !== -1) {
+                    // Use stable name based on preset memory address
+                    refs.push({
                         name: `tim_memory_M${presetAddr}`,
                         originalName: presetToken,
                         type: 'u32',
@@ -1103,9 +1105,9 @@ export class VovkPLCEditor {
                         end: presetStart + presetToken.length,
                         isTimerPT: true,
                         storageAddress: storageAddr,
-                        isPresetAddress: true
-                     })
-                 }
+                        isPresetAddress: true,
+                    })
+                }
             }
         }
         return refs
@@ -1120,7 +1122,7 @@ export class VovkPLCEditor {
 
     _getAsmAddressRefsForLive(offsets) {
         const normalizedOffsets = offsets || ensureOffsets(this.project?.offsets || {})
-        const { details: symbolDetails } = this._buildSymbolCache()
+        const {details: symbolDetails} = this._buildSymbolCache()
         const refs = []
         const seen = new Set()
         const programs = (this.project?.files || []).filter(file => file?.type === 'program')
@@ -1128,7 +1130,7 @@ export class VovkPLCEditor {
             const blocks = program.blocks || []
             blocks.forEach(block => {
                 if (!block) return
-                
+
                 // Handle ASM/STL blocks
                 if (block.type === 'asm' || block.type === 'stl') {
                     this._ensureBlockAddressRefs(block, normalizedOffsets, symbolDetails)
@@ -1140,31 +1142,31 @@ export class VovkPLCEditor {
                         refs.push(ref)
                     })
                 }
-                
+
                 // Handle Ladder blocks - collect timer symbols for monitoring
                 if (block.type === 'ladder' && block.blocks) {
                     block.blocks.forEach(ladderBlock => {
                         if (!ladderBlock || !ladderBlock.symbol) return
                         const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(ladderBlock.type)
                         if (!isTimer) return
-                        
+
                         const symbolName = ladderBlock.symbol
                         if (seen.has(symbolName)) return
                         seen.add(symbolName)
-                        
+
                         // Parse the timer address (e.g., T0, T1)
                         const match = symbolName.match(/^[tT]([0-9]+)$/i)
                         if (match) {
                             const timerIndex = parseInt(match[1], 10)
                             const timerOffset = normalizedOffsets.timer?.offset || 704
                             // Timer storage is 9 bytes per timer unit in memory layout
-                            const absoluteAddress = timerOffset + (timerIndex * 9)
+                            const absoluteAddress = timerOffset + timerIndex * 9
                             refs.push({
                                 name: symbolName,
                                 location: 'timer',
                                 type: 'u32', // Timer elapsed time is u32
                                 address: timerIndex,
-                                absoluteAddress: absoluteAddress
+                                absoluteAddress: absoluteAddress,
                             })
                         }
                     })
@@ -1387,7 +1389,7 @@ export class VovkPLCEditor {
                 if (!block.id) block.id = this._generateID(block.id)
 
                 let code = ''
-                
+
                 if (block.type === 'stl') {
                     // STL blocks need to be transpiled to PLCASM
                     // The transpilation will be done during compilation in ProjectManager
@@ -1408,7 +1410,7 @@ export class VovkPLCEditor {
                     // ASM blocks use the cache
                     code = this._ensureAsmCache(block, signature, map, details) || ''
                 }
-                
+
                 const header = includeHeaders ? `// block:${block.id}\n` : ''
                 assembly += header
                 const codeStart = assembly.length
@@ -1429,7 +1431,7 @@ export class VovkPLCEditor {
     async _transpileSTLForLinting(assembly) {
         // Transpile Ladder blocks to PLCASM before STL
         let result = await this._transpileLadderForLinting(assembly)
-        
+
         // Then transpile STL blocks to PLCASM
         const stlBlockRegex = /\/\/ stl_block_start\n([\s\S]*?)\/\/ stl_block_end\n/g
         let match
@@ -1442,12 +1444,12 @@ export class VovkPLCEditor {
 
             try {
                 // Use runtime.compile with language: 'stl' to transpile STL to PLCASM
-                const compileResult = await this.runtime.compile(stlCode, { language: 'stl' })
+                const compileResult = await this.runtime.compile(stlCode, {language: 'stl'})
                 if (compileResult && compileResult.output) {
                     replacements.push({
                         start: startIndex,
                         end: startIndex + fullMatch.length,
-                        replacement: compileResult.output + '\n'
+                        replacement: compileResult.output + '\n',
                     })
                 }
             } catch (e) {
@@ -1456,7 +1458,7 @@ export class VovkPLCEditor {
                 replacements.push({
                     start: startIndex,
                     end: startIndex + fullMatch.length,
-                    replacement: '// STL block with errors\n'
+                    replacement: '// STL block with errors\n',
                 })
             }
         }
@@ -1490,30 +1492,30 @@ export class VovkPLCEditor {
                 } catch (parseErr) {
                     throw new Error('Invalid ladder graph JSON')
                 }
-                
+
                 // Skip if no nodes
                 if (!parsedGraph.nodes || parsedGraph.nodes.length === 0) {
                     throw new Error('No nodes in graph')
                 }
-                
+
                 // Check if compileLadder is available
                 if (typeof this.runtime.compileLadder !== 'function') {
                     throw new Error('Ladder Graph compiler not available')
                 }
-                
+
                 // Step 1: Ladder Graph JSON -> STL
                 const ladderResult = await this.runtime.compileLadder(graphJson)
                 if (!ladderResult || !ladderResult.output) {
                     throw new Error('Ladder Graph compilation returned no output')
                 }
-                
+
                 // Step 2: STL -> PLCASM
-                const stlResult = await this.runtime.compile(ladderResult.output, { language: 'stl' })
+                const stlResult = await this.runtime.compile(ladderResult.output, {language: 'stl'})
                 if (stlResult && stlResult.output) {
                     replacements.push({
                         start: startIndex,
                         end: startIndex + fullMatch.length,
-                        replacement: stlResult.output + '\n'
+                        replacement: stlResult.output + '\n',
                     })
                 }
             } catch (e) {
@@ -1521,7 +1523,7 @@ export class VovkPLCEditor {
                 replacements.push({
                     start: startIndex,
                     end: startIndex + fullMatch.length,
-                    replacement: '// Ladder graph with errors\n'
+                    replacement: '// Ladder graph with errors\n',
                 })
             }
         }
@@ -1537,20 +1539,243 @@ export class VovkPLCEditor {
 
     _applyLintDiagnostics(blocks, diagnosticsByBlock) {
         blocks.forEach(({block}) => {
-            const editor = block.props?.text_editor
-            if (editor && typeof editor.setDiagnostics === 'function') {
-                editor.setDiagnostics(diagnosticsByBlock.get(block.id) || [])
+            const diagnostics = diagnosticsByBlock.get(block.id) || []
+            
+            if (block.type === 'ladder') {
+                // For ladder blocks, store diagnostics on props and trigger re-render
+                if (!block.props) block.props = {}
+                block.props.diagnostics = diagnostics
+                // Trigger re-render if renderer is available
+                if (this.language_manager) {
+                    const renderer = this.language_manager.getRenderer('ladder')
+                    if (renderer && typeof renderer.render === 'function') {
+                        renderer.render(this, block)
+                    }
+                }
+            } else {
+                // For text-based blocks (STL/ASM), use the text_editor
+                const editor = block.props?.text_editor
+                if (editor && typeof editor.setDiagnostics === 'function') {
+                    editor.setDiagnostics(diagnostics)
+                }
             }
         })
     }
 
     async lintProject() {
+        // Use project-based linting if available
+        if (this.runtime_ready && this.runtime && typeof this.runtime.lintProject === 'function' && this.project_manager) {
+            return await this._lintProjectBased()
+        }
+
+        // Fallback to assembly-based linting
+        return await this._lintAssemblyBased()
+    }
+
+    async _lintProjectBased() {
+        const programs = this._getLintPrograms()
+        const emptyByBlock = new Map()
+        const blocks = []
+
+        // Build block list for applying diagnostics
+        programs.forEach(file => {
+            if (!file.blocks) return
+            file.blocks.forEach(block => {
+                if (!block.id) block.id = this._generateID(block.id)
+                emptyByBlock.set(block.id, [])
+                blocks.push({block, program: file})
+            })
+        })
+
+        // Build project text for linting
+        let projectText = ''
+        try {
+            projectText = this.project_manager.buildProjectText()
+        } catch (e) {
+            console.warn('Failed to build project text for linting:', e)
+            this._lint_state = {assembly: '', projectText: '', diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0}
+            this._applyLintDiagnostics(
+                blocks.map(b => ({...b, code: '', codeStart: 0, codeEnd: 0})),
+                emptyByBlock,
+            )
+            if (this.window_manager?.setConsoleProblems) {
+                this.window_manager.setConsoleProblems([])
+            }
+            return this._lint_state
+        }
+
+        if (!projectText.trim()) {
+            this._lint_state = {assembly: '', projectText: '', diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0}
+            this._applyLintDiagnostics(
+                blocks.map(b => ({...b, code: '', codeStart: 0, codeEnd: 0})),
+                emptyByBlock,
+            )
+            if (this.window_manager?.setConsoleProblems) {
+                this.window_manager.setConsoleProblems([])
+            }
+            return this._lint_state
+        }
+
+        // Check if we already have results for this project text
+        if (this._lint_state.projectText === projectText && this._lint_state.diagnosticsByBlock) {
+            this._applyLintDiagnostics(
+                blocks.map(b => ({...b, code: '', codeStart: 0, codeEnd: 0})),
+                this._lint_state.diagnosticsByBlock,
+            )
+            return this._lint_state
+        }
+
+        // Check if there's already a request in flight for this text
+        if (this._lint_state.inFlight && this._lint_state.inFlight.projectText === projectText) {
+            return await this._lint_state.inFlight.promise
+        }
+
+        const runId = (this._lint_state.runId || 0) + 1
+        this._lint_state.runId = runId
+
+        if (this.window_manager?.setConsoleProblems) {
+            this.window_manager.setConsoleProblems({status: 'checking'})
+        }
+
+        const promise = (async () => {
+            const diagnosticsByBlock = new Map()
+            const problemsList = []
+            blocks.forEach(({block}) => diagnosticsByBlock.set(block.id, []))
+
+            try {
+                // Call the runtime's lintProject API
+                const problems = await this.runtime.lintProject(projectText)
+
+                if (problems && problems.length) {
+                    console.log(`Project lint found ${problems.length} problems:`, problems)
+                    for (const problem of problems) {
+                        // Find the matching block by name
+                        const blockName = problem.block || ''
+                        const programName = problem.program || ''
+
+                        let target = null
+                        for (const info of blocks) {
+                            const blockMatches = !blockName || info.block.name === blockName
+                            const programMatches = !programName || info.program?.name === programName || info.program?.path === programName || info.program?.full_path === programName
+                            if (blockMatches && programMatches) {
+                                // For ladder blocks with a token, verify the token exists in this block
+                                if (info.block.type === 'ladder' && problem.token) {
+                                    const token = problem.token
+                                    // Check if token is a connection reference (c[index])
+                                    const connMatch = token.match(/^c\[(\d+)\]$/)
+                                    if (connMatch) {
+                                        const connIndex = parseInt(connMatch[1], 10)
+                                        const connections = info.block.connections || []
+                                        if (connIndex >= connections.length) continue // Connection index out of range
+                                    } else {
+                                        // Token is a node ID
+                                        const nodes = info.block.nodes || info.block.blocks || []
+                                        const hasToken = nodes.some(n => n.id === token)
+                                        if (!hasToken) continue // Token not in this ladder, keep looking
+                                    }
+                                }
+                                target = info
+                                break
+                            }
+                        }
+
+                        // Calculate local position within block's code
+                        let localLine = problem.line || 1
+                        let localColumn = problem.column || 1
+                        let localStart = 0
+                        let localEnd = 1
+
+                        if (target && (target.block.type === 'stl' || target.block.type === 'asm')) {
+                            const code = target.block.code || ''
+                            const lines = code.split('\n')
+                            const lineStarts = [0]
+                            for (let i = 0; i < lines.length; i++) {
+                                lineStarts.push(lineStarts[i] + lines[i].length + 1)
+                            }
+                            const lineIndex = Math.max(0, localLine - 1)
+                            const colIndex = Math.max(0, localColumn - 1)
+                            localStart = (lineStarts[lineIndex] ?? 0) + colIndex
+                            localEnd = localStart + (problem.length || 1)
+
+                            // Add to diagnostics for this block
+                            const list = diagnosticsByBlock.get(target.block.id) || []
+                            list.push({
+                                type: problem.type || 'error',
+                                start: localStart,
+                                end: localEnd,
+                                message: problem.message || 'Lint error',
+                            })
+                            diagnosticsByBlock.set(target.block.id, list)
+                        } else if (target && target.block.type === 'ladder') {
+                            // For ladder blocks, store the token and let renderer resolve position
+                            // This ensures highlighting follows nodes when they move
+                            const list = diagnosticsByBlock.get(target.block.id) || []
+                            list.push({
+                                type: problem.type || 'error',
+                                token: problem.token || '',
+                                // Fallback cell positions if token lookup fails
+                                fallbackCellX: (problem.column || 1) - 1,
+                                fallbackCellY: (problem.line || 1) - 1,
+                                message: problem.message || 'Lint error',
+                            })
+                            diagnosticsByBlock.set(target.block.id, list)
+                        }
+
+                        // Add to problems list for the console panel
+                        const langMap = {1: 'plcasm', 2: 'stl', 3: 'ladder'}
+                        const language = problem.compiler?.toLowerCase() || langMap[problem.lang] || target?.block.type || ''
+
+                        problemsList.push({
+                            type: problem.type || 'error',
+                            message: problem.message || 'Lint error',
+                            token: problem.token || '',
+                            line: localLine,
+                            column: localColumn,
+                            start: localStart,
+                            end: localEnd,
+                            blockId: target?.block.id || '',
+                            blockName: blockName || target?.block.name || '',
+                            blockType: target?.block.type || '',
+                            language,
+                            languageStack: [language].filter(Boolean),
+                            programName: programName || target?.program?.name || '',
+                            programPath: target?.program?.full_path || target?.program?.path || '',
+                            programId: target?.program?.id || '',
+                        })
+                    }
+                }
+            } catch (e) {
+                console.error('Project lint failed', e)
+            }
+
+            if (this._lint_state.runId !== runId) return this._lint_state
+
+            this._lint_state = {assembly: '', projectText, diagnosticsByBlock, inFlight: null, runId}
+            this._applyLintDiagnostics(
+                blocks.map(b => ({...b, code: '', codeStart: 0, codeEnd: 0})),
+                diagnosticsByBlock,
+            )
+            if (this.window_manager?.setConsoleProblems) {
+                this.window_manager.setConsoleProblems(problemsList)
+            }
+            return this._lint_state
+        })()
+
+        this._lint_state.inFlight = {projectText, promise}
+        const state = await promise
+        if (this._lint_state.inFlight?.promise === promise) {
+            this._lint_state.inFlight = null
+        }
+        return state
+    }
+
+    async _lintAssemblyBased() {
         const {assembly, blocks} = this._buildLintAssembly()
         const emptyByBlock = new Map()
         blocks.forEach(({block}) => emptyByBlock.set(block.id, []))
 
         if (!this.runtime_ready || !this.runtime || typeof this.runtime.lint !== 'function') {
-            this._lint_state = {assembly, diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0}
+            this._lint_state = {assembly, projectText: '', diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0}
             this._applyLintDiagnostics(blocks, emptyByBlock)
             if (this.window_manager?.setConsoleProblems) {
                 this.window_manager.setConsoleProblems([])
@@ -1559,7 +1784,7 @@ export class VovkPLCEditor {
         }
 
         if (!assembly.trim()) {
-            this._lint_state = {assembly, diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0}
+            this._lint_state = {assembly, projectText: '', diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0}
             this._applyLintDiagnostics(blocks, emptyByBlock)
             if (this.window_manager?.setConsoleProblems) {
                 this.window_manager.setConsoleProblems([])
@@ -1681,7 +1906,7 @@ export class VovkPLCEditor {
                                 const irResult = ladderLanguage.toIR(info.block)
                                 if (irResult.errors && irResult.errors.length > 0) {
                                     const list = diagnosticsByBlock.get(info.block.id) || []
-                                    
+
                                     for (const err of irResult.errors) {
                                         // Add to diagnostics for this block
                                         list.push({
@@ -1809,7 +2034,7 @@ export class VovkPLCEditor {
 
             if (this._lint_state.runId !== runId) return this._lint_state
 
-            this._lint_state = {assembly, diagnosticsByBlock, inFlight: null, runId}
+            this._lint_state = {assembly, projectText: '', diagnosticsByBlock, inFlight: null, runId}
             this._applyLintDiagnostics(blocks, diagnosticsByBlock)
             if (this.window_manager?.setConsoleProblems) {
                 this.window_manager.setConsoleProblems(problemsList)

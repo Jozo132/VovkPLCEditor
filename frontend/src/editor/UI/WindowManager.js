@@ -2150,6 +2150,31 @@ export default class WindowManager {
             const result = await this.#editor.project_manager.compile()
             const endTime = performance.now()
 
+            // Check for compilation errors
+            if (result.problem) {
+                if (!silent) {
+                    if (silentOnSuccess && typeof this.setConsoleTab === 'function') this.setConsoleTab('output')
+                    const p = result.problem
+                    this.logToConsole(`Compilation failed: ${p.message}`, 'error')
+                    
+                    // Show location info if available
+                    const locationParts = []
+                    if (p.program) locationParts.push(`Program: ${p.program}`)
+                    if (p.block) locationParts.push(`Block: ${p.block}`)
+                    if (p.line) locationParts.push(`Line ${p.line}${p.column ? `:${p.column}` : ''}`)
+                    if (p.compiler && p.compiler !== 'UNKNOWN') locationParts.push(`(${p.compiler})`)
+                    
+                    if (locationParts.length > 0) {
+                        this.logToConsole(`  ${locationParts.join(' | ')}`, 'error')
+                    }
+                    if (p.token) {
+                        this.logToConsole(`  Token: "${p.token}"`, 'error')
+                    }
+                    this.logToConsole('----------------------------------------', 'info')
+                }
+                return false
+            }
+
             // Store result for download
             this.#editor.project.binary = ((str) => {
                 const matches = str.match(/.{1,2}/g) || []
@@ -2179,7 +2204,7 @@ export default class WindowManager {
                 // Calculate Checksum
                 let checksumMsg = ''
                 let hexPreview = ''
-                if (this.#editor.runtime && this.#editor.runtime.parseHex && this.#editor.runtime.crc8) {
+                if (result.output && this.#editor.runtime && this.#editor.runtime.parseHex && this.#editor.runtime.crc8) {
                     try {
                         const bytes = this.#editor.runtime.parseHex(result.output)
                         const checksum = this.#editor.runtime.crc8(bytes)

@@ -1983,7 +1983,7 @@ export const ladderRenderer = {
       highlight_sim_color: '#00ffff', // cyan for simulation mode
       grid_color: '#FFF4',
       select_highlight_color: '#7AF',
-      select_color: '#456',
+      select_color: 'rgba(68, 85, 102, 0.6)',  // Semi-transparent to show errors underneath
       hover_color: '#456',
       font: '16px Consolas',
       font_color: '#DDD',
@@ -1997,6 +1997,12 @@ export const ladderRenderer = {
       if (!div) throw new Error('Block div not found')
       const block_container = div.querySelector('.plc-program-block-code')
       if (!block_container) throw new Error('Block code not found')
+      
+      // Ensure container is positioned for tooltip
+      if (getComputedStyle(block_container).position === 'static') {
+        block_container.style.position = 'relative'
+      }
+      
       const canvas = document.createElement('canvas')
       canvas.width = 600
       canvas.height = 600
@@ -2006,6 +2012,29 @@ export const ladderRenderer = {
       props.ctx = ctx
       props.canvas = canvas
       block_container.appendChild(canvas)
+      
+      // Create diagnostic tooltip element
+      const diagTooltip = document.createElement('div')
+      diagTooltip.className = 'ladder-diag-tooltip'
+      diagTooltip.style.cssText = `
+        position: absolute;
+        display: none;
+        background: #252526;
+        border: 1px solid #454545;
+        border-radius: 4px;
+        padding: 6px 10px;
+        color: #ccc;
+        font-size: 12px;
+        font-family: monospace;
+        max-width: 300px;
+        z-index: 1000;
+        pointer-events: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        white-space: pre-wrap;
+        word-break: break-word;
+      `
+      block_container.appendChild(diagTooltip)
+      props.diagTooltip = diagTooltip
 
       // Initialize event handlers (only once)
       initializeEventHandlers(editor, block, canvas, style)
@@ -2080,6 +2109,46 @@ export const ladderRenderer = {
           const { x, y, width: w, height: h } = sel
           ctx.fillRect(x * ladder_block_width, y * ladder_block_height, w * ladder_block_width, h * ladder_block_height)
         }
+      }
+    }
+
+    // Draw diagnostic highlights (errors/warnings from linting) - drawn AFTER selection so they're visible
+    const diagnostics = props.diagnostics || []
+    if (diagnostics.length > 0) {
+      for (const diag of diagnostics) {
+        let cellX = diag.fallbackCellX ?? 0
+        let cellY = diag.fallbackCellY ?? 0
+        
+        // Resolve position from token if available
+        if (diag.token) {
+          const token = diag.token
+          // Check if token is a connection reference (c[index])
+          const connMatch = token.match(/^c\[(\d+)\]$/)
+          if (connMatch) {
+            // Connection - we can't highlight connections directly, skip or use fallback
+            // For now, skip connection diagnostics in visual highlighting
+            continue
+          } else {
+            // Token is a node ID - find the node's current position
+            const node = blocks.find(n => n.id === token)
+            if (node) {
+              cellX = node.x
+              cellY = node.y
+            }
+          }
+        }
+        
+        const isError = diag.type === 'error'
+        
+        // Draw semi-transparent red/yellow background for problem cells
+        ctx.fillStyle = isError ? 'rgba(255, 80, 80, 0.35)' : 'rgba(255, 200, 0, 0.3)'
+        ctx.fillRect(cellX * ladder_block_width, cellY * ladder_block_height, ladder_block_width, ladder_block_height)
+        
+        // Draw border
+        ctx.strokeStyle = isError ? '#f44' : '#cc0'
+        ctx.lineWidth = 2
+        ctx.setLineDash([])
+        ctx.strokeRect(cellX * ladder_block_width + 1, cellY * ladder_block_height + 1, ladder_block_width - 2, ladder_block_height - 2)
       }
     }
 
@@ -2323,6 +2392,17 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   }
   const connState = editor.ladder_connection_state[ladderId]
 
+  // Debounced lint trigger for ladder changes
+  let lintTimer = null
+  const triggerLint = () => {
+    if (lintTimer) clearTimeout(lintTimer)
+    lintTimer = setTimeout(() => {
+      if (editor.lintProject && typeof editor.lintProject === 'function') {
+        editor.lintProject()
+      }
+    }, 300)
+  }
+
   let is_dragging = false
   let is_moving = false
   let moving_elements = []
@@ -2494,6 +2574,49 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     // Always track hover position for connection handles (even when not dragging)
     const live = editor.device_manager.connected && !!editor.window_manager?.isMonitoringActive?.()
     const edit = !live
+    
+    // Handle diagnostic tooltip
+    const diagTooltip = ladder.props?.diagTooltip
+    if (diagTooltip) {
+      const diagnostics = ladder.props?.diagnostics || []
+      const nodes = ladder.nodes || ladder.blocks || []
+      const blockWidth = getBlockWidth()
+      const blockHeight = getBlockHeight()
+      const cellX = Math.floor(mouseX * getScale() / blockWidth)
+      const cellY = Math.floor(mouseY * getScale() / blockHeight)
+      
+      // Find diagnostics at this cell - resolve token positions
+      const cellDiags = diagnostics.filter(d => {
+        let diagX = d.fallbackCellX ?? 0
+        let diagY = d.fallbackCellY ?? 0
+        
+        if (d.token && !d.token.match(/^c\[\d+\]$/)) {
+          // Token is a node ID - find current position
+          const node = nodes.find(n => n.id === d.token)
+          if (node) {
+            diagX = node.x
+            diagY = node.y
+          }
+        }
+        
+        return diagX === cellX && diagY === cellY
+      })
+      
+      if (cellDiags.length > 0) {
+        // Build tooltip content
+        const messages = cellDiags.map(d => {
+          const icon = d.type === 'error' ? '⛔' : '⚠️'
+          return `${icon} ${d.message}`
+        }).join('\n')
+        
+        diagTooltip.textContent = messages
+        diagTooltip.style.display = 'block'
+        diagTooltip.style.left = (mouseX + 10) + 'px'
+        diagTooltip.style.top = (mouseY + 10) + 'px'
+      } else {
+        diagTooltip.style.display = 'none'
+      }
+    }
     
     if (edit) {
       const hover_x_raw = mouseX * getScale() / getBlockWidth()
@@ -2680,10 +2803,17 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       return
     }
 
-    const x = Math.floor(start_x * getScale() / getBlockWidth())
-    const y = Math.floor(start_y * getScale() / getBlockHeight())
-    const width = Math.max(Math.round(1 + (end_x - start_x) * getScale() / getBlockWidth()), 1)
-    const height = Math.max(Math.round(1 + (end_y - start_y) * getScale() / getBlockHeight()), 1)
+    // Calculate selection area - support dragging in any direction
+    const cellStartX = Math.floor(start_x * getScale() / getBlockWidth())
+    const cellStartY = Math.floor(start_y * getScale() / getBlockHeight())
+    const cellEndX = Math.floor(end_x * getScale() / getBlockWidth())
+    const cellEndY = Math.floor(end_y * getScale() / getBlockHeight())
+    
+    // Normalize to get top-left corner and dimensions
+    const x = Math.min(cellStartX, cellEndX)
+    const y = Math.min(cellStartY, cellEndY)
+    const width = Math.abs(cellEndX - cellStartX) + 1
+    const height = Math.abs(cellEndY - cellStartY) + 1
 
     // Update selection area
     const ctrl = event.ctrlKey
@@ -2778,6 +2908,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       connState.snapped_block = null
       was_dragging_wire = true
       ladderRenderer.render(editor, ladder)
+      triggerLint() // Trigger lint after wire connection
       return
     }
     
@@ -2790,6 +2921,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       connectTouchingBlocks(ladder)
       // Trigger redraw to show new connections
       ladderRenderer.render(editor, ladder)
+      triggerLint() // Trigger lint after moving blocks
       moving_elements = []
     }
   }
@@ -2915,6 +3047,11 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       connState.dragging_wire = false
       connState.wire_start_block = null
       connState.wire_start_side = null
+    }
+    // Hide diagnostic tooltip
+    const diagTooltip = ladder.props?.diagTooltip
+    if (diagTooltip) {
+      diagTooltip.style.display = 'none'
     }
     ladderRenderer.render(editor, ladder)
   })
@@ -3441,6 +3578,21 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
 
         // Trigger redraw after any context menu action
         ladderRenderer.render(editor, ladder)
+        
+        // Trigger linting for structural changes (insert, delete, paste, cut, edit, toggle)
+        const structuralActions = [
+          'insert_contact', 'insert_contact_n', 'insert_contact_p', 'insert_contact_np',
+          'insert_coil', 'insert_coil_set', 'insert_coil_rset',
+          'insert_timer_ton', 'insert_timer_tof', 'insert_timer_tp',
+          'insert_counter_ctu', 'insert_counter_ctd', 'insert_counter_ctud',
+          'insert_fb_add', 'insert_fb_sub', 'insert_fb_mul', 'insert_fb_div', 'insert_fb_mod',
+          'insert_fb_cmp_eq', 'insert_fb_cmp_neq', 'insert_fb_cmp_gt', 'insert_fb_cmp_lt', 
+          'insert_fb_cmp_gte', 'insert_fb_cmp_lte', 'insert_fb_move',
+          'delete', 'cut', 'paste', 'toggle_inverted', 'edit_symbol', 'edit_function_block'
+        ]
+        if (structuralActions.includes(selected_action)) {
+          triggerLint()
+        }
       }
     })
   }
@@ -3509,6 +3661,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       // Since prompt is a separate DOM element usually, this event typically won't fire on canvas if prompt has focus.
       deleteSelection(editor, ladder)
       ladderRenderer.render(editor, ladder)
+      triggerLint()
       e.preventDefault()
     }
 
@@ -3523,6 +3676,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       copySelection(editor, ladder, origin.x, origin.y)
       deleteSelection(editor, ladder)
       ladderRenderer.render(editor, ladder)
+      triggerLint()
       e.preventDefault()
     }
 
@@ -3530,6 +3684,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       const origin = editor.ladder_selection?.origin || { x: 0, y: 0 }
       pasteSelection(editor, ladder, origin.x, origin.y)
       ladderRenderer.render(editor, ladder)
+      triggerLint()
       e.preventDefault()
     }
   })
@@ -4066,6 +4221,10 @@ async function promptForSymbol(editor, block, ladder) {
     if (ladder) {
       ladderRenderer.render(editor, ladder)
     }
+    // Trigger linting
+    if (editor.lintProject && typeof editor.lintProject === 'function') {
+      editor.lintProject()
+    }
   }
 }
 
@@ -4239,6 +4398,10 @@ async function promptForTimerParameters(editor, block, ladder) {
     if (ladder) {
       ladderRenderer.render(editor, ladder)
     }
+    // Trigger linting
+    if (editor.lintProject && typeof editor.lintProject === 'function') {
+      editor.lintProject()
+    }
   }
 }
 
@@ -4297,6 +4460,10 @@ async function promptForCounterParameters(editor, block, ladder) {
     // Re-render the ladder
     if (ladder) {
       ladderRenderer.render(editor, ladder)
+    }
+    // Trigger linting
+    if (editor.lintProject && typeof editor.lintProject === 'function') {
+      editor.lintProject()
     }
   }
 }
@@ -4459,6 +4626,10 @@ async function promptForFunctionBlockParameters(editor, block, ladder) {
     // Re-render the ladder
     if (ladder) {
       ladderRenderer.render(editor, ladder)
+    }
+    // Trigger linting
+    if (editor.lintProject && typeof editor.lintProject === 'function') {
+      editor.lintProject()
     }
   }
 }
