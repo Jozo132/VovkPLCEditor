@@ -3241,20 +3241,28 @@ export default class WindowManager {
 
         if (show) showTooltip()
 
-        // Try getting runtime version
-        if (this.#editor && this.#editor.runtime) {
+        // Try getting runtime version - prefer connected device info, then cached runtime info
+        const deviceInfo = this.#editor?.device_manager?.deviceInfo
+        const cachedInfo = this.#editor?.runtime_info
+        if (deviceInfo && deviceInfo.version) {
+            runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime</div><div style="color:#aaa;">Version: ${deviceInfo.version}${deviceInfo.arch ? `<br>Arch: ${deviceInfo.arch}` : ''}</div>`
+        } else if (cachedInfo && cachedInfo.version) {
+            runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime</div><div style="color:#aaa;">Version: ${cachedInfo.version}${cachedInfo.arch ? `<br>Arch: ${cachedInfo.arch}` : ''}</div>`
+        } else if (this.#editor && this.#editor.runtime && this.#editor.runtime_ready) {
              try {
-                 const info = await this.#editor.runtime.printInfo()
+                 const info = this.#editor.runtime.printInfo()
                  if (info && info.version) {
                      runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime</div><div style="color:#aaa;">Version: ${info.version}${info.arch ? `<br>Arch: ${info.arch}` : ''}</div>`
-                 } else if (typeof info === 'string') {
+                 } else if (typeof info === 'string' && info !== 'No info available') {
                      runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#aaa;">${info}</div>`
                  } else {
-                     runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#aaa;">Unknown</div>`
+                     runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#aaa;">Ready</div>`
                  }
              } catch (e) {
                  runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#d44;">Offline</div>`
              }
+        } else if (this.#editor && this.#editor.runtime) {
+             runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#888;">Initializing...</div>`
         } else {
              runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#888;">Not initialized</div>`
         }

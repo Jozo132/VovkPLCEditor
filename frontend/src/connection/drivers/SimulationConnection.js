@@ -38,7 +38,47 @@ export default class SimulationConnection extends ConnectionBase {
     }
 
     async getInfo() {
-        return this.plc.printInfo()
+        const info = this.plc.printInfo()
+        // If printInfo returns valid object data, use it
+        if (info && typeof info === 'object' && info.arch) {
+            return info
+        }
+        // Fallback: try to use cached runtime info from editor
+        const cachedInfo = this.editor?.runtime_info
+        if (cachedInfo && typeof cachedInfo === 'object' && cachedInfo.arch) {
+            return cachedInfo
+        }
+        // Last resort: provide default simulator info using project offsets
+        const offsets = this.editor?.project?.offsets
+        const normalized = offsets ? ensureOffsets(offsets) : null
+        const now = new Date()
+        const dateStr = now.toISOString().replace('T', ' ').substring(0, 19)
+        return {
+            header: 'VovkPLCRuntime',
+            arch: 'WASM',
+            version: '0.1.0',
+            date: dateStr,
+            device: 'Simulator',
+            stack: 1024,
+            memory: this.plc.memory_size || 32768,
+            program: this.plc.program_size || 32768,
+            control_offset: normalized?.control?.offset ?? 0,
+            control_size: normalized?.control?.size ?? 64,
+            input_offset: normalized?.input?.offset ?? 64,
+            input_size: normalized?.input?.size ?? 64,
+            output_offset: normalized?.output?.offset ?? 128,
+            output_size: normalized?.output?.size ?? 64,
+            system_offset: normalized?.system?.offset ?? 192,
+            system_size: normalized?.system?.size ?? 256,
+            marker_offset: normalized?.marker?.offset ?? 448,
+            marker_size: normalized?.marker?.size ?? 256,
+            timer_offset: normalized?.timer?.offset ?? 704,
+            timer_count: 16,
+            timer_struct_size: 9,
+            counter_offset: normalized?.counter?.offset ?? 848,
+            counter_count: 16,
+            counter_struct_size: 5,
+        }
     }
 
     async reboot() {

@@ -439,7 +439,37 @@ export class VovkPLCEditor {
         })
 
         this.runtime = new VovkPLC('/wasm/VovkPLC.wasm')
-        this.runtime.initialize().then(() => {
+        this.runtime_info = null
+        this.runtime.initialize().then(async () => {
+            // Small delay to ensure WASM internals are fully ready
+            await new Promise(r => setTimeout(r, 50))
+            // Cache runtime info immediately after initialization (before stream is consumed)
+            try {
+                const info = await this.runtime.getInfo()
+                // If printInfo returned valid object with version, use it
+                if (info && typeof info === 'object' && info.version) {
+                    this.runtime_info = info
+                } else {
+                    // Fallback: get version from runtime properties if available
+                    const version = this.runtime.version || '0.1.0'
+                    const build = this.runtime.build || ''
+                    this.runtime_info = {
+                        header: 'VovkPLCRuntime',
+                        arch: 'WASM',
+                        version: build ? `${version} Build ${build}` : version,
+                        device: 'Simulator'
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to get runtime info:', e)
+                // Provide basic fallback info
+                this.runtime_info = {
+                    header: 'VovkPLCRuntime',
+                    arch: 'WASM',
+                    version: '0.1.0',
+                    device: 'Simulator'
+                }
+            }
             // Compile 'exit' to flush out any initial runtime logs
             try {
                 this.runtime.compile('exit')
