@@ -9,6 +9,1051 @@ import { Popup } from "../../editor/UI/Elements/components/popup.js"
 import { MiniCodeEditor } from "../MiniCodeEditor.js"
 
 
+// ============================================================================
+// CONNECTION PATH ROUTING SYSTEM
+// ============================================================================
+
+/**
+ * @typedef {Object} ConnectionPath
+ * @property {string} srcId - Source block ID
+ * @property {string} destId - Destination block ID
+ * @property {Array<{x: number, y: number, offsetX?: number, offsetY?: number}>} points - Path points in grid coordinates with optional pixel offsets
+ * @property {string} svgPath - SVG path string for rendering
+ * @property {number} [hOffset] - Horizontal line offset (fraction of block height, for vertical spacing)
+ * @property {number} [vOffset] - Vertical line offset (fraction of block width, for horizontal spacing)
+ * @property {number} [cornerX] - X position where the connection turns from horizontal to vertical (grid units)
+ */
+
+/**
+ * @typedef {Object} ConnectionPathCache
+ * @property {string} hash - Hash of blocks and connections for cache invalidation
+ * @property {ConnectionPath[]} paths - Computed paths
+ * @property {Array<{x1: number, y1: number, x2: number, y2: number, srcId: string, destId: string}>} segments - All line segments for collision detection
+ */
+
+/** @type {Map<string, ConnectionPathCache>} */
+const connectionPathCache = new Map()
+
+/**
+ * Compute a hash of the ladder's blocks and connections for cache invalidation
+ * @param {PLC_Ladder} ladder 
+ * @returns {string}
+ */
+function computeLadderHash(ladder) {
+  const blocks = ladder.nodes || []
+  const connections = ladder.connections || []
+  
+  const blockStr = blocks.map(b => `${b.id}:${b.x},${b.y}`).sort().join('|')
+  const connStr = connections.map(c => {
+    if (c.from && c.to) return `${c.from.id}->${c.to.id}`
+    if (c.sources && c.destinations) {
+      return c.sources.sort().join(',') + '=>' + c.destinations.sort().join(',')
+    }
+    return ''
+  }).sort().join('|')
+  
+  return `${blockStr}::${connStr}`
+}
+
+/**
+ * Build a grid occupancy map for routing
+ * @param {PLC_LadderBlock[]} blocks 
+ * @returns {Set<string>} Set of "x,y" strings for occupied cells
+ */
+function buildOccupancyMap(blocks) {
+  const occupied = new Set()
+  for (const b of blocks) {
+    occupied.add(`${b.x},${b.y}`)
+  }
+  return occupied
+}
+
+/**
+ * Check if a point collides with existing line segments
+ * @param {number} x 
+ * @param {number} y 
+ * @param {Array<{x1: number, y1: number, x2: number, y2: number}>} segments 
+ * @param {number} tolerance
+ * @returns {boolean}
+ */
+function pointCollidesWithSegments(x, y, segments, tolerance = 0.05) {
+  for (const seg of segments) {
+    // Check if point is on this segment
+    if (seg.x1 === seg.x2) {
+      // Vertical segment
+      if (Math.abs(x - seg.x1) < tolerance) {
+        const minY = Math.min(seg.y1, seg.y2)
+        const maxY = Math.max(seg.y1, seg.y2)
+        if (y > minY + tolerance && y < maxY - tolerance) {
+          return true
+        }
+      }
+    } else if (seg.y1 === seg.y2) {
+      // Horizontal segment
+      if (Math.abs(y - seg.y1) < tolerance) {
+        const minX = Math.min(seg.x1, seg.x2)
+        const maxX = Math.max(seg.x1, seg.x2)
+        if (x > minX + tolerance && x < maxX - tolerance) {
+          return true
+        }
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * Check if two line segments intersect (properly cross, not just touch at endpoint)
+ * @param {{x1: number, y1: number, x2: number, y2: number}} seg1 
+ * @param {{x1: number, y1: number, x2: number, y2: number}} seg2 
+ * @returns {boolean}
+ */
+function segmentsIntersect(seg1, seg2) {
+  // Both must be axis-aligned
+  const seg1Horiz = seg1.y1 === seg1.y2
+  const seg1Vert = seg1.x1 === seg1.x2
+  const seg2Horiz = seg2.y1 === seg2.y2
+  const seg2Vert = seg2.x1 === seg2.x2
+  
+  if (seg1Horiz && seg2Vert) {
+    // seg1 horizontal, seg2 vertical
+    const y = seg1.y1
+    const x = seg2.x1
+    const minX1 = Math.min(seg1.x1, seg1.x2)
+    const maxX1 = Math.max(seg1.x1, seg1.x2)
+    const minY2 = Math.min(seg2.y1, seg2.y2)
+    const maxY2 = Math.max(seg2.y1, seg2.y2)
+    // Strictly inside (not at endpoints)
+    return x > minX1 && x < maxX1 && y > minY2 && y < maxY2
+  }
+  
+  if (seg1Vert && seg2Horiz) {
+    // seg1 vertical, seg2 horizontal
+    const x = seg1.x1
+    const y = seg2.y1
+    const minY1 = Math.min(seg1.y1, seg1.y2)
+    const maxY1 = Math.max(seg1.y1, seg1.y2)
+    const minX2 = Math.min(seg2.x1, seg2.x2)
+    const maxX2 = Math.max(seg2.x1, seg2.x2)
+    return y > minY1 && y < maxY1 && x > minX2 && x < maxX2
+  }
+  
+  // Same orientation - check for overlap on same line
+  if (seg1Horiz && seg2Horiz && seg1.y1 === seg2.y1) {
+    const min1 = Math.min(seg1.x1, seg1.x2)
+    const max1 = Math.max(seg1.x1, seg1.x2)
+    const min2 = Math.min(seg2.x1, seg2.x2)
+    const max2 = Math.max(seg2.x1, seg2.x2)
+    // Overlap check (not just touching at single point)
+    return max1 > min2 && max2 > min1 && !(max1 === min2 || max2 === min1)
+  }
+  
+  if (seg1Vert && seg2Vert && seg1.x1 === seg2.x1) {
+    const min1 = Math.min(seg1.y1, seg1.y2)
+    const max1 = Math.max(seg1.y1, seg1.y2)
+    const min2 = Math.min(seg2.y1, seg2.y2)
+    const max2 = Math.max(seg2.y1, seg2.y2)
+    return max1 > min2 && max2 > min1 && !(max1 === min2 || max2 === min1)
+  }
+  
+  return false
+}
+
+/**
+ * Convert path points to SVG path string and segment list
+ * @param {Array<{x: number, y: number}>} points 
+ * @param {number} blockWidth 
+ * @param {number} blockHeight 
+ * @returns {{svgPath: string, segments: Array<{x1: number, y1: number, x2: number, y2: number}>}}
+ */
+function pointsToSvgPath(points, blockWidth, blockHeight) {
+  if (points.length < 2) return { svgPath: '', segments: [] }
+  
+  const segments = []
+  let svgPath = `M ${points[0].x * blockWidth + blockWidth} ${points[0].y * blockHeight + blockHeight / 2}`
+  
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1]
+    const curr = points[i]
+    
+    // Convert to pixel coordinates
+    const prevPixelX = prev.x * blockWidth + blockWidth
+    const prevPixelY = prev.y * blockHeight + blockHeight / 2
+    const currPixelX = i === points.length - 1 
+      ? curr.x * blockWidth  // Last point connects to left side of dest
+      : curr.x * blockWidth + blockWidth
+    const currPixelY = curr.y * blockHeight + blockHeight / 2
+    
+    // Use relative movements for cleaner SVG
+    if (prevPixelY === currPixelY) {
+      // Horizontal
+      svgPath += ` h ${currPixelX - prevPixelX}`
+    } else if (prevPixelX === currPixelX) {
+      // Vertical
+      svgPath += ` v ${currPixelY - prevPixelY}`
+    } else {
+      // Diagonal (shouldn't happen but handle gracefully)
+      svgPath += ` L ${currPixelX} ${currPixelY}`
+    }
+    
+    // Add segment in grid coordinates for collision detection
+    segments.push({
+      x1: prev.x + 1, // +1 because we start from right side of block
+      y1: prev.y,
+      x2: i === points.length - 1 ? curr.x : curr.x + 1,
+      y2: curr.y
+    })
+  }
+  
+  return { svgPath, segments }
+}
+
+/**
+ * Route a single connection from source to destination
+ * Uses L-shaped routing: horizontal first at source row, then vertical to dest row
+ * @param {PLC_LadderBlock} srcBlock 
+ * @param {PLC_LadderBlock} destBlock 
+ * @param {Set<string>} occupiedCells 
+ * @param {Array<{x1: number, y1: number, x2: number, y2: number, srcId: string, destId: string}>} existingSegments 
+ * @param {number} hOffset - Horizontal line vertical offset (fraction of block height, e.g., 0.1 = 10% of block height)
+ * @param {number} vOffset - Vertical line horizontal offset (fraction of block width)
+ * @returns {{points: Array<{x: number, y: number}>, segments: Array<{x1: number, y1: number, x2: number, y2: number}>, hOffset: number, vOffset: number} | null}
+ */
+function routeConnection(srcBlock, destBlock, occupiedCells, existingSegments, hOffset = 0, vOffset = 0) {
+  const srcX = srcBlock.x
+  const srcY = srcBlock.y
+  const destX = destBlock.x
+  const destY = destBlock.y
+  
+  // Destination must be to the right of source
+  if (destX <= srcX) return null
+  
+  // Check if blocks are in horizontal path
+  const hasBlockInHorizontalPath = () => {
+    for (let x = srcX + 1; x < destX; x++) {
+      if (occupiedCells.has(`${x},${srcY}`)) return true
+    }
+    return false
+  }
+  
+  // Check if blocks are in vertical path
+  const hasBlockInVerticalPath = (x, y1, y2) => {
+    const minY = Math.min(y1, y2)
+    const maxY = Math.max(y1, y2)
+    for (let y = minY + 1; y < maxY; y++) {
+      if (occupiedCells.has(`${x},${y}`)) return true
+    }
+    return false
+  }
+  
+  // Simple L-shaped path: horizontal at srcY, then vertical to destY
+  if (srcY === destY) {
+    // Same row - direct horizontal connection
+    // Check for blocks in path
+    if (hasBlockInHorizontalPath()) return null
+    
+    // Create simple 2-point path
+    const points = [
+      { x: srcX, y: srcY },
+      { x: destX, y: destY }
+    ]
+    
+    // Create segment (with offset for collision detection)
+    // Y coordinates are at row center (y + 0.5) plus any offset
+    const segments = [{
+      x1: srcX + 1,
+      y1: srcY + 0.5 + hOffset,
+      x2: destX,
+      y2: destY + 0.5 + hOffset
+    }]
+    
+    return { points, segments, hOffset, vOffset }
+  }
+  
+  // Cross-row connection - L-shaped path
+  // Route: srcX,srcY -> destX,srcY -> destX,destY
+  
+  // Check for blocks in horizontal path
+  if (hasBlockInHorizontalPath()) return null
+  
+  // Check for blocks in vertical path
+  if (hasBlockInVerticalPath(destX, srcY, destY)) return null
+  
+  // Create L-shaped path
+  const points = [
+    { x: srcX, y: srcY },
+    { x: destX, y: srcY },  // Corner point
+    { x: destX, y: destY }
+  ]
+  
+  // Create segments with offsets
+  // Y coordinates for horizontal segment at row center (y + 0.5)
+  // Vertical segment goes from source row center to dest row center
+  const segments = [
+    {
+      x1: srcX + 1,
+      y1: srcY + 0.5 + hOffset,
+      x2: destX + vOffset,
+      y2: srcY + 0.5 + hOffset
+    },
+    {
+      x1: destX + vOffset,
+      y1: srcY + 0.5 + hOffset,
+      x2: destX + vOffset,
+      y2: destY + 0.5
+    }
+  ]
+  
+  return { points, segments, hOffset, vOffset }
+}
+
+/**
+ * Compute connection paths for a ladder with cascading corners to avoid overlaps
+ * Uses iterative approach: render default, find conflicts, push away, repeat
+ * @param {VovkPLCEditor} editor 
+ * @param {PLC_Ladder} ladder 
+ * @returns {ConnectionPathCache}
+ */
+function computeConnectionPaths(editor, ladder) {
+  const ladderId = ladder.id || 'unknown'
+  const hash = computeLadderHash(ladder)
+  
+  // Check cache
+  const cached = connectionPathCache.get(ladderId)
+  if (cached && cached.hash === hash) {
+    return cached
+  }
+  
+  const { ladder_block_width, ladder_block_height } = editor.properties
+  const blocks = ladder.nodes || []
+  const connections = ladder.connections || []
+  
+  // Build occupancy map
+  const occupiedCells = buildOccupancyMap(blocks)
+  
+  // Get all connection pairs
+  /** @type {Array<{srcId: string, destId: string, srcBlock: PLC_LadderBlock, destBlock: PLC_LadderBlock, cornerX?: number}>} */
+  const pairs = []
+  
+  for (const conn of connections) {
+    if (conn.from && conn.to) {
+      const srcBlock = blocks.find(b => b.id === conn.from.id)
+      const destBlock = blocks.find(b => b.id === conn.to.id)
+      if (srcBlock && destBlock) {
+        pairs.push({ srcId: conn.from.id, destId: conn.to.id, srcBlock, destBlock })
+      }
+    } else if (conn.sources && conn.destinations) {
+      for (const srcId of conn.sources) {
+        for (const destId of conn.destinations) {
+          const srcBlock = blocks.find(b => b.id === srcId)
+          const destBlock = blocks.find(b => b.id === destId)
+          if (srcBlock && destBlock) {
+            pairs.push({ srcId, destId, srcBlock, destBlock })
+          }
+        }
+      }
+    }
+  }
+  
+  // Separate same-row and cross-row connections
+  const sameRowPairs = pairs.filter(p => p.srcBlock.y === p.destBlock.y)
+  const crossRowPairs = pairs.filter(p => p.srcBlock.y !== p.destBlock.y)
+  
+  // Route connections
+  /** @type {ConnectionPath[]} */
+  const paths = []
+  /** @type {Array<{x1: number, y1: number, x2: number, y2: number, srcId: string, destId: string}>} */
+  const allSegments = []
+  
+  // First route same-row connections (simple horizontal lines)
+  for (const pair of sameRowPairs) {
+    const srcX = pair.srcBlock.x
+    const srcY = pair.srcBlock.y
+    const destX = pair.destBlock.x
+    
+    if (destX <= srcX) continue // Invalid
+    
+    // Check for blocks in path
+    let blocked = false
+    for (let x = srcX + 1; x < destX; x++) {
+      if (occupiedCells.has(`${x},${srcY}`)) {
+        blocked = true
+        break
+      }
+    }
+    if (blocked) continue
+    
+    const points = [{ x: srcX, y: srcY }, { x: destX, y: srcY }]
+    const segments = [{
+      x1: srcX + 1,
+      y1: srcY + 0.5,
+      x2: destX,
+      y2: srcY + 0.5,
+      srcId: pair.srcId,
+      destId: pair.destId
+    }]
+    
+    paths.push({
+      srcId: pair.srcId,
+      destId: pair.destId,
+      points,
+      svgPath: '',
+      hOffset: 0,
+      vOffset: 0
+    })
+    
+    allSegments.push(...segments)
+  }
+  
+  // STEP 1: Initialize all cross-row connections with default cornerX = destX
+  for (const pair of crossRowPairs) {
+    const srcX = pair.srcBlock.x
+    const destX = pair.destBlock.x
+    
+    if (destX <= srcX) continue // Invalid
+    
+    pair.cornerX = destX // Start with ideal position
+  }
+  
+  // STEP 2: Group and space connections evenly
+  // Group ALL connections that share vertical space, then space them evenly
+  const validPairs = crossRowPairs.filter(p => p.cornerX !== undefined)
+  
+  // Helper to get vertical range of a pair
+  const getVerticalRange = (pair) => {
+    const minY = Math.min(pair.srcBlock.y, pair.destBlock.y)
+    const maxY = Math.max(pair.srcBlock.y, pair.destBlock.y)
+    return { minY, maxY }
+  }
+  
+  // Helper to check if two pairs' vertical segments overlap or touch
+  const verticalRangesOverlapOrTouch = (pairA, pairB) => {
+    const rangeA = getVerticalRange(pairA)
+    const rangeB = getVerticalRange(pairB)
+    // Touch or overlap: not completely separate
+    return !(rangeA.maxY < rangeB.minY || rangeB.maxY < rangeA.minY)
+  }
+  
+  // Helper to check if two pairs could conflict horizontally
+  // They only conflict if their cornerX zones overlap AND destX values are close
+  // CornerX can range from srcX+1 to destX, so check if those ranges intersect
+  const horizontalRangesOverlap = (pairA, pairB) => {
+    const leftA = pairA.srcBlock.x + 1
+    const rightA = pairA.destBlock.x
+    const leftB = pairB.srcBlock.x + 1
+    const rightB = pairB.destBlock.x
+    
+    // Also require destX values to be within 1 cell of each other
+    // Otherwise they won't actually compete for the same cornerX positions
+    const destXClose = Math.abs(pairA.destBlock.x - pairB.destBlock.x) <= 1
+    
+    // Overlap if one range contains or intersects the other
+    const rangesOverlap = !(rightA < leftB || rightB < leftA)
+    
+    return rangesOverlap && destXClose
+  }
+  
+  // Build a set of blocks that have incoming connections (their input terminals have wires)
+  const blocksWithIncomingConnection = new Set()
+  for (const p of pairs) {
+    blocksWithIncomingConnection.add(`${p.destBlock.x},${p.destBlock.y}`)
+  }
+  
+  // Helper to check if a cornerX position hits a block for a given pair
+  const cornerHitsBlock = (pair, cx) => {
+    const srcX = pair.srcBlock.x
+    const srcY = pair.srcBlock.y
+    const destX = pair.destBlock.x
+    const destY = pair.destBlock.y
+    const minY = Math.min(srcY, destY)
+    const maxY = Math.max(srcY, destY)
+    const col = Math.floor(cx)
+    
+    // Check horizontal path on srcY (from srcX+1 up to and including floor(cx))
+    // But don't check beyond destX-1 since destX column has the destination block on destY
+    const hCheckEnd = Math.min(Math.floor(cx), destX)
+    for (let x = srcX + 1; x <= hCheckEnd; x++) {
+      // Skip the destination column - the dest block is at destY not srcY
+      if (x === destX) continue
+      if (occupiedCells.has(`${x},${srcY}`)) {
+        return true
+      }
+    }
+    
+    // Special case: if vertical wire is at destX column, check if there's another block
+    // at (destX, srcY) that would have its terminal touched by the wire
+    if (col === destX) {
+      if (occupiedCells.has(`${destX},${srcY}`)) {
+        return true
+      }
+      // If there's a connected block at destX column on srcY row, avoid its input wire too
+      if (blocksWithIncomingConnection.has(`${destX},${srcY}`)) {
+        return true
+      }
+    }
+    
+    // Check vertical path (from minY+1 to maxY-1, not including endpoints)
+    // Only check adjacency on INTERMEDIATE rows - not srcY or destY
+    for (let y = minY + 1; y < maxY; y++) {
+      if (occupiedCells.has(`${col},${y}`)) {
+        return true
+      }
+      // Also check adjacent cells to avoid touching their connection terminals
+      // A block at (col-1, y) has its right terminal at col, so avoid
+      // A block at (col+1, y) has its left terminal at col+1, so avoid if wire is close to right edge
+      // Only check if wire is actually close to the adjacent cell
+      const fracPart = cx - col
+      if (fracPart < 0.25 && occupiedCells.has(`${col - 1},${y}`)) {
+        return true // Wire close to left edge, would touch block on left
+      }
+      if (fracPart > 0.75 && occupiedCells.has(`${col + 1},${y}`)) {
+        return true // Wire close to right edge, would touch block on right
+      }
+    }
+    
+    // Also check adjacency at destY for the vertical wire position
+    // Only check when wire is actually close to the adjacent cell's edge
+    if (col !== destX) {
+      const fracPart = cx - col
+      if (fracPart < 0.25 && occupiedCells.has(`${col - 1},${destY}`)) {
+        return true
+      }
+      if (fracPart > 0.75 && occupiedCells.has(`${col + 1},${destY}`)) {
+        return true
+      }
+    }
+    
+    // Check horizontal path on destY (from cornerX to destX-1)
+    // This is for L-shaped paths where corner is before dest
+    if (cx < destX) {
+      const hDestStart = Math.ceil(cx)
+      for (let x = hDestStart; x < destX; x++) {
+        if (occupiedCells.has(`${x},${destY}`)) {
+          return true
+        }
+      }
+    }
+    
+    return false
+  }
+  
+  // Build groups of connections with overlapping/touching vertical ranges
+  // Using Union-Find to group transitively connected pairs
+  const pairIndex = new Map()
+  validPairs.forEach((p, i) => pairIndex.set(p, i))
+  
+  const parent = new Array(validPairs.length)
+  for (let i = 0; i < validPairs.length; i++) parent[i] = i
+  
+  const find = (x) => {
+    if (parent[x] !== x) parent[x] = find(parent[x])
+    return parent[x]
+  }
+  
+  const union = (x, y) => {
+    const px = find(x), py = find(y)
+    if (px !== py) parent[px] = py
+  }
+  
+  // Union all pairs that have overlapping vertical AND horizontal ranges
+  // Both must overlap for connections to potentially conflict
+  for (let i = 0; i < validPairs.length; i++) {
+    for (let j = i + 1; j < validPairs.length; j++) {
+      if (verticalRangesOverlapOrTouch(validPairs[i], validPairs[j]) && 
+          horizontalRangesOverlap(validPairs[i], validPairs[j])) {
+        union(i, j)
+      }
+    }
+  }
+  
+  // Build groups from Union-Find result
+  const groupMap = new Map()
+  for (let i = 0; i < validPairs.length; i++) {
+    const root = find(i)
+    if (!groupMap.has(root)) groupMap.set(root, [])
+    groupMap.get(root).push(validPairs[i])
+  }
+  
+  // Process each group
+  for (const [root, group] of groupMap) {
+    // For single connections, still check for block conflicts
+    if (group.length === 1) {
+      const pair = group[0]
+      let targetX = pair.cornerX
+      const pairLimit = pair.srcBlock.x + 1
+      const pairDestX = pair.destBlock.x
+      
+      console.log(`=== Single connection: src(${pair.srcBlock.x},${pair.srcBlock.y}) -> dest(${pair.destBlock.x},${pair.destBlock.y}) ===`)
+      console.log(`  initial cornerX = ${targetX}, pairLimit = ${pairLimit}, pairDestX = ${pairDestX}`)
+      
+      // Check for block conflicts - search for ANY valid position in range
+      if (cornerHitsBlock(pair, targetX)) {
+        console.log(`  -> conflict at ${targetX}, searching...`)
+        // Try positions from pairLimit to pairDestX in 0.1 increments
+        // Collect all valid positions and pick the one closest to targetX
+        const validPositions = []
+        for (let tryX = pairLimit; tryX <= pairDestX; tryX += 0.1) {
+          if (!cornerHitsBlock(pair, tryX)) {
+            validPositions.push(tryX)
+          }
+        }
+        
+        if (validPositions.length > 0) {
+          // Pick the valid position closest to the original targetX
+          let bestX = validPositions[0]
+          let bestDist = Math.abs(validPositions[0] - targetX)
+          for (const vx of validPositions) {
+            const dist = Math.abs(vx - targetX)
+            if (dist < bestDist) {
+              bestDist = dist
+              bestX = vx
+            }
+          }
+          targetX = bestX
+          console.log(`  -> found valid: ${targetX} (from ${validPositions.length} candidates)`)
+        } else {
+          // No valid position found, clamp to pairLimit as fallback
+          targetX = pairLimit
+          console.log(`  -> no valid position, using pairLimit: ${targetX}`)
+        }
+        pair.cornerX = targetX
+      } else {
+        console.log(`  -> no conflict, keeping ${targetX}`)
+      }
+      continue
+    }
+    
+    // Determine dominant direction: UP (srcY > destY) or DOWN (srcY < destY)
+    let upCount = 0, downCount = 0
+    for (const pair of group) {
+      if (pair.srcBlock.y > pair.destBlock.y) upCount++
+      else if (pair.srcBlock.y < pair.destBlock.y) downCount++
+    }
+    const goingUp = upCount >= downCount
+    
+    // Sort by srcY ascending
+    group.sort((a, b) => {
+      if (a.srcBlock.y !== b.srcBlock.y) return a.srcBlock.y - b.srcBlock.y
+      return b.destBlock.x - a.destBlock.x
+    })
+    
+    console.log('=== Processing conflict group ===')
+    console.log('Group size:', group.length, 'Direction:', goingUp ? 'UP' : 'DOWN')
+    console.log('Connections in group:')
+    group.forEach((p, i) => {
+      console.log(`  [${i}] src(${p.srcBlock.x},${p.srcBlock.y}) -> dest(${p.destBlock.x},${p.destBlock.y})`)
+    })
+    
+    // Find the anchor (rightmost destination X among the group)
+    const anchorX = Math.max(...group.map(p => p.destBlock.x))
+    console.log('anchorX (rightmost destX):', anchorX)
+    
+    // Find the left limit - right edge of source block (srcX + 1)
+    // Use MAXIMUM of all srcX + 1 (rightmost source's right edge)
+    let leftLimit = 0
+    for (const pair of group) {
+      leftLimit = Math.max(leftLimit, pair.srcBlock.x + 1)
+    }
+    console.log('leftLimit (max srcX + 1):', leftLimit)
+    
+    // Calculate available space and spacing
+    const availableSpace = anchorX - leftLimit
+    const numConnections = group.length
+    
+    let spacing = 0
+    if (numConnections > 1) {
+      // Calculate even spacing, but cap at 1.0 (don't spread more than 1 cell apart)
+      spacing = Math.min(1.0, availableSpace / (numConnections - 1))
+    }
+    console.log('availableSpace:', availableSpace)
+    console.log('numConnections:', numConnections)
+    console.log('spacing (capped at 1.0):', spacing)
+    
+    // Distribute corners based on direction
+    // Both are right-aligned (starting from anchorX), but UP reverses the index
+    console.log('Distributing corners:')
+    
+    // Track positions already assigned in this group to avoid overlaps
+    const usedPositions = []
+    
+    for (let i = 0; i < group.length; i++) {
+      const pair = group[i]
+      let targetX
+      
+      if (goingUp) {
+        // Going UP: right-aligned but top sources get leftmost (reverse index)
+        const reverseI = group.length - 1 - i
+        targetX = anchorX - (reverseI * spacing)
+        console.log(`  [${i}] initial targetX = ${anchorX} - (${reverseI} * ${spacing}) = ${targetX}`)
+      } else {
+        // Going DOWN: right-aligned, top sources get rightmost
+        targetX = anchorX - (i * spacing)
+        console.log(`  [${i}] initial targetX = ${anchorX} - (${i} * ${spacing}) = ${targetX}`)
+      }
+      
+      // Enforce per-pair limit (can't go left of own srcX + 1, right edge of source)
+      const pairLimit = pair.srcBlock.x + 1
+      if (targetX < pairLimit) {
+        console.log(`    -> clamped to pairLimit: ${pairLimit}`)
+        targetX = pairLimit
+      }
+      
+      // Enforce pair's own destX limit (corner can't be past own destination)
+      const pairDestX = pair.destBlock.x
+      if (targetX > pairDestX) {
+        console.log(`    -> clamped to pair destX: ${pairDestX}`)
+        targetX = pairDestX
+      }
+      
+      // Helper to check if position is too close to an already-used position
+      const tooCloseToUsed = (x) => {
+        for (const used of usedPositions) {
+          if (Math.abs(x - used) < 0.15) return true
+        }
+        return false
+      }
+      
+      // Check for block conflicts OR position already used - search for valid position
+      if (cornerHitsBlock(pair, targetX) || tooCloseToUsed(targetX)) {
+        const reason = cornerHitsBlock(pair, targetX) ? 'block conflict' : 'too close to used'
+        console.log(`    -> ${reason} at ${targetX}, searching for valid position...`)
+        
+        // Try positions from pairLimit to pairDestX in 0.1 increments
+        // Collect all valid positions (no block conflict AND not too close to used)
+        const validPositions = []
+        // Also collect positions that only have block conflict (no overlap with used wires)
+        const blockConflictOnly = []
+        
+        for (let tryX = pairLimit; tryX <= pairDestX; tryX += 0.1) {
+          const hasBlockConflict = cornerHitsBlock(pair, tryX)
+          const hasUsedConflict = tooCloseToUsed(tryX)
+          
+          if (!hasBlockConflict && !hasUsedConflict) {
+            validPositions.push(tryX)
+          } else if (hasBlockConflict && !hasUsedConflict) {
+            // Block conflict but at least no wire overlap
+            blockConflictOnly.push(tryX)
+          }
+        }
+        
+        if (validPositions.length > 0) {
+          // Pick the valid position closest to the original targetX
+          let bestX = validPositions[0]
+          let bestDist = Math.abs(validPositions[0] - targetX)
+          for (const vx of validPositions) {
+            const dist = Math.abs(vx - targetX)
+            if (dist < bestDist) {
+              bestDist = dist
+              bestX = vx
+            }
+          }
+          targetX = bestX
+          console.log(`    -> found valid position: ${targetX} (from ${validPositions.length} candidates)`)
+        } else if (blockConflictOnly.length > 0) {
+          // Fallback: accept block conflict but avoid wire overlap
+          let bestX = blockConflictOnly[0]
+          let bestDist = Math.abs(blockConflictOnly[0] - targetX)
+          for (const vx of blockConflictOnly) {
+            const dist = Math.abs(vx - targetX)
+            if (dist < bestDist) {
+              bestDist = dist
+              bestX = vx
+            }
+          }
+          targetX = bestX
+          console.log(`    -> fallback to block-conflict position: ${targetX} (avoids wire overlap)`)
+        } else {
+          // Last resort: use pairLimit even if it overlaps
+          targetX = pairLimit
+          console.log(`    -> no position found, using pairLimit: ${targetX}`)
+        }
+      }
+      
+      console.log(`  [${i}] FINAL cornerX = ${targetX}`)
+      pair.cornerX = targetX
+      usedPositions.push(targetX)
+    }
+    console.log('=================================')
+  }
+  
+  // STEP 3: Build final paths and segments
+  for (const pair of validPairs) {
+    const srcX = pair.srcBlock.x
+    const srcY = pair.srcBlock.y
+    const destX = pair.destBlock.x
+    const destY = pair.destBlock.y
+    const cornerX = pair.cornerX
+    
+    const points = [
+      { x: srcX, y: srcY },
+      { x: cornerX, y: srcY },
+      { x: cornerX, y: destY }
+    ]
+    
+    // Create segments
+    const hSeg = {
+      x1: srcX + 1,
+      y1: srcY + 0.5,
+      x2: cornerX,
+      y2: srcY + 0.5,
+      srcId: pair.srcId,
+      destId: pair.destId
+    }
+    
+    const vSeg = {
+      x1: cornerX,
+      y1: srcY + 0.5,
+      x2: cornerX,
+      y2: destY + 0.5,
+      srcId: pair.srcId,
+      destId: pair.destId
+    }
+    
+    const segments = [hSeg, vSeg]
+    
+    // Final horizontal segment from corner to dest (if corner isn't at destX)
+    if (Math.abs(cornerX - destX) > 0.01) {
+      segments.push({
+        x1: cornerX,
+        y1: destY + 0.5,
+        x2: destX,
+        y2: destY + 0.5,
+        srcId: pair.srcId,
+        destId: pair.destId
+      })
+    }
+    
+    paths.push({
+      srcId: pair.srcId,
+      destId: pair.destId,
+      points,
+      svgPath: '',
+      hOffset: 0,
+      vOffset: 0,
+      cornerX
+    })
+    
+    allSegments.push(...segments)
+  }
+  
+  // Cache result
+  const cacheEntry = { hash, paths, segments: allSegments }
+  connectionPathCache.set(ladderId, cacheEntry)
+  
+  return cacheEntry
+}
+
+/**
+ * Get cached connection segments for path validation
+ * @param {VovkPLCEditor} editor 
+ * @param {PLC_Ladder} ladder 
+ * @returns {{horizontalSegments: Array<{y: number, minX: number, maxX: number, srcId: string, destId: string}>, verticalSegments: Array<{x: number, minY: number, maxY: number, srcId: string, destId: string}>}}
+ */
+function getConnectionSegments(editor, ladder) {
+  const cache = computeConnectionPaths(editor, ladder)
+  
+  const horizontalSegments = []
+  const verticalSegments = []
+  
+  for (const seg of cache.segments) {
+    if (seg.y1 === seg.y2) {
+      // Horizontal segment
+      horizontalSegments.push({
+        y: seg.y1,
+        minX: Math.min(seg.x1, seg.x2),
+        maxX: Math.max(seg.x1, seg.x2),
+        srcId: seg.srcId,
+        destId: seg.destId
+      })
+    } else if (seg.x1 === seg.x2) {
+      // Vertical segment
+      verticalSegments.push({
+        x: seg.x1,
+        minY: Math.min(seg.y1, seg.y2),
+        maxY: Math.max(seg.y1, seg.y2),
+        srcId: seg.srcId,
+        destId: seg.destId
+      })
+    }
+  }
+  
+  return { horizontalSegments, verticalSegments }
+}
+
+/**
+ * Check if a proposed connection path is clear (no blocks or crossing existing connections)
+ * For use in connection handle validation
+ * @param {PLC_LadderBlock} sourceBlock 
+ * @param {PLC_LadderBlock} destBlock 
+ * @param {PLC_LadderBlock[]} blocks 
+ * @param {{horizontalSegments: Array, verticalSegments: Array}} segments 
+ * @returns {boolean}
+ */
+function isConnectionPathClear(sourceBlock, destBlock, blocks, segments) {
+  const srcX = sourceBlock.x
+  const srcY = sourceBlock.y
+  const destX = destBlock.x
+  const destY = destBlock.y
+  
+  // Destination must be strictly to the right
+  if (destX <= srcX) return false
+  
+  // Check for blocks in horizontal path at source row
+  for (const blk of blocks) {
+    if (blk.id === sourceBlock.id || blk.id === destBlock.id) continue
+    if (blk.y === srcY && blk.x > srcX && blk.x < destX) {
+      return false
+    }
+  }
+  
+  // Check if horizontal segment crosses any vertical connection lines
+  for (const vseg of segments.verticalSegments) {
+    if (vseg.x <= srcX || vseg.x >= destX) continue
+    if (srcY < vseg.minY || srcY > vseg.maxY) continue
+    if (vseg.srcId === sourceBlock.id || vseg.destId === sourceBlock.id) continue
+    if (vseg.srcId === destBlock.id || vseg.destId === destBlock.id) continue
+    return false
+  }
+  
+  // For cross-row, check vertical path at dest column
+  if (srcY !== destY) {
+    const minY = Math.min(srcY, destY)
+    const maxY = Math.max(srcY, destY)
+    
+    for (const blk of blocks) {
+      if (blk.id === sourceBlock.id || blk.id === destBlock.id) continue
+      if (blk.x === destX && blk.y > minY && blk.y < maxY) {
+        return false
+      }
+    }
+    
+    // Check if our vertical segment at destX would overlap with existing vertical segments
+    // This prevents "short-circuit" where two connections share the same vertical path
+    for (const vseg of segments.verticalSegments) {
+      if (vseg.x !== destX) continue
+      // Skip segments that start/end at the destination (they share an endpoint at destBlock)
+      if (vseg.destId === destBlock.id) continue
+      // Skip segments from our source
+      if (vseg.srcId === sourceBlock.id) continue
+      // Check if vertical ranges overlap (not just touch at endpoints)
+      const overlap = Math.max(minY, vseg.minY) < Math.min(maxY, vseg.maxY)
+      if (overlap) {
+        return false
+      }
+    }
+  }
+  
+  // Function to check if segments interleave
+  const segmentsInterleave = (a1, a2, b1, b2) => {
+    const aMin = Math.min(a1, a2)
+    const aMax = Math.max(a1, a2)
+    const bMin = Math.min(b1, b2)
+    const bMax = Math.max(b1, b2)
+    return (aMin < bMin && bMin < aMax && aMax < bMax) ||
+           (bMin < aMin && aMin < bMax && bMax < aMax)
+  }
+  
+  // Check horizontal segment interleaving
+  if (srcY === destY) {
+    for (const seg of segments.horizontalSegments) {
+      if (seg.y !== srcY) continue
+      if (seg.srcId === sourceBlock.id || seg.destId === sourceBlock.id) continue
+      if (seg.srcId === destBlock.id || seg.destId === destBlock.id) continue
+      if (segmentsInterleave(srcX, destX, seg.minX, seg.maxX)) {
+        return false
+      }
+    }
+    return true
+  }
+  
+  // Cross-row: check horizontal segment at source row
+  for (const seg of segments.horizontalSegments) {
+    if (seg.y === srcY) {
+      if (seg.srcId === sourceBlock.id || seg.destId === sourceBlock.id) continue
+      if (seg.srcId === destBlock.id || seg.destId === destBlock.id) continue
+      if (segmentsInterleave(srcX, destX, seg.minX, seg.maxX)) {
+        return false
+      }
+    }
+  }
+  
+  // Check vertical segment crossing horizontal connections
+  const minY = Math.min(srcY, destY)
+  const maxY = Math.max(srcY, destY)
+  for (const seg of segments.horizontalSegments) {
+    if (seg.y > minY && seg.y < maxY) {
+      if (destX > seg.minX && destX < seg.maxX) {
+        return false
+      }
+    }
+  }
+  
+  return true
+}
+
+/**
+ * Find connections at a clicked point and return the connection pairs that pass through
+ * @param {VovkPLCEditor} editor 
+ * @param {PLC_Ladder} ladder 
+ * @param {number} clickX - Click X in grid coordinates (fractional)
+ * @param {number} clickY - Click Y in grid coordinates (fractional)
+ * @returns {{pairs: Array<{srcId: string, destId: string}>} | null}
+ */
+function findConnectionAtPoint(editor, ladder, clickX, clickY) {
+  const cache = computeConnectionPaths(editor, ladder)
+  const { ladder_block_width, ladder_block_height } = editor.properties
+  
+  // Hit tolerance in grid units (how close to the line we need to be)
+  // 0.05 means within 5% of a block height/width from the line
+  const hitTolerance = 0.05
+  
+  // Find all segments that the click is on
+  /** @type {Array<{srcId: string, destId: string}>} */
+  const matchingPairs = []
+  
+  for (const seg of cache.segments) {
+    const isHorizontal = Math.abs(seg.y1 - seg.y2) < 0.01
+    const isVertical = Math.abs(seg.x1 - seg.x2) < 0.01
+    
+    if (isHorizontal) {
+      const segY = seg.y1
+      const minX = Math.min(seg.x1, seg.x2)
+      const maxX = Math.max(seg.x1, seg.x2)
+      
+      // Check if click is on this horizontal segment
+      if (Math.abs(clickY - segY) < hitTolerance && clickX >= minX - hitTolerance && clickX <= maxX + hitTolerance) {
+        // Add this pair if not already added
+        const exists = matchingPairs.some(p => p.srcId === seg.srcId && p.destId === seg.destId)
+        if (!exists) {
+          matchingPairs.push({ srcId: seg.srcId, destId: seg.destId })
+        }
+      }
+    } else if (isVertical) {
+      const segX = seg.x1
+      const minY = Math.min(seg.y1, seg.y2)
+      const maxY = Math.max(seg.y1, seg.y2)
+      
+      // Check if click is on this vertical segment
+      if (Math.abs(clickX - segX) < hitTolerance && clickY >= minY - hitTolerance && clickY <= maxY + hitTolerance) {
+        // Add this pair if not already added
+        const exists = matchingPairs.some(p => p.srcId === seg.srcId && p.destId === seg.destId)
+        if (!exists) {
+          matchingPairs.push({ srcId: seg.srcId, destId: seg.destId })
+        }
+      }
+    }
+  }
+  
+  if (matchingPairs.length === 0) return null
+  
+  return { pairs: matchingPairs }
+}
+
+// ============================================================================
+// END CONNECTION PATH ROUTING SYSTEM
+// ============================================================================
+
+
 /**
  * Ensures ladder is in correct format and provides backward-compatible accessors.
  * Call this at the start of render functions to ensure ladder.blocks works as alias for ladder.nodes.
@@ -1716,40 +2761,56 @@ const draw_counter = (editor, like, ctx, block) => {
 // Draw links between blocks
 
 /** @typedef {{ from: PLC_LadderBlock , to: PLC_LadderBlock, powered: boolean }} LadderLink */
-/** @type {(editor: VovkPLCEditor, like: 'symbol' | 'highlight', ctx: CanvasRenderingContext2D , link: LadderLink) => void} */
-const draw_connection = (editor, like, ctx, link) => {
-  // Draw a connection line from the output of the from block to the input of the to block
-  // If the target block is bellow the source block, draw the vertical line first
-  // If the target block is above the source block, draw the horizontal line first
-  // If the target block is to the right, just draw a straight line
+
+/**
+ * Draw a connection using cached routed path
+ * @param {VovkPLCEditor} editor 
+ * @param {'symbol' | 'highlight'} like 
+ * @param {CanvasRenderingContext2D} ctx 
+ * @param {LadderLink} link 
+ * @param {ConnectionPath} [routedPath] - Optional pre-computed path
+ */
+const draw_connection = (editor, like, ctx, link, routedPath) => {
   const { ladder_block_width, ladder_block_height, style } = editor.properties
-  const { line_width, highlight_width, highlight_color, highlight_sim_color, color } = style
+  const { line_width, highlight_width, color } = style
   const { from, to, powered } = link
-  const x0 = from.x * ladder_block_width + ladder_block_width
+  
+  // Calculate pixel coordinates
+  const x0 = from.x * ladder_block_width + ladder_block_width  // Right side of source
   const y0 = from.y * ladder_block_height + ladder_block_height / 2
-  const x1 = to.x * ladder_block_width
+  const x1 = to.x * ladder_block_width  // Left side of dest
   const y1 = to.y * ladder_block_height + ladder_block_height / 2
 
-  const x_direction = x0 < x1 ? 1 : x0 > x1 ? -1 : 0
-  const y_direction = y0 < y1 ? 1 : y0 > y1 ? -1 : 0
-  if (x_direction === 0 && y_direction === 0) return // elements are touching, no need to draw a connection
+  // Skip if blocks are touching (no wire needed)
+  if (x0 >= x1 && from.y === to.y) return
+  
+  const isCrossRow = from.y !== to.y
+  
+  // Get corner X position from routed path, or default to dest X
+  const cornerXGrid = routedPath?.cornerX ?? to.x
+  const cornerX = cornerXGrid * ladder_block_width
+  
   if (like === 'highlight') {
     if (powered) {
-      // Use cyan for simulation, lime green for device/serial mode
       const isSimulation = editor.window_manager.active_device === 'simulation'
       const activeColor = isSimulation ? '#00ffff' : '#32cd32'
       ctx.strokeStyle = activeColor
       ctx.lineWidth = highlight_width
       ctx.beginPath()
-      if (x_direction === 0) {
-        if (y_direction > 0) ctx.moveTo(x0, y0 - 4)
-        if (y_direction < 0) ctx.moveTo(x0, y0 + 4)
-      } else {
+      
+      if (isCrossRow) {
+        // Path: horizontal to corner, vertical to dest row, then horizontal to dest
         ctx.moveTo(x0, y0)
+        ctx.lineTo(cornerX, y0)
+        ctx.lineTo(cornerX, y1)
+        if (Math.abs(cornerX - x1) > 1) {
+          ctx.lineTo(x1, y1)
+        }
+      } else {
+        // Same row: straight horizontal line
+        ctx.moveTo(x0, y0)
+        ctx.lineTo(x1, y1)
       }
-      if (x_direction > 0) ctx.lineTo(x1, y0)
-      if (y_direction > 0) ctx.lineTo(x1, y1 + 4)
-      if (y_direction < 0) ctx.lineTo(x1, y1 - 4)
       ctx.stroke()
     }
     return
@@ -1759,11 +2820,20 @@ const draw_connection = (editor, like, ctx, link) => {
     ctx.strokeStyle = color
     ctx.lineWidth = line_width
     ctx.beginPath()
-    ctx.moveTo(x0, y0)
-    // if (y0 < y1) ctx.lineTo(x0, y1)
-    // if (y0 > y1)
-    ctx.lineTo(x1, y0)
-    ctx.lineTo(x1, y1)
+    
+    if (isCrossRow) {
+      // Path: horizontal to corner, vertical to dest row, then horizontal to dest
+      ctx.moveTo(x0, y0)
+      ctx.lineTo(cornerX, y0)
+      ctx.lineTo(cornerX, y1)
+      if (Math.abs(cornerX - x1) > 1) {
+        ctx.lineTo(x1, y1)
+      }
+    } else {
+      // Same row: straight horizontal
+      ctx.moveTo(x0, y0)
+      ctx.lineTo(x1, y1)
+    }
     ctx.stroke()
     return
   }
@@ -2490,9 +3560,17 @@ export const ladderRenderer = {
       if (from && to) links.push({ from, to, powered: !!con.state?.powered })
     })
 
+    // Get computed connection paths
+    const pathCache = computeConnectionPaths(editor, block)
+    const pathMap = new Map()
+    for (const path of pathCache.paths) {
+      pathMap.set(`${path.srcId}->${path.destId}`, path)
+    }
+
     links.forEach(link => {
       if (live) {
-        draw_connection(editor, 'highlight', ctx, link)
+        const routedPath = pathMap.get(`${link.from.id}->${link.to.id}`)
+        draw_connection(editor, 'highlight', ctx, link, routedPath)
       }
     })
 
@@ -2505,8 +3583,103 @@ export const ladderRenderer = {
       if (isFunctionBlock(b.type)) draw_function_block(editor, 'symbol', ctx, b)
     })
     links.forEach(link => {
-      draw_connection(editor, 'symbol', ctx, link)
+      const routedPath = pathMap.get(`${link.from.id}->${link.to.id}`)
+      draw_connection(editor, 'symbol', ctx, link, routedPath)
     })
+    
+    // Draw hovered connection highlights in edit mode (before selected, so selected shows on top)
+    if (edit) {
+      const connState = editor.ladder_connection_state?.[ladderId]
+      if (connState && connState.hovered_connections?.length > 0) {
+        ctx.save()
+        ctx.strokeStyle = '#88c8ff' // Hover light blue
+        ctx.lineWidth = 3
+        ctx.setLineDash([])
+        
+        for (const pair of connState.hovered_connections) {
+          // Skip if this connection is already selected (will be drawn with selection style)
+          const isSelected = connState.selected_connections?.some(
+            s => s.srcId === pair.srcId && s.destId === pair.destId
+          )
+          if (isSelected) continue
+          
+          const routedPath = pathMap.get(`${pair.srcId}->${pair.destId}`)
+          const link = links.find(l => l.from.id === pair.srcId && l.to.id === pair.destId)
+          if (link) {
+            const { from, to } = link
+            const x0 = from.x * ladder_block_width + ladder_block_width
+            const y0 = from.y * ladder_block_height + ladder_block_height / 2
+            const x1 = to.x * ladder_block_width
+            const y1 = to.y * ladder_block_height + ladder_block_height / 2
+            const isCrossRow = from.y !== to.y
+            
+            const cornerXGrid = routedPath?.cornerX ?? to.x
+            const cornerX = cornerXGrid * ladder_block_width
+            
+            ctx.beginPath()
+            if (isCrossRow) {
+              ctx.moveTo(x0, y0)
+              ctx.lineTo(cornerX, y0)
+              ctx.lineTo(cornerX, y1)
+              if (Math.abs(cornerX - x1) > 1) {
+                ctx.lineTo(x1, y1)
+              }
+            } else {
+              ctx.moveTo(x0, y0)
+              ctx.lineTo(x1, y1)
+            }
+            ctx.stroke()
+          }
+        }
+        
+        ctx.restore()
+      }
+    }
+    
+    // Draw selected connection highlights in edit mode
+    if (edit) {
+      const connState = editor.ladder_connection_state?.[ladderId]
+      if (connState && connState.selected_connections?.length > 0) {
+        ctx.save()
+        ctx.strokeStyle = '#4a9eff' // Selection blue
+        ctx.lineWidth = 4
+        ctx.setLineDash([6, 4])
+        
+        for (const pair of connState.selected_connections) {
+          const routedPath = pathMap.get(`${pair.srcId}->${pair.destId}`)
+          const link = links.find(l => l.from.id === pair.srcId && l.to.id === pair.destId)
+          if (link) {
+            // Draw the selection highlight using same logic as draw_connection
+            const { from, to } = link
+            const x0 = from.x * ladder_block_width + ladder_block_width
+            const y0 = from.y * ladder_block_height + ladder_block_height / 2
+            const x1 = to.x * ladder_block_width
+            const y1 = to.y * ladder_block_height + ladder_block_height / 2
+            const isCrossRow = from.y !== to.y
+            
+            // Get corner X position from routed path, or default to dest X
+            const cornerXGrid = routedPath?.cornerX ?? to.x
+            const cornerX = cornerXGrid * ladder_block_width
+            
+            ctx.beginPath()
+            if (isCrossRow) {
+              ctx.moveTo(x0, y0)
+              ctx.lineTo(cornerX, y0)
+              ctx.lineTo(cornerX, y1)
+              if (Math.abs(cornerX - x1) > 1) {
+                ctx.lineTo(x1, y1)
+              }
+            } else {
+              ctx.moveTo(x0, y0)
+              ctx.lineTo(x1, y1)
+            }
+            ctx.stroke()
+          }
+        }
+        
+        ctx.restore()
+      }
+    }
     
     // Draw connection handles and wire in edit mode
     if (edit) {
@@ -2577,153 +3750,8 @@ export const ladderRenderer = {
             }
           }
           
-          // Build a list of all connection segments for crossing detection
-          // Horizontal segments: between source and destination on the same row
-          // Vertical segments: for cross-row connections, vertical line at dest column
-          const horizontalSegments = [] // { y, minX, maxX, srcId, destId }
-          const verticalSegments = [] // { x, minY, maxY, srcId, destId }
-          for (const conn of connections) {
-            let pairs = []
-            if (conn.sources && conn.destinations) {
-              for (const srcId of conn.sources) {
-                for (const destId of conn.destinations) {
-                  pairs.push({ srcId, destId })
-                }
-              }
-            } else if (conn.from && conn.to) {
-              pairs.push({ srcId: conn.from.id, destId: conn.to.id })
-            }
-            for (const { srcId, destId } of pairs) {
-              const srcBlk = blocks.find(b => b.id === srcId)
-              const destBlk = blocks.find(b => b.id === destId)
-              if (!srcBlk || !destBlk) continue
-              
-              const minX = Math.min(srcBlk.x, destBlk.x)
-              const maxX = Math.max(srcBlk.x, destBlk.x)
-              
-              if (srcBlk.y === destBlk.y) {
-                // Same row: horizontal segment
-                horizontalSegments.push({ y: srcBlk.y, minX, maxX, srcId, destId })
-              } else {
-                // Cross-row: horizontal segment at source row, vertical segment at dest column
-                horizontalSegments.push({ y: srcBlk.y, minX, maxX, srcId, destId })
-                const minY = Math.min(srcBlk.y, destBlk.y)
-                const maxY = Math.max(srcBlk.y, destBlk.y)
-                verticalSegments.push({ x: destBlk.x, minY, maxY, srcId, destId })
-              }
-            }
-          }
-          
-          // Function to check if two segments interleave (cross)
-          // Segments [a1, a2] and [b1, b2] interleave if one starts inside the other and ends outside
-          const segmentsInterleave = (a1, a2, b1, b2) => {
-            const aMin = Math.min(a1, a2)
-            const aMax = Math.max(a1, a2)
-            const bMin = Math.min(b1, b2)
-            const bMax = Math.max(b1, b2)
-            // Interleave: (aMin < bMin < aMax < bMax) or (bMin < aMin < bMax < aMax)
-            return (aMin < bMin && bMin < aMax && aMax < bMax) ||
-                   (bMin < aMin && aMin < bMax && bMax < aMax)
-          }
-          
-          // Function to check if there's a clear path for a connection
-          // sourceBlock is always to the LEFT, destBlock is always to the RIGHT
-          const isPathClear = (sourceBlock, destBlock) => {
-            const srcX = sourceBlock.x
-            const srcY = sourceBlock.y
-            const destX = destBlock.x
-            const destY = destBlock.y
-            
-            // Destination must always be strictly to the right of source
-            if (destX <= srcX) return false
-            
-            // Check if there are any BLOCKS in the horizontal path (same row as source)
-            // The horizontal segment goes from srcX+1 to destX-1 (exclusive of endpoints)
-            for (const blk of blocks) {
-              if (blk.id === sourceBlock.id || blk.id === destBlock.id) continue
-              // Block is on source row and between source and dest columns
-              if (blk.y === srcY && blk.x > srcX && blk.x < destX) {
-                return false // Block in horizontal path
-              }
-            }
-            
-            // For cross-row connections, check vertical path
-            if (srcY !== destY) {
-              const minY = Math.min(srcY, destY)
-              const maxY = Math.max(srcY, destY)
-              
-              // Check if there are blocks in the vertical path at destX column
-              // The vertical segment is at column destX, from srcY to destY (exclusive of destY which is the target)
-              for (const blk of blocks) {
-                if (blk.id === sourceBlock.id || blk.id === destBlock.id) continue
-                // Block is at dest column and between source and dest rows (exclusive)
-                if (blk.x === destX && blk.y > minY && blk.y < maxY) {
-                  return false // Block in vertical path
-                }
-              }
-            }
-            
-            // Check if horizontal segment at source row crosses any VERTICAL connection lines
-            // A vertical segment exists for each cross-row connection at the dest column
-            for (const vseg of verticalSegments) {
-              // Skip if this vertical segment is at source or dest column (endpoints)
-              if (vseg.x <= srcX || vseg.x >= destX) continue
-              // Skip if vertical segment doesn't pass through source row
-              if (srcY < vseg.minY || srcY > vseg.maxY) continue
-              // Skip segments connected to source or dest
-              if (vseg.srcId === sourceBlock.id || vseg.destId === sourceBlock.id) continue
-              if (vseg.srcId === destBlock.id || vseg.destId === destBlock.id) continue
-              // Horizontal path crosses this vertical segment
-              return false
-            }
-            
-            // Now check horizontal connection line crossings
-            // For same-row connections, check for interleaving with existing same-row segments
-            if (srcY === destY) {
-              for (const seg of horizontalSegments) {
-                if (seg.y !== srcY) continue
-                // Skip segments that share an endpoint with our new connection
-                if (seg.srcId === sourceBlock.id || seg.destId === sourceBlock.id) continue
-                if (seg.srcId === destBlock.id || seg.destId === destBlock.id) continue
-                
-                // Check for interleaving
-                if (segmentsInterleave(srcX, destX, seg.minX, seg.maxX)) {
-                  return false
-                }
-              }
-              return true
-            }
-            
-            // For cross-row connections, check if the L-shaped path would cross any existing connections
-            // Check horizontal segment for interleaving with same-row connections at srcY
-            for (const seg of horizontalSegments) {
-              if (seg.y === srcY) {
-                // Skip segments that share an endpoint
-                if (seg.srcId === sourceBlock.id || seg.destId === sourceBlock.id) continue
-                if (seg.srcId === destBlock.id || seg.destId === destBlock.id) continue
-                
-                // Check if our horizontal segment [srcX, destX] interleaves with existing segment
-                if (segmentsInterleave(srcX, destX, seg.minX, seg.maxX)) {
-                  return false
-                }
-              }
-            }
-            
-            // Check if the vertical segment at destX crosses any horizontal connections
-            const minY = Math.min(srcY, destY)
-            const maxY = Math.max(srcY, destY)
-            for (const seg of horizontalSegments) {
-              // If segment is on a row between start and end (exclusive of endpoints)
-              if (seg.y > minY && seg.y < maxY) {
-                // Check if destX is strictly inside this segment (would cross it)
-                if (destX > seg.minX && destX < seg.maxX) {
-                  return false
-                }
-              }
-            }
-            
-            return true
-          }
+          // Use centralized connection segments from path routing system
+          const segments = getConnectionSegments(editor, block)
           
           blocks.forEach(b => {
             // Skip the origin block
@@ -2742,7 +3770,7 @@ export const ladderRenderer = {
             // When dragging from RIGHT side: startBlock is SOURCE, looking for DESTINATIONS to the right
             if (startSide === 'right' && b.x > startBlock.x) {
               // Check if path from startBlock (source) to b (dest) is clear
-              if (!isPathClear(startBlock, b)) return
+              if (!isConnectionPathClear(startBlock, b, blocks, segments)) return
               
               // Show left-side handle (input side) of destination
               ctx.beginPath()
@@ -2757,7 +3785,7 @@ export const ladderRenderer = {
             // When dragging from LEFT side: startBlock is DESTINATION, looking for SOURCES to the left
             if (startSide === 'left' && b.x < startBlock.x) {
               // Check if path from b (source) to startBlock (dest) is clear
-              if (!isPathClear(b, startBlock)) return
+              if (!isConnectionPathClear(b, startBlock, blocks, segments)) return
               
               // Show right-side handle (output side) of source
               ctx.beginPath()
@@ -2848,7 +3876,11 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     wire_start_side: null, // 'left' or 'right'
     wire_end_x: 0,
     wire_end_y: 0,
-    snapped_block: null
+    snapped_block: null,
+    // Selected connection pairs: array of {srcId, destId}
+    selected_connections: [],
+    // Flag to prevent click handler after connection selection
+    just_selected_connection: false
   }
   const connState = editor.ladder_connection_state[ladderId]
 
@@ -2883,6 +3915,8 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   let end_y = 0
   let temp_x = 0
   let temp_y = 0
+  let move_offset_x = 0 // Offset from cursor to origin when drag started
+  let move_offset_y = 0
 
   /** @type { PLC_Symbol | undefined } */
   let selected_for_toggle = undefined
@@ -2938,6 +3972,10 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     const live = editor.device_manager.connected && !!editor.window_manager?.isMonitoringActive?.()
     const edit = !live
     
+    // Mouse position in canvas coordinates (scaled)
+    const mouseCanvasX = start_x * getScale()
+    const mouseCanvasY = start_y * getScale()
+    
     if (edit) {
       // Only allow wire drag from the first selected block (where handles are visible)
       const selected = editor.ladder_selection?.ladder_id === ladderId ? editor.ladder_selection.selection : []
@@ -2954,10 +3992,6 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         const leftHandleX = block.x * blockWidth
         const rightHandleX = (block.x + 1) * blockWidth
         const handleY = block.y * blockHeight + blockHeight / 2
-        
-        // Mouse position in canvas coordinates (scaled)
-        const mouseCanvasX = start_x * getScale()
-        const mouseCanvasY = start_y * getScale()
         
         const handleRadius = 8 // pixels in canvas space
         const clickRadius = handleRadius * 2 // detection radius
@@ -2991,7 +4025,75 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           return
         }
       }
+      
+      // Check if clicking on a connection line
+      const clickGridX = mouseCanvasX / getBlockWidth()
+      const clickGridY = mouseCanvasY / getBlockHeight()
+      const connectionHit = findConnectionAtPoint(editor, ladder, clickGridX, clickGridY)
+      
+      if (connectionHit && connectionHit.pairs.length > 0) {
+        const ctrl = event.ctrlKey || event.metaKey
+        const shift = event.shiftKey
+        
+        // If SHIFT or CTRL is held and there are selected cells, don't select connections
+        const hasCellSelection = editor.ladder_selection?.ladder_id === ladderId && 
+                                  editor.ladder_selection.selection?.length > 0
+        if ((shift || ctrl) && hasCellSelection) {
+          // Skip connection selection when adding to cell selection
+        } else {
+        // Get current selection
+        const currentSelection = connState.selected_connections || []
+        
+        if (ctrl) {
+          // CTRL+CLICK: Toggle selection (add if not selected, remove if selected)
+          const newSelection = [...currentSelection]
+          for (const pair of connectionHit.pairs) {
+            const idx = newSelection.findIndex(p => p.srcId === pair.srcId && p.destId === pair.destId)
+            if (idx >= 0) {
+              newSelection.splice(idx, 1) // Remove if exists
+            } else {
+              newSelection.push(pair) // Add if not exists
+            }
+          }
+          connState.selected_connections = newSelection
+        } else if (shift) {
+          // SHIFT+CLICK: Add to selection (only if not already selected)
+          const newSelection = [...currentSelection]
+          for (const pair of connectionHit.pairs) {
+            const exists = newSelection.some(p => p.srcId === pair.srcId && p.destId === pair.destId)
+            if (!exists) {
+              newSelection.push(pair)
+            }
+          }
+          connState.selected_connections = newSelection
+        } else {
+          // Regular click: Replace selection
+          connState.selected_connections = connectionHit.pairs
+        }
+        
+        connState.just_selected_connection = true
+        // Clear block selection when selecting connections
+        if (editor.ladder_selection?.ladder_id === ladderId) {
+          editor.ladder_selection.selection = []
+        }
+        ladderRenderer.render(editor, ladder)
+        return
+        }
+      }
+      
+      // If SHIFT/CTRL is held and connections are selected, don't allow cell selection
+      // (user is trying to add to connection selection but missed the wire)
+      const hasConnectionSelection = connState.selected_connections?.length > 0
+      const ctrl = event.ctrlKey || event.metaKey
+      const shift = event.shiftKey
+      if ((ctrl || shift) && hasConnectionSelection) {
+        // Don't proceed to cell selection - just return
+        return
+      }
     }
+    
+    // Clear connection selection when clicking elsewhere
+    connState.selected_connections = []
     
     is_dragging = true
 
@@ -3040,8 +4142,9 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       // Store original positions for ESC cancel
       moving_original_positions = elements.map(b => ({ id: b.id, x: b.x, y: b.y }))
       moving_original_selection = JSON.parse(JSON.stringify(editor.ladder_selection))
-      temp_x = x
-      temp_y = y
+      // Store the offset from click position to origin - this offset is preserved during entire drag
+      move_offset_x = editor.ladder_selection.origin.x - x
+      move_offset_y = editor.ladder_selection.origin.y - y
     }
   }
 
@@ -3116,6 +4219,16 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       connState.hover_x = hover_x_raw
       connState.hover_y = hover_y_raw
       
+      // Detect hovered connections (only when not dragging wire or blocks)
+      if (!connState.dragging_wire && !is_dragging && !is_moving) {
+        const clickGridX = (mouseX * getScale()) / getBlockWidth()
+        const clickGridY = (mouseY * getScale()) / getBlockHeight()
+        const connectionHit = findConnectionAtPoint(editor, ladder, clickGridX, clickGridY)
+        connState.hovered_connections = connectionHit?.pairs || []
+      } else {
+        connState.hovered_connections = []
+      }
+      
       // If dragging a connection wire, update the end position with snapping
       if (connState.dragging_wire) {
         const rawEndX = mouseX * getScale()
@@ -3153,130 +4266,8 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           }
         }
         
-        // Build connection segments for crossing detection
-        const horizontalSegments = [] // { y, minX, maxX, srcId, destId }
-        const verticalSegments = [] // { x, minY, maxY, srcId, destId }
-        for (const conn of connections) {
-          let pairs = []
-          if (conn.sources && conn.destinations) {
-            for (const srcId of conn.sources) {
-              for (const destId of conn.destinations) {
-                pairs.push({ srcId, destId })
-              }
-            }
-          } else if (conn.from && conn.to) {
-            pairs.push({ srcId: conn.from.id, destId: conn.to.id })
-          }
-          for (const { srcId, destId } of pairs) {
-            const srcBlk = ladder.blocks.find(b => b.id === srcId)
-            const destBlk = ladder.blocks.find(b => b.id === destId)
-            if (!srcBlk || !destBlk) continue
-            
-            // Horizontal segment at source row (from source to dest column)
-            const minX = Math.min(srcBlk.x, destBlk.x)
-            const maxX = Math.max(srcBlk.x, destBlk.x)
-            horizontalSegments.push({ y: srcBlk.y, minX, maxX, srcId, destId })
-            
-            // For cross-row connections, add vertical segment at dest column
-            if (srcBlk.y !== destBlk.y) {
-              const minY = Math.min(srcBlk.y, destBlk.y)
-              const maxY = Math.max(srcBlk.y, destBlk.y)
-              verticalSegments.push({ x: destBlk.x, minY, maxY, srcId, destId })
-            }
-          }
-        }
-        
-        // Function to check if two segments interleave (cross)
-        const segmentsInterleave = (a1, a2, b1, b2) => {
-          const aMin = Math.min(a1, a2)
-          const aMax = Math.max(a1, a2)
-          const bMin = Math.min(b1, b2)
-          const bMax = Math.max(b1, b2)
-          // Interleave: (aMin < bMin < aMax < bMax) or (bMin < aMin < bMax < aMax)
-          return (aMin < bMin && bMin < aMax && aMax < bMax) ||
-                 (bMin < aMin && aMin < bMax && bMax < aMax)
-        }
-        
-        // Function to check if path is clear (no blocks or crossing connections)
-        const isPathClear = (sourceBlock, destBlock) => {
-          const srcX = sourceBlock.x
-          const srcY = sourceBlock.y
-          const destX = destBlock.x
-          const destY = destBlock.y
-          
-          // Destination must be strictly to the right
-          if (destX <= srcX) return false
-          
-          // Check for blocks in horizontal path at source row
-          for (const blk of ladder.blocks) {
-            if (blk.id === sourceBlock.id || blk.id === destBlock.id) continue
-            if (blk.y === srcY && blk.x > srcX && blk.x < destX) {
-              return false
-            }
-          }
-          
-          // Check if horizontal segment at source row crosses any VERTICAL connection lines
-          for (const vseg of verticalSegments) {
-            // Vertical segment must be between source and dest columns (exclusive)
-            if (vseg.x <= srcX || vseg.x >= destX) continue
-            // Source row must be within the vertical segment's range
-            if (srcY < vseg.minY || srcY > vseg.maxY) continue
-            // Skip segments connected to source or dest
-            if (vseg.srcId === sourceBlock.id || vseg.destId === sourceBlock.id) continue
-            if (vseg.srcId === destBlock.id || vseg.destId === destBlock.id) continue
-            return false
-          }
-          
-          // For cross-row, check vertical path at dest column
-          if (srcY !== destY) {
-            const minY = Math.min(srcY, destY)
-            const maxY = Math.max(srcY, destY)
-            for (const blk of ladder.blocks) {
-              if (blk.id === sourceBlock.id || blk.id === destBlock.id) continue
-              if (blk.x === destX && blk.y > minY && blk.y < maxY) {
-                return false
-              }
-            }
-          }
-          
-          // Check connection line crossings
-          // Same-row: check interleaving with horizontal segments
-          if (srcY === destY) {
-            for (const seg of horizontalSegments) {
-              if (seg.y !== srcY) continue
-              if (seg.srcId === sourceBlock.id || seg.destId === sourceBlock.id) continue
-              if (seg.srcId === destBlock.id || seg.destId === destBlock.id) continue
-              if (segmentsInterleave(srcX, destX, seg.minX, seg.maxX)) {
-                return false
-              }
-            }
-            return true
-          }
-          
-          // Cross-row: check horizontal segment at source row
-          for (const seg of horizontalSegments) {
-            if (seg.y === srcY) {
-              if (seg.srcId === sourceBlock.id || seg.destId === sourceBlock.id) continue
-              if (seg.srcId === destBlock.id || seg.destId === destBlock.id) continue
-              if (segmentsInterleave(srcX, destX, seg.minX, seg.maxX)) {
-                return false
-              }
-            }
-          }
-          
-          // Check vertical segment crossing horizontal connections
-          const minY = Math.min(srcY, destY)
-          const maxY = Math.max(srcY, destY)
-          for (const seg of horizontalSegments) {
-            if (seg.y > minY && seg.y < maxY) {
-              if (destX > seg.minX && destX < seg.maxX) {
-                return false
-              }
-            }
-          }
-          
-          return true
-        }
+        // Use centralized connection segments from path routing system
+        const segments = getConnectionSegments(editor, ladder)
         
         ladder.blocks.forEach(b => {
           if (b.id === startBlock.id) return
@@ -3288,7 +4279,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           
           // When dragging from RIGHT side: startBlock is SOURCE, looking for DESTINATIONS to the right
           if (startSide === 'right' && b.x > startBlock.x) {
-            if (!isPathClear(startBlock, b)) return
+            if (!isConnectionPathClear(startBlock, b, ladder.blocks, segments)) return
             
             const targetX = b.x * blockWidth
             const dist = Math.sqrt((rawEndX - targetX) ** 2 + (rawEndY - y_mid) ** 2)
@@ -3301,7 +4292,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           
           // When dragging from LEFT side: startBlock is DESTINATION, looking for SOURCES to the left
           if (startSide === 'left' && b.x < startBlock.x) {
-            if (!isPathClear(b, startBlock)) return
+            if (!isConnectionPathClear(b, startBlock, ladder.blocks, segments)) return
             
             const targetX = (b.x + 1) * blockWidth
             const dist = Math.sqrt((rawEndX - targetX) ** 2 + (rawEndY - y_mid) ** 2)
@@ -3355,7 +4346,10 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         }
       }
       
-      canvas.style.cursor = hoveringHandle ? 'pointer' : 'default'
+      // Check if hovering over a connection
+      const hoveringConnection = connState.hovered_connections?.length > 0
+      
+      canvas.style.cursor = (hoveringHandle || hoveringConnection) ? 'pointer' : 'default'
       
       // Trigger redraw to show/hide connection handles
       ladderRenderer.render(editor, ladder)
@@ -3372,40 +4366,42 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     if (distance < 10) return // Don't start dragging until the distance is greater than 10
 
     if (is_moving) {
-      // Move the selection
+      // Move the selection - always compute absolute target position
       // Calculate current cursor cell position
       const cursor_x_block = Math.floor(end_x * getScale() / getBlockWidth())
       const cursor_y_block = Math.floor(end_y * getScale() / getBlockHeight())
       
-      const start_cell_x = temp_x
-      const start_cell_y = temp_y
-    
+      // Target origin = cursor + offset (offset was computed at drag start)
+      let target_origin_x = cursor_x_block + move_offset_x
+      let target_origin_y = cursor_y_block + move_offset_y
+      
+      // Calculate the bounds of all moving elements to prevent moving into negative
+      let minX = Infinity, minY = Infinity
+      for (const b of moving_elements) {
+        if (!b) continue
+        if (b.x < minX) minX = b.x
+        if (b.y < minY) minY = b.y
+      }
+      
+      // Calculate how far min element is from current origin
       const current_origin_x = editor.ladder_selection.origin.x
       const current_origin_y = editor.ladder_selection.origin.y
+      const minOffsetX = minX - current_origin_x
+      const minOffsetY = minY - current_origin_y
       
-      // Let me try a cleaner approach: always compute from start
-      const total_dx = cursor_x_block - start_cell_x
-      const total_dy = cursor_y_block - start_cell_y
-      
-      // How much have we already moved?
-      const already_dx = current_origin_x - start_cell_x
-      const already_dy = current_origin_y - start_cell_y
-      
-      // How much more do we need to move?
-      let dx = total_dx - already_dx
-      let dy = total_dy - already_dy
-      
-      // Clamp target to valid range
-      let target_x = current_origin_x + dx
-      let target_y = current_origin_y + dy
-      if (target_x < 0) {
-        dx = -current_origin_x
-        target_x = 0
+      // Clamp target origin so no element goes into negative
+      // minElement's new position = target_origin + minOffset >= 0
+      // target_origin >= -minOffset
+      if (target_origin_x + minOffsetX < 0) {
+        target_origin_x = -minOffsetX
       }
-      if (target_y < 0) {
-        dy = -current_origin_y
-        target_y = 0
+      if (target_origin_y + minOffsetY < 0) {
+        target_origin_y = -minOffsetY
       }
+      
+      // Calculate delta from current to target
+      let dx = target_origin_x - current_origin_x
+      let dy = target_origin_y - current_origin_y
       
       // Skip if no movement
       if (dx === 0 && dy === 0) return
@@ -3500,6 +4496,14 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     const ctrl = event.ctrlKey
     const shift = event.shiftKey
     const ctrl_or_shift = ctrl || shift
+    
+    // If SHIFT is held and there are selected connections, don't modify cell selection
+    const hasConnectionSelection = connState.selected_connections?.length > 0
+    if (ctrl_or_shift && hasConnectionSelection) {
+      // Skip cell selection when adding to connection selection
+      return
+    }
+    
     if (ctrl_or_shift && editor.ladder_selection?.ladder_id === ladderId) {
       const exists = editor.ladder_selection.selection.find(sel => sel.type === 'area' && sel.x === x && sel.y === y)
       if (exists && exists.type === 'area') {
@@ -3627,6 +4631,12 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       was_dragging_wire = false
       return
     }
+    
+    // Skip click handler if we just selected a connection
+    if (connState.just_selected_connection) {
+      connState.just_selected_connection = false
+      return
+    }
 
     if (was_dragging) {
       was_dragging = false
@@ -3647,6 +4657,14 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
 
     const ctrl = event.ctrlKey
     const shift = event.shiftKey
+    
+    // If SHIFT is held and there are selected connections, don't modify cell selection
+    const hasConnectionSelection = connState.selected_connections?.length > 0
+    if ((shift || ctrl) && hasConnectionSelection) {
+      // Skip cell selection when adding to connection selection
+      ladderRenderer.render(editor, ladder)
+      return
+    }
     
     if (shift && editor.ladder_selection?.ladder_id === ladderId) {
       // SHIFT+click: Extend selection from origin to clicked cell
@@ -3672,6 +4690,9 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       }
     } else {
       // Normal click: Start new selection at clicked cell
+      // Clear connection selection when starting a new cell selection
+      connState.selected_connections = []
+      
       editor.ladder_selection = {
         ladder_id: ladderId,
         program_id: ladder.program_id || '',
@@ -4355,6 +5376,14 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         e.stopPropagation()
         return
       }
+      // Clear connection selection on ESC
+      if (connState.selected_connections && connState.selected_connections.length > 0) {
+        connState.selected_connections = []
+        ladderRenderer.render(editor, ladder)
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
       // Otherwise, deselect everything
       if (editor.ladder_selection?.ladder_id === ladderId) {
         editor.ladder_selection.selection = []
@@ -4553,8 +5582,19 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     }
 
     if (key === 'delete' || key === 'backspace') {
-      // If we are editing text (like prompt), don't delete block?
-      // Since prompt is a separate DOM element usually, this event typically won't fire on canvas if prompt has focus.
+      // Check if we have selected connections to delete
+      const connState = editor.ladder_connection_state?.[ladderId]
+      if (connState && connState.selected_connections?.length > 0) {
+        // Delete selected connections
+        deleteSelectedConnections(editor, ladder, connState.selected_connections)
+        connState.selected_connections = []
+        ladderRenderer.render(editor, ladder)
+        triggerLint()
+        e.preventDefault()
+        return
+      }
+      
+      // Otherwise delete selected blocks
       deleteSelection(editor, ladder)
       ladderRenderer.render(editor, ladder)
       triggerLint()
@@ -4794,6 +5834,80 @@ function deleteSelection(editor, ladder, contextX, contextY) {
   if (editor.ladder_selection && blocksToDelete.length > 0) {
     editor.ladder_selection.selection = []
   }
+}
+
+/**
+ * Delete selected connection pairs from the ladder
+ * @param {VovkPLCEditor} editor 
+ * @param {PLC_Ladder} ladder 
+ * @param {Array<{srcId: string, destId: string}>} pairs - Connection pairs to delete
+ */
+function deleteSelectedConnections(editor, ladder, pairs) {
+  if (!pairs || pairs.length === 0) return
+  
+  // Create a set for quick lookup
+  const pairsToDelete = new Set(pairs.map(p => `${p.srcId}->${p.destId}`))
+  
+  // Filter connections
+  ladder.connections = ladder.connections.filter(c => {
+    // Legacy format: { from: {id}, to: {id} }
+    if (c.from && c.to) {
+      const key = `${c.from.id}->${c.to.id}`
+      return !pairsToDelete.has(key)
+    }
+    
+    // New grouped format: { sources: [], destinations: [] }
+    if (c.sources && c.destinations) {
+      // Remove individual pairs from grouped connection
+      const remainingSources = new Set(c.sources)
+      const remainingDests = new Set(c.destinations)
+      
+      for (const pair of pairs) {
+        if (c.sources.includes(pair.srcId) && c.destinations.includes(pair.destId)) {
+          // This grouped connection contains this pair
+          // For simplicity, we'll convert to individual connections and filter
+          // TODO: More sophisticated handling for partial group removal
+        }
+      }
+      
+      // For now, remove entire grouped connection if any pair matches
+      for (const srcId of c.sources) {
+        for (const destId of c.destinations) {
+          if (pairsToDelete.has(`${srcId}->${destId}`)) {
+            // Remove this specific pair from the group
+            // If it results in empty arrays, remove the whole connection
+          }
+        }
+      }
+      
+      // Simple approach: expand to legacy, filter, and keep
+      const expanded = []
+      for (const srcId of c.sources) {
+        for (const destId of c.destinations) {
+          const key = `${srcId}->${destId}`
+          if (!pairsToDelete.has(key)) {
+            expanded.push({ srcId, destId })
+          }
+        }
+      }
+      
+      if (expanded.length === 0) {
+        return false // Remove entire connection
+      }
+      
+      // Rebuild the grouped connection with remaining pairs
+      const newSources = [...new Set(expanded.map(e => e.srcId))]
+      const newDests = [...new Set(expanded.map(e => e.destId))]
+      c.sources = newSources
+      c.destinations = newDests
+      return true
+    }
+    
+    return true
+  })
+  
+  // Invalidate path cache since connections changed
+  connectionPathCache.delete(ladder.id || 'unknown')
 }
 
 /**
