@@ -2115,6 +2115,9 @@ export const ladderRenderer = {
     // Draw diagnostic highlights (errors/warnings from linting) - drawn AFTER selection so they're visible
     const diagnostics = props.diagnostics || []
     if (diagnostics.length > 0) {
+      // Group diagnostics by cell position, prioritizing errors over warnings
+      const cellDiagMap = new Map() // key: "x,y", value: { hasError: bool, hasWarning: bool }
+      
       for (const diag of diagnostics) {
         let cellX = diag.fallbackCellX ?? 0
         let cellY = diag.fallbackCellY ?? 0
@@ -2126,7 +2129,6 @@ export const ladderRenderer = {
           const connMatch = token.match(/^c\[(\d+)\]$/)
           if (connMatch) {
             // Connection - we can't highlight connections directly, skip or use fallback
-            // For now, skip connection diagnostics in visual highlighting
             continue
           } else {
             // Token is a node ID - find the node's current position
@@ -2138,7 +2140,20 @@ export const ladderRenderer = {
           }
         }
         
-        const isError = diag.type === 'error'
+        const key = `${cellX},${cellY}`
+        if (!cellDiagMap.has(key)) {
+          cellDiagMap.set(key, { cellX, cellY, hasError: false, hasWarning: false })
+        }
+        const cell = cellDiagMap.get(key)
+        if (diag.type === 'error') cell.hasError = true
+        else cell.hasWarning = true
+      }
+      
+      // Draw each cell only once - error style takes priority over warning
+      for (const cell of cellDiagMap.values()) {
+        const { cellX, cellY, hasError } = cell
+        // If cell has error, show error style; otherwise show warning style
+        const isError = hasError
         
         // Draw semi-transparent red/yellow background for problem cells
         ctx.fillStyle = isError ? 'rgba(255, 80, 80, 0.35)' : 'rgba(255, 200, 0, 0.3)'
@@ -2603,6 +2618,13 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       })
       
       if (cellDiags.length > 0) {
+        // Sort diagnostics: errors first, then warnings
+        cellDiags.sort((a, b) => {
+          if (a.type === 'error' && b.type !== 'error') return -1
+          if (a.type !== 'error' && b.type === 'error') return 1
+          return 0
+        })
+        
         // Build tooltip content
         const messages = cellDiags.map(d => {
           const icon = d.type === 'error' ? '⛔' : '⚠️'
