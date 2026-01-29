@@ -3233,7 +3233,10 @@ export const ladderRenderer = {
 
                 // 3. If PLCASM requested, compile STL to ASM
                 if (action === 'view_asm') {
-                  const asmResult = await editor.runtime.compile(finalOutput, { language: 'stl' })
+                  if (!editor.runtime.compileSTL) {
+                    throw new Error('STL compiler not available')
+                  }
+                  const asmResult = await editor.runtime.compileSTL(finalOutput)
                   if (!asmResult || typeof asmResult.output !== 'string') {
                     throw new Error('STL compilation failed to produce PLCASM')
                   }

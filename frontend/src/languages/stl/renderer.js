@@ -139,12 +139,10 @@ export const stlRenderer = {
                 if (editor.context_manager) {
                     editor.context_manager.show(e, items, async () => {
                         try {
-                            if (!editor.runtime || !editor.runtime.compile) {
+                            if (!editor.runtime || !editor.runtime.compileSTL) {
                                 throw new Error("Runtime compiler not available")
                             }
-                            const result = await editor.runtime.compile(block.code, {
-                                language: 'stl'
-                            })
+                            const result = await editor.runtime.compileSTL(block.code)
                             
                             if (result && typeof result.output === 'string') {
                                 const pre = document.createElement('pre')
