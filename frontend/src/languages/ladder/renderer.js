@@ -2095,6 +2095,30 @@ export const ladderRenderer = {
       block_container.appendChild(diagTooltip)
       props.diagTooltip = diagTooltip
 
+      // API functions for problem panel integration
+      props.setHoverHighlightCell = (cell) => {
+        props.hoverHighlightCell = cell
+        ladderRenderer.render(editor, block)
+      }
+      
+      props.clearHoverHighlightCell = () => {
+        props.hoverHighlightCell = null
+        ladderRenderer.render(editor, block)
+      }
+      
+      props.selectCell = (x, y) => {
+        // Set the ladder selection to this cell
+        editor.ladder_selection = {
+          ladder_id: ladderId,
+          program_id: block.program_id || null,
+          origin: { x, y },
+          selection: [{ type: 'block', x, y }]
+        }
+        ladderRenderer.render(editor, block)
+        // Focus the canvas so ESC and blur events work
+        canvas.focus()
+      }
+
       // Initialize event handlers (only once)
       initializeEventHandlers(editor, block, canvas, style)
 
@@ -2226,6 +2250,18 @@ export const ladderRenderer = {
       }
     }
 
+    // Draw problem hover highlight (from problem panel)
+    const hoverCell = props.hoverHighlightCell
+    if (hoverCell && typeof hoverCell.x === 'number' && typeof hoverCell.y === 'number') {
+      const { x: hoverX, y: hoverY } = hoverCell
+      ctx.fillStyle = 'rgba(100, 150, 255, 0.3)'
+      ctx.fillRect(hoverX * ladder_block_width, hoverY * ladder_block_height, ladder_block_width, ladder_block_height)
+      ctx.strokeStyle = '#68f'
+      ctx.lineWidth = 3
+      ctx.setLineDash([])
+      ctx.strokeRect(hoverX * ladder_block_width + 1, hoverY * ladder_block_height + 1, ladder_block_width - 2, ladder_block_height - 2)
+    }
+
     // Draw grid
     ctx.strokeStyle = grid_color
     ctx.lineWidth = 0.5
@@ -2242,18 +2278,15 @@ export const ladderRenderer = {
     }
     ctx.stroke()
 
-    // Check if this ladder has a selection and highlight the first selected block origin
+    // Check if this ladder has a selection and highlight the origin (primary selected cell)
     if (hasSelection && selection.length > 0) {
-      const first_block = selection.find(s => s.type === 'block' || s.type === 'area')
-      if (first_block) {
-        const { x, y } = first_block
-        ctx.strokeStyle = select_highlight_color
-        ctx.lineWidth = 3
-        ctx.setLineDash([])
-        ctx.beginPath()
-        ctx.strokeRect(x * ladder_block_width, y * ladder_block_height, ladder_block_width, ladder_block_height)
-        ctx.stroke()
-      }
+      const origin = editor.ladder_selection?.origin || { x: 0, y: 0 }
+      ctx.strokeStyle = select_highlight_color
+      ctx.lineWidth = 3
+      ctx.setLineDash([6, 4])
+      ctx.beginPath()
+      ctx.strokeRect(origin.x * ladder_block_width, origin.y * ladder_block_height, ladder_block_width, ladder_block_height)
+      ctx.stroke()
     }
 
     ctx.setLineDash([])
@@ -2310,19 +2343,20 @@ export const ladderRenderer = {
         const hover_y = connState.hover_y
         const handleRadius = 8
         
-        // Get the first selected block (if any) to show connection handles only on it
-        const firstSelectedBlock = selection.length > 0 
-          ? blocks.find(b => b.x === selection[0].x && b.y === selection[0].y)
+        // Get the origin (primary selected) block to show connection handles on it
+        const origin = editor.ladder_selection?.origin
+        const originBlock = origin 
+          ? blocks.find(b => b.x === origin.x && b.y === origin.y)
           : null
         
-        // Only show connection handles when dragging (for drop targets) or on first selected block
+        // Only show connection handles when dragging (for drop targets) or on origin block
         const isDragging = connState.dragging_wire
         const startBlock = connState.wire_start_block
         const startSide = connState.wire_start_side
         
-        // Draw handles on first selected block
-        if (firstSelectedBlock && !isDragging) {
-          const b = firstSelectedBlock
+        // Draw handles on origin (primary selected) block
+        if (originBlock && !isDragging) {
+          const b = originBlock
           const x0 = b.x * ladder_block_width
           const y_mid = b.y * ladder_block_height + ladder_block_height / 2
           const x1 = x0 + ladder_block_width
@@ -2896,7 +2930,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     const width = Math.abs(cellEndX - cellStartX) + 1
     const height = Math.abs(cellEndY - cellStartY) + 1
 
-    // Update selection area
+    // Update selection area - origin is always where the drag started (primary selection cell)
     const ctrl = event.ctrlKey
     const shift = event.shiftKey
     const ctrl_or_shift = ctrl || shift
@@ -2906,15 +2940,17 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         exists.width = width
         exists.height = height
       } else {
-        if (editor.ladder_selection.origin.x > x) editor.ladder_selection.origin.x = x
-        if (editor.ladder_selection.origin.y > y) editor.ladder_selection.origin.y = y
+        // Keep origin at the starting cell, not normalized top-left
         editor.ladder_selection.selection.push({ type: 'area', x, y, width, height })
       }
+      // Update cursor to current drag end position
+      editor.ladder_selection.cursor = { x: cellEndX, y: cellEndY }
     } else {
       editor.ladder_selection = {
         ladder_id: ladderId,
         program_id: ladder.program_id || '',
-        origin: { x, y },
+        origin: { x: cellStartX, y: cellStartY }, // Origin is where drag started
+        cursor: { x: cellEndX, y: cellEndY }, // Cursor is where drag ended
         selection: [{ type: 'area', x, y, width, height }]
       }
     }
@@ -3037,35 +3073,37 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
 
     const ctrl = event.ctrlKey
     const shift = event.shiftKey
-    const ctrl_or_shift = ctrl || shift
-    if (ctrl_or_shift && editor.ladder_selection?.ladder_id === ladderId) {
+    
+    if (shift && editor.ladder_selection?.ladder_id === ladderId) {
+      // SHIFT+click: Extend selection from origin to clicked cell
+      const origin = editor.ladder_selection.origin || { x, y }
+      const minX = Math.min(origin.x, x)
+      const maxX = Math.max(origin.x, x)
+      const minY = Math.min(origin.y, y)
+      const maxY = Math.max(origin.y, y)
+      const width = maxX - minX + 1
+      const height = maxY - minY + 1
+      
+      editor.ladder_selection.selection = [{ type: 'area', x: minX, y: minY, width, height }]
+      // Set cursor to clicked position
+      editor.ladder_selection.cursor = { x, y }
+    } else if (ctrl && editor.ladder_selection?.ladder_id === ladderId) {
+      // CTRL+click: Toggle individual block in selection
       const exists = editor.ladder_selection.selection.some(sel => sel.type === 'block' && sel.x === x && sel.y === y)
       if (exists) {
-        if (ctrl) {
-          // Remove selected block
-          editor.ladder_selection.selection = editor.ladder_selection.selection.filter(sel => !(sel.type === 'block' && sel.x === x && sel.y === y))
-        }
+        // Remove selected block
+        editor.ladder_selection.selection = editor.ladder_selection.selection.filter(sel => !(sel.type === 'block' && sel.x === x && sel.y === y))
       } else {
-        if (editor.ladder_selection.origin.x > x) editor.ladder_selection.origin.x = x
-        if (editor.ladder_selection.origin.y > y) editor.ladder_selection.origin.y = y
         editor.ladder_selection.selection.push({ type: 'block', x, y })
       }
     } else {
-      if (editor.ladder_selection?.selection?.[0]?.type === 'area') {
-        // Deselect the area selection first
-        editor.ladder_selection = {
-          ladder_id: ladderId,
-          program_id: ladder.program_id || '',
-          origin: { x, y },
-          selection: []
-        }
-      } else {
-        editor.ladder_selection = {
-          ladder_id: ladderId,
-          program_id: ladder.program_id || '',
-          origin: { x, y },
-          selection: [{ type: 'block', x, y }]
-        }
+      // Normal click: Start new selection at clicked cell
+      editor.ladder_selection = {
+        ladder_id: ladderId,
+        program_id: ladder.program_id || '',
+        origin: { x, y },
+        cursor: { x, y }, // Cursor starts at origin
+        selection: [{ type: 'block', x, y }]
       }
     }
     // Trigger redraw to show selection
@@ -3694,6 +3732,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   canvas.addEventListener('keydown', (e) => {
     const live = editor.device_manager.connected && !!editor.window_manager?.isMonitoringActive?.()
     const ctrl = e.ctrlKey || e.metaKey
+    const shift = e.shiftKey
     const key = e.key.toLowerCase()
 
     // Handle Escape (Always) to deselect
@@ -3705,6 +3744,163 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       }
       e.preventDefault()
       e.stopPropagation()
+      return
+    }
+
+    // Handle Arrow Keys for selection movement/expansion
+    const isArrowKey = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)
+    if (isArrowKey && editor.ladder_selection?.ladder_id === ladderId) {
+      e.preventDefault()
+      e.stopPropagation()
+      
+      const dx = key === 'arrowleft' ? -1 : key === 'arrowright' ? 1 : 0
+      const dy = key === 'arrowup' ? -1 : key === 'arrowdown' ? 1 : 0
+      
+      const selection = editor.ladder_selection.selection || []
+      const origin = editor.ladder_selection.origin || { x: 0, y: 0 }
+      
+      if (ctrl && !shift && !live) {
+        // CTRL + Arrow: Move selected blocks
+        const selected = selection.filter(s => s.type === 'block' || s.type === 'area')
+        if (selected.length === 0) return
+        
+        // Collect all blocks to move
+        const blocksToMove = []
+        const positions = new Set()
+        for (const sel of selected) {
+          if (sel.type === 'block') {
+            const block = ladder.blocks.find(b => b.x === sel.x && b.y === sel.y)
+            if (block) {
+              blocksToMove.push(block)
+              positions.add(`${sel.x},${sel.y}`)
+            }
+          } else if (sel.type === 'area') {
+            for (let bx = sel.x; bx < sel.x + sel.width; bx++) {
+              for (let by = sel.y; by < sel.y + sel.height; by++) {
+                const block = ladder.blocks.find(b => b.x === bx && b.y === by)
+                if (block && !positions.has(`${bx},${by}`)) {
+                  blocksToMove.push(block)
+                  positions.add(`${bx},${by}`)
+                }
+              }
+            }
+          }
+        }
+        
+        if (blocksToMove.length === 0) return
+        
+        // Check boundaries
+        const canMoveBounds = blocksToMove.every(b => {
+          const newX = b.x + dx
+          const newY = b.y + dy
+          return newX >= 0 && newY >= 0
+        })
+        
+        if (!canMoveBounds) return
+        
+        // Check for collisions with non-moving blocks
+        const movingIds = new Set(blocksToMove.map(b => b.id))
+        const nonMovingBlocks = ladder.blocks.filter(b => !movingIds.has(b.id))
+        
+        const proposedPositions = blocksToMove.map(b => ({
+          id: b.id,
+          x: b.x + dx,
+          y: b.y + dy
+        }))
+        
+        const hasCollision = proposedPositions.some(pos => 
+          nonMovingBlocks.some(b => b.x === pos.x && b.y === pos.y)
+        )
+        
+        if (hasCollision) return
+        
+        // Check connection constraints - connections cannot go backwards
+        const legacyConns = getLegacyConnections(ladder)
+        const hasConnectionViolation = proposedPositions.some(pos => {
+          // Find connections where this moving block is the source (connects TO something)
+          const outgoingToNonMoving = legacyConns.filter(c => 
+            c.from.id === pos.id && !movingIds.has(c.to.id)
+          )
+          for (const conn of outgoingToNonMoving) {
+            const targetBlock = nonMovingBlocks.find(b => b.id === conn.to.id)
+            if (targetBlock && pos.x >= targetBlock.x) return true
+          }
+          
+          // Find connections where this moving block is the target (something connects TO it)
+          const incomingFromNonMoving = legacyConns.filter(c => 
+            c.to.id === pos.id && !movingIds.has(c.from.id)
+          )
+          for (const conn of incomingFromNonMoving) {
+            const sourceBlock = nonMovingBlocks.find(b => b.id === conn.from.id)
+            if (sourceBlock && pos.x <= sourceBlock.x) return true
+          }
+          
+          return false
+        })
+        
+        if (hasConnectionViolation) return
+        
+        // Move blocks
+        blocksToMove.forEach(b => {
+          b.x += dx
+          b.y += dy
+        })
+        // Move selection
+        for (const sel of selected) {
+          sel.x += dx
+          sel.y += dy
+        }
+        editor.ladder_selection.origin.x += dx
+        editor.ladder_selection.origin.y += dy
+        connectTouchingBlocks(ladder)
+        ladderRenderer.render(editor, ladder)
+        triggerLint()
+      } else if (shift && !ctrl) {
+        // SHIFT + Arrow: Move virtual cursor to expand/change selection box
+        // Selection is always the box between origin and cursor
+        
+        // Get current cursor position - use stored cursor if available
+        let cursor = editor.ladder_selection.cursor 
+          ? { ...editor.ladder_selection.cursor }
+          : { x: origin.x, y: origin.y }
+        
+        // Move cursor
+        cursor.x += dx
+        cursor.y += dy
+        
+        // Clamp cursor to valid range
+        cursor.x = Math.max(0, cursor.x)
+        cursor.y = Math.max(0, cursor.y)
+        
+        // Create selection box between origin and cursor
+        const minX = Math.min(origin.x, cursor.x)
+        const maxX = Math.max(origin.x, cursor.x)
+        const minY = Math.min(origin.y, cursor.y)
+        const maxY = Math.max(origin.y, cursor.y)
+        const width = maxX - minX + 1
+        const height = maxY - minY + 1
+        
+        editor.ladder_selection.selection = [{ type: 'area', x: minX, y: minY, width, height }]
+        // Store cursor position for next SHIFT+arrow
+        editor.ladder_selection.cursor = cursor
+        ladderRenderer.render(editor, ladder)
+      } else if (!ctrl && !shift) {
+        // Plain Arrow: Move selection cursor (single cell)
+        let newX = origin.x + dx
+        let newY = origin.y + dy
+        
+        // Clamp to valid range
+        newX = Math.max(0, newX)
+        newY = Math.max(0, newY)
+        
+        editor.ladder_selection = {
+          ladder_id: ladderId,
+          program_id: ladder.program_id || '',
+          origin: { x: newX, y: newY },
+          selection: [{ type: 'block', x: newX, y: newY }]
+        }
+        ladderRenderer.render(editor, ladder)
+      }
       return
     }
 

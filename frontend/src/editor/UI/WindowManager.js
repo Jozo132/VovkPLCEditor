@@ -395,6 +395,10 @@ export default class WindowManager {
             if (this._activeProblemHover?.editor?.showLintTooltip) {
                 this._activeProblemHover.editor.showLintTooltip(null)
             }
+            // Clear ladder hover highlight
+            if (this._activeProblemHover?.ladder?.props?.clearHoverHighlightCell) {
+                this._activeProblemHover.ladder.props.clearHoverHighlightCell()
+            }
             this._activeProblemHover = null
         }
 
@@ -404,6 +408,26 @@ export default class WindowManager {
             }
             if (opts.hideTooltip && this._selectedProblemHighlight?.editor?.showLintTooltip) {
                 this._selectedProblemHighlight.editor.showLintTooltip(null)
+            }
+            // Clear ladder selection if it was set from problem panel
+            if (this._selectedProblemHighlight?.ladder) {
+                const ladder = this._selectedProblemHighlight.ladder
+                const editor = this.#editor
+                if (editor?.ladder_selection?.ladder_id === ladder.id) {
+                    editor.ladder_selection = {
+                        ladder_id: null,
+                        program_id: null,
+                        origin: { x: 0, y: 0 },
+                        selection: []
+                    }
+                    // Re-render the ladder to clear the visual selection
+                    if (ladder.props?.ctx) {
+                        const renderer = editor.language_manager?.getRenderer?.('ladder')
+                        if (renderer?.render) {
+                            renderer.render(editor, ladder)
+                        }
+                    }
+                }
             }
             this._selectedProblemHighlight = null
         }
@@ -636,7 +660,14 @@ export default class WindowManager {
                 const items = document.createElement('div')
                 items.className = 'plc-problems-group-items'
 
-                group.items.forEach(problem => {
+                // Sort items: errors first, then warnings
+                const sortedItems = [...group.items].sort((a, b) => {
+                    if (a.type === 'error' && b.type !== 'error') return -1
+                    if (a.type !== 'error' && b.type === 'error') return 1
+                    return 0
+                })
+
+                sortedItems.forEach(problem => {
                     const item = document.createElement('div')
                     item.className = `plc-problems-item ${problem.type || 'error'}`
 
@@ -677,7 +708,13 @@ export default class WindowManager {
                         }
 
                         const run = async () => {
-                            if (!problem.blockId || typeof problem.start !== 'number' || typeof problem.end !== 'number') return
+                            // For ladder blocks, we use token to find cell position
+                            const isLadderBlock = problem.blockType === 'ladder'
+                            
+                            // Text editors need start/end, ladder blocks can use token or line/column
+                            if (!problem.blockId) return
+                            if (!isLadderBlock && (typeof problem.start !== 'number' || typeof problem.end !== 'number')) return
+                            
                             const findTarget = () => {
                                 const programs = this.#editor?._getLintPrograms?.() || []
                                 for (const program of programs) {
@@ -762,6 +799,37 @@ export default class WindowManager {
                             if (focus) {
                                 scrollBlockIntoView(targetBlock.div, 0.33)
                                 await waitForLayout()
+                            }
+
+                            // Handle ladder blocks differently
+                            if (isLadderBlock) {
+                                // Resolve cell position from token or fallback to line/column
+                                let cellX = (problem.column || 1) - 1
+                                let cellY = (problem.line || 1) - 1
+                                
+                                if (problem.token) {
+                                    const nodes = targetBlock.nodes || targetBlock.blocks || []
+                                    const node = nodes.find(n => n.id === problem.token)
+                                    if (node) {
+                                        cellX = node.x
+                                        cellY = node.y
+                                    }
+                                }
+                                
+                                if (isSelected) {
+                                    // Select the cell
+                                    if (typeof targetBlock.props?.selectCell === 'function') {
+                                        targetBlock.props.selectCell(cellX, cellY)
+                                        this._selectedProblemHighlight = {ladder: targetBlock}
+                                    }
+                                } else {
+                                    // Hover highlight the cell
+                                    if (typeof targetBlock.props?.setHoverHighlightCell === 'function') {
+                                        targetBlock.props.setHoverHighlightCell({x: cellX, y: cellY})
+                                        this._activeProblemHover = {ladder: targetBlock}
+                                    }
+                                }
+                                return
                             }
 
                             const editor = await waitForEditor(targetBlock)
@@ -1586,6 +1654,14 @@ export default class WindowManager {
                 }
             }, { passive: false })
         }
+
+        // Clear problem selection when clicking anywhere in the program window area
+        window_frame.addEventListener('mousedown', (evt) => {
+            // Clear problem panel selection to focus on user interaction
+            if (typeof this.clearProblemSelection === 'function') {
+                this.clearProblemSelection()
+            }
+        }, { capture: true })
         
         this.#initPanelResizables(workspace)
         this.#initContextMenus(workspace)
