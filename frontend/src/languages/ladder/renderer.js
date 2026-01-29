@@ -112,6 +112,179 @@ export function connectTouchingBlocks(ladder) {
   }
 }
 
+/**
+ * Connect a newly added block to adjacent blocks, and split any existing connections
+ * that pass through this block's position.
+ * @param {PLC_Ladder} ladder 
+ * @param {object} newBlock - The newly added block with x, y, id properties
+ */
+export function connectNewBlock(ladder, newBlock) {
+  ensureLadderFormat(ladder)
+  const nodes = ladder.nodes || []
+  const connections = ladder.connections || []
+  
+  const newX = newBlock.x
+  const newY = newBlock.y
+  const newId = newBlock.id
+  
+  // Find adjacent blocks (left and right neighbors on the same row)
+  const leftNeighbor = nodes.find(n => n.x === newX - 1 && n.y === newY && n.id !== newId)
+  const rightNeighbor = nodes.find(n => n.x === newX + 1 && n.y === newY && n.id !== newId)
+  
+  // Collect all source->destination pairs that need to be split
+  // These are pairs where source is left of newX and destination is right of newX on the same row
+  const pairsToSplit = [] // { srcId, destId, connIndex }
+  const connectionsToRemove = new Set() // indices of connections to fully remove
+  
+  for (let i = 0; i < connections.length; i++) {
+    const conn = connections[i]
+    if (conn.sources && conn.destinations) {
+      // New grouped format - check each source->destination pair
+      for (const srcId of conn.sources) {
+        for (const destId of conn.destinations) {
+          const srcNode = nodes.find(n => n.id === srcId)
+          const destNode = nodes.find(n => n.id === destId)
+          if (srcNode && destNode && srcNode.y === newY && destNode.y === newY) {
+            if (srcNode.x < newX && destNode.x > newX) {
+              pairsToSplit.push({ srcId, destId, connIndex: i })
+            }
+          }
+        }
+      }
+    } else if (conn.from && conn.to) {
+      // Legacy format
+      const srcNode = nodes.find(n => n.id === conn.from.id)
+      const destNode = nodes.find(n => n.id === conn.to.id)
+      if (srcNode && destNode && srcNode.y === newY && destNode.y === newY) {
+        if (srcNode.x < newX && destNode.x > newX) {
+          pairsToSplit.push({ srcId: conn.from.id, destId: conn.to.id, connIndex: i, legacy: true })
+          connectionsToRemove.add(i) // Legacy connections are removed entirely
+        }
+      }
+    }
+  }
+  
+  // Process pairs to split - for grouped connections, we need to carefully handle them
+  const addedPairs = new Set()
+  const modifiedConnections = new Map() // connIndex -> { removedDests: Set, removedSrcs: Set }
+  
+  for (const { srcId, destId, connIndex, legacy } of pairsToSplit) {
+    if (legacy) {
+      // Legacy connections are handled by full removal (already added to connectionsToRemove)
+    } else {
+      // Track which pairs to remove from this grouped connection
+      if (!modifiedConnections.has(connIndex)) {
+        modifiedConnections.set(connIndex, { pairs: [] })
+      }
+      modifiedConnections.get(connIndex).pairs.push({ srcId, destId })
+    }
+    
+    // Add connection from source to new block (if not already added)
+    const pair1 = `${srcId}->${newId}`
+    if (!addedPairs.has(pair1)) {
+      connections.push({
+        id: `conn_${srcId}_${newId}_${Date.now()}`,
+        sources: [srcId],
+        destinations: [newId]
+      })
+      addedPairs.add(pair1)
+    }
+    
+    // Add connection from new block to destination (if not already added)
+    const pair2 = `${newId}->${destId}`
+    if (!addedPairs.has(pair2)) {
+      connections.push({
+        id: `conn_${newId}_${destId}_${Date.now()}`,
+        sources: [newId],
+        destinations: [destId]
+      })
+      addedPairs.add(pair2)
+    }
+  }
+  
+  // Now modify grouped connections - remove split pairs and handle empty arrays
+  for (const [connIndex, { pairs }] of modifiedConnections) {
+    const conn = connections[connIndex]
+    if (!conn || !conn.sources || !conn.destinations) continue
+    
+    // Build a set of pairs to remove
+    const pairsToRemoveFromConn = new Set(pairs.map(p => `${p.srcId}->${p.destId}`))
+    
+    // Rebuild the connection without the split pairs
+    // For simplicity, if ANY pairs were removed, convert to simple individual connections
+    const remainingPairs = []
+    for (const srcId of conn.sources) {
+      for (const destId of conn.destinations) {
+        const pairKey = `${srcId}->${destId}`
+        if (!pairsToRemoveFromConn.has(pairKey)) {
+          remainingPairs.push({ srcId, destId })
+        }
+      }
+    }
+    
+    if (remainingPairs.length === 0) {
+      // All pairs were split, remove the connection entirely
+      connectionsToRemove.add(connIndex)
+    } else {
+      // Update connection with remaining pairs
+      // Convert to simple source->destinations format for remaining pairs
+      const newSources = [...new Set(remainingPairs.map(p => p.srcId))]
+      const newDests = [...new Set(remainingPairs.map(p => p.destId))]
+      conn.sources = newSources
+      conn.destinations = newDests
+    }
+  }
+  
+  // Remove connections (in reverse order to preserve indices)
+  const indicesToRemove = [...connectionsToRemove].sort((a, b) => b - a)
+  for (const idx of indicesToRemove) {
+    connections.splice(idx, 1)
+  }
+  
+  // If no connections were split, connect to adjacent blocks if they exist
+  if (pairsToSplit.length === 0) {
+    // Get existing connection pairs to avoid duplicates
+    const existingPairs = new Set()
+    for (const conn of connections) {
+      if (conn.from && conn.to) {
+        existingPairs.add(`${conn.from.id}->${conn.to.id}`)
+      } else if (conn.sources && conn.destinations) {
+        for (const src of conn.sources) {
+          for (const dest of conn.destinations) {
+            existingPairs.add(`${src}->${dest}`)
+          }
+        }
+      }
+    }
+    
+    // Connect left neighbor -> new block
+    if (leftNeighbor) {
+      const pairKey = `${leftNeighbor.id}->${newId}`
+      if (!existingPairs.has(pairKey)) {
+        connections.push({
+          id: `conn_${leftNeighbor.id}_${newId}`,
+          sources: [leftNeighbor.id],
+          destinations: [newId]
+        })
+        existingPairs.add(pairKey)
+      }
+    }
+    
+    // Connect new block -> right neighbor
+    if (rightNeighbor) {
+      const pairKey = `${newId}->${rightNeighbor.id}`
+      if (!existingPairs.has(pairKey)) {
+        connections.push({
+          id: `conn_${newId}_${rightNeighbor.id}`,
+          sources: [newId],
+          destinations: [rightNeighbor.id]
+        })
+        existingPairs.add(pairKey)
+      }
+    }
+  }
+}
+
 
 /** @typedef */
 const memory_locations = [
@@ -2344,7 +2517,10 @@ export const ladderRenderer = {
         const handleRadius = 8
         
         // Get the origin (primary selected) block to show connection handles on it
-        const origin = editor.ladder_selection?.origin
+        // Only if the selection belongs to THIS ladder and there's an actual selection
+        const selectionBelongsToThisLadder = editor.ladder_selection?.ladder_id === ladderId
+        const hasSelection = selectionBelongsToThisLadder && editor.ladder_selection?.selection?.length > 0
+        const origin = hasSelection ? editor.ladder_selection?.origin : null
         const originBlock = origin 
           ? blocks.find(b => b.x === origin.x && b.y === origin.y)
           : null
@@ -2384,9 +2560,177 @@ export const ladderRenderer = {
         if (isDragging && startBlock) {
           const snappedBlock = connState.snapped_block
           
+          // Build a set of existing connections from/to the start block
+          const existingConnections = new Set()
+          const connections = block.connections || []
+          for (const conn of connections) {
+            if (conn.sources && conn.destinations) {
+              if (conn.sources.includes(startBlock.id)) {
+                conn.destinations.forEach(d => existingConnections.add(d))
+              }
+              if (conn.destinations.includes(startBlock.id)) {
+                conn.sources.forEach(s => existingConnections.add(s))
+              }
+            } else if (conn.from && conn.to) {
+              if (conn.from.id === startBlock.id) existingConnections.add(conn.to.id)
+              if (conn.to.id === startBlock.id) existingConnections.add(conn.from.id)
+            }
+          }
+          
+          // Build a list of all connection segments for crossing detection
+          // Horizontal segments: between source and destination on the same row
+          // Vertical segments: for cross-row connections, vertical line at dest column
+          const horizontalSegments = [] // { y, minX, maxX, srcId, destId }
+          const verticalSegments = [] // { x, minY, maxY, srcId, destId }
+          for (const conn of connections) {
+            let pairs = []
+            if (conn.sources && conn.destinations) {
+              for (const srcId of conn.sources) {
+                for (const destId of conn.destinations) {
+                  pairs.push({ srcId, destId })
+                }
+              }
+            } else if (conn.from && conn.to) {
+              pairs.push({ srcId: conn.from.id, destId: conn.to.id })
+            }
+            for (const { srcId, destId } of pairs) {
+              const srcBlk = blocks.find(b => b.id === srcId)
+              const destBlk = blocks.find(b => b.id === destId)
+              if (!srcBlk || !destBlk) continue
+              
+              const minX = Math.min(srcBlk.x, destBlk.x)
+              const maxX = Math.max(srcBlk.x, destBlk.x)
+              
+              if (srcBlk.y === destBlk.y) {
+                // Same row: horizontal segment
+                horizontalSegments.push({ y: srcBlk.y, minX, maxX, srcId, destId })
+              } else {
+                // Cross-row: horizontal segment at source row, vertical segment at dest column
+                horizontalSegments.push({ y: srcBlk.y, minX, maxX, srcId, destId })
+                const minY = Math.min(srcBlk.y, destBlk.y)
+                const maxY = Math.max(srcBlk.y, destBlk.y)
+                verticalSegments.push({ x: destBlk.x, minY, maxY, srcId, destId })
+              }
+            }
+          }
+          
+          // Function to check if two segments interleave (cross)
+          // Segments [a1, a2] and [b1, b2] interleave if one starts inside the other and ends outside
+          const segmentsInterleave = (a1, a2, b1, b2) => {
+            const aMin = Math.min(a1, a2)
+            const aMax = Math.max(a1, a2)
+            const bMin = Math.min(b1, b2)
+            const bMax = Math.max(b1, b2)
+            // Interleave: (aMin < bMin < aMax < bMax) or (bMin < aMin < bMax < aMax)
+            return (aMin < bMin && bMin < aMax && aMax < bMax) ||
+                   (bMin < aMin && aMin < bMax && bMax < aMax)
+          }
+          
+          // Function to check if there's a clear path for a connection
+          // sourceBlock is always to the LEFT, destBlock is always to the RIGHT
+          const isPathClear = (sourceBlock, destBlock) => {
+            const srcX = sourceBlock.x
+            const srcY = sourceBlock.y
+            const destX = destBlock.x
+            const destY = destBlock.y
+            
+            // Destination must always be strictly to the right of source
+            if (destX <= srcX) return false
+            
+            // Check if there are any BLOCKS in the horizontal path (same row as source)
+            // The horizontal segment goes from srcX+1 to destX-1 (exclusive of endpoints)
+            for (const blk of blocks) {
+              if (blk.id === sourceBlock.id || blk.id === destBlock.id) continue
+              // Block is on source row and between source and dest columns
+              if (blk.y === srcY && blk.x > srcX && blk.x < destX) {
+                return false // Block in horizontal path
+              }
+            }
+            
+            // For cross-row connections, check vertical path
+            if (srcY !== destY) {
+              const minY = Math.min(srcY, destY)
+              const maxY = Math.max(srcY, destY)
+              
+              // Check if there are blocks in the vertical path at destX column
+              // The vertical segment is at column destX, from srcY to destY (exclusive of destY which is the target)
+              for (const blk of blocks) {
+                if (blk.id === sourceBlock.id || blk.id === destBlock.id) continue
+                // Block is at dest column and between source and dest rows (exclusive)
+                if (blk.x === destX && blk.y > minY && blk.y < maxY) {
+                  return false // Block in vertical path
+                }
+              }
+            }
+            
+            // Check if horizontal segment at source row crosses any VERTICAL connection lines
+            // A vertical segment exists for each cross-row connection at the dest column
+            for (const vseg of verticalSegments) {
+              // Skip if this vertical segment is at source or dest column (endpoints)
+              if (vseg.x <= srcX || vseg.x >= destX) continue
+              // Skip if vertical segment doesn't pass through source row
+              if (srcY < vseg.minY || srcY > vseg.maxY) continue
+              // Skip segments connected to source or dest
+              if (vseg.srcId === sourceBlock.id || vseg.destId === sourceBlock.id) continue
+              if (vseg.srcId === destBlock.id || vseg.destId === destBlock.id) continue
+              // Horizontal path crosses this vertical segment
+              return false
+            }
+            
+            // Now check horizontal connection line crossings
+            // For same-row connections, check for interleaving with existing same-row segments
+            if (srcY === destY) {
+              for (const seg of horizontalSegments) {
+                if (seg.y !== srcY) continue
+                // Skip segments that share an endpoint with our new connection
+                if (seg.srcId === sourceBlock.id || seg.destId === sourceBlock.id) continue
+                if (seg.srcId === destBlock.id || seg.destId === destBlock.id) continue
+                
+                // Check for interleaving
+                if (segmentsInterleave(srcX, destX, seg.minX, seg.maxX)) {
+                  return false
+                }
+              }
+              return true
+            }
+            
+            // For cross-row connections, check if the L-shaped path would cross any existing connections
+            // Check horizontal segment for interleaving with same-row connections at srcY
+            for (const seg of horizontalSegments) {
+              if (seg.y === srcY) {
+                // Skip segments that share an endpoint
+                if (seg.srcId === sourceBlock.id || seg.destId === sourceBlock.id) continue
+                if (seg.srcId === destBlock.id || seg.destId === destBlock.id) continue
+                
+                // Check if our horizontal segment [srcX, destX] interleaves with existing segment
+                if (segmentsInterleave(srcX, destX, seg.minX, seg.maxX)) {
+                  return false
+                }
+              }
+            }
+            
+            // Check if the vertical segment at destX crosses any horizontal connections
+            const minY = Math.min(srcY, destY)
+            const maxY = Math.max(srcY, destY)
+            for (const seg of horizontalSegments) {
+              // If segment is on a row between start and end (exclusive of endpoints)
+              if (seg.y > minY && seg.y < maxY) {
+                // Check if destX is strictly inside this segment (would cross it)
+                if (destX > seg.minX && destX < seg.maxX) {
+                  return false
+                }
+              }
+            }
+            
+            return true
+          }
+          
           blocks.forEach(b => {
-            // Skip the source block
+            // Skip the origin block
             if (b.id === startBlock.id) return
+            
+            // Skip blocks already connected to the origin
+            if (existingConnections.has(b.id)) return
             
             const x0 = b.x * ladder_block_width
             const y_mid = b.y * ladder_block_height + ladder_block_height / 2
@@ -2395,9 +2739,12 @@ export const ladderRenderer = {
             const isSnapped = snappedBlock && b.id === snappedBlock.id
             const handleSize = isSnapped ? handleRadius * 1.5 : handleRadius
             
-            // Determine which handle to show based on drag direction
-            // If dragging from right, left side of blocks to the right is valid
+            // When dragging from RIGHT side: startBlock is SOURCE, looking for DESTINATIONS to the right
             if (startSide === 'right' && b.x > startBlock.x) {
+              // Check if path from startBlock (source) to b (dest) is clear
+              if (!isPathClear(startBlock, b)) return
+              
+              // Show left-side handle (input side) of destination
               ctx.beginPath()
               ctx.arc(x0, y_mid, handleSize, 0, Math.PI * 2)
               ctx.fillStyle = isSnapped ? '#8BC34A' : '#4CAF50'
@@ -2406,8 +2753,13 @@ export const ladderRenderer = {
               ctx.lineWidth = isSnapped ? 3 : 2
               ctx.stroke()
             }
-            // If dragging from left, right side of blocks to the left is valid
+            
+            // When dragging from LEFT side: startBlock is DESTINATION, looking for SOURCES to the left
             if (startSide === 'left' && b.x < startBlock.x) {
+              // Check if path from b (source) to startBlock (dest) is clear
+              if (!isPathClear(b, startBlock)) return
+              
+              // Show right-side handle (output side) of source
               ctx.beginPath()
               ctx.arc(x1, y_mid, handleSize, 0, Math.PI * 2)
               ctx.fillStyle = isSnapped ? '#8BC34A' : '#4CAF50'
@@ -2500,6 +2852,12 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   }
   const connState = editor.ladder_connection_state[ladderId]
 
+  // Register this ladder's re-render callback for cross-ladder selection updates
+  if (!editor.ladder_render_registry) {
+    editor.ladder_render_registry = {}
+  }
+  editor.ladder_render_registry[ladderId] = () => ladderRenderer.render(editor, ladder)
+
   // Debounced lint trigger for ladder changes
   let lintTimer = null
   const triggerLint = () => {
@@ -2514,8 +2872,11 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   let is_dragging = false
   let is_moving = false
   let moving_elements = []
+  let moving_original_positions = [] // Store original positions for ESC cancel
+  let moving_original_selection = null // Store original selection for ESC cancel
   let was_dragging = false
   let was_dragging_wire = false
+  let operation_cancelled = false // Flag to ignore mouse until released after ESC cancel
   let start_x = 0
   let start_y = 0
   let end_x = 0
@@ -2584,37 +2945,47 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         ? ladder.blocks.find(b => b.x === selected[0].x && b.y === selected[0].y)
         : null
       
-      if (firstSelectedBlock && firstSelectedBlock.x === x && firstSelectedBlock.y === y) {
+      if (firstSelectedBlock) {
         const block = firstSelectedBlock
-        const x_in_cell = x_raw - x
-        const y_in_cell = y_raw - y
-        const handleRadius = 0.15 // Radius of connection handle in cell units
-        const handleY = 0.5 // Y position of handle in cell (middle)
+        const blockWidth = getBlockWidth()
+        const blockHeight = getBlockHeight()
         
-        // Check left handle (at x=0, y=0.5)
-        const distToLeftHandle = Math.sqrt((x_in_cell - 0) ** 2 + (y_in_cell - handleY) ** 2)
-        // Check right handle (at x=1, y=0.5)
-        const distToRightHandle = Math.sqrt((x_in_cell - 1) ** 2 + (y_in_cell - handleY) ** 2)
+        // Calculate handle positions in canvas coordinates (scaled)
+        const leftHandleX = block.x * blockWidth
+        const rightHandleX = (block.x + 1) * blockWidth
+        const handleY = block.y * blockHeight + blockHeight / 2
         
-        if (distToLeftHandle < handleRadius * 2) {
+        // Mouse position in canvas coordinates (scaled)
+        const mouseCanvasX = start_x * getScale()
+        const mouseCanvasY = start_y * getScale()
+        
+        const handleRadius = 8 // pixels in canvas space
+        const clickRadius = handleRadius * 2 // detection radius
+        
+        // Check left handle
+        const distToLeftHandle = Math.sqrt((mouseCanvasX - leftHandleX) ** 2 + (mouseCanvasY - handleY) ** 2)
+        // Check right handle
+        const distToRightHandle = Math.sqrt((mouseCanvasX - rightHandleX) ** 2 + (mouseCanvasY - handleY) ** 2)
+        
+        if (distToLeftHandle < clickRadius) {
           // Start dragging from left handle
           connState.dragging_wire = true
           connState.wire_start_block = block
           connState.wire_start_side = 'left'
-          connState.wire_end_x = start_x * getScale()
-          connState.wire_end_y = start_y * getScale()
+          connState.wire_end_x = mouseCanvasX
+          connState.wire_end_y = mouseCanvasY
           connState.snapped_block = null
           ladderRenderer.render(editor, ladder)
           return
         }
         
-        if (distToRightHandle < handleRadius * 2) {
+        if (distToRightHandle < clickRadius) {
           // Start dragging from right handle
           connState.dragging_wire = true
           connState.wire_start_block = block
           connState.wire_start_side = 'right'
-          connState.wire_end_x = start_x * getScale()
-          connState.wire_end_y = start_y * getScale()
+          connState.wire_end_x = mouseCanvasX
+          connState.wire_end_y = mouseCanvasY
           connState.snapped_block = null
           ladderRenderer.render(editor, ladder)
           return
@@ -2666,6 +3037,9 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         return null
       }).flat().filter(Boolean))]
       moving_elements = elements
+      // Store original positions for ESC cancel
+      moving_original_positions = elements.map(b => ({ id: b.id, x: b.x, y: b.y }))
+      moving_original_selection = JSON.parse(JSON.stringify(editor.ladder_selection))
       temp_x = x
       temp_y = y
     }
@@ -2674,6 +3048,9 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
   /** @param { MouseEvent } event */
   const onMove = (event) => {
     event.preventDefault()
+    
+    // If operation was cancelled by ESC, ignore all mouse movement until released
+    if (operation_cancelled) return
     
     const rect = canvas.getBoundingClientRect()
     const mouseX = Math.floor(event.clientX - rect.left)
@@ -2759,22 +3136,174 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         const blockWidth = getBlockWidth()
         const blockHeight = getBlockHeight()
         
+        // Build a set of existing connections from/to the start block
+        const existingConnections = new Set()
+        const connections = ladder.connections || []
+        for (const conn of connections) {
+          if (conn.sources && conn.destinations) {
+            if (conn.sources.includes(startBlock.id)) {
+              conn.destinations.forEach(d => existingConnections.add(d))
+            }
+            if (conn.destinations.includes(startBlock.id)) {
+              conn.sources.forEach(s => existingConnections.add(s))
+            }
+          } else if (conn.from && conn.to) {
+            if (conn.from.id === startBlock.id) existingConnections.add(conn.to.id)
+            if (conn.to.id === startBlock.id) existingConnections.add(conn.from.id)
+          }
+        }
+        
+        // Build connection segments for crossing detection
+        const horizontalSegments = [] // { y, minX, maxX, srcId, destId }
+        const verticalSegments = [] // { x, minY, maxY, srcId, destId }
+        for (const conn of connections) {
+          let pairs = []
+          if (conn.sources && conn.destinations) {
+            for (const srcId of conn.sources) {
+              for (const destId of conn.destinations) {
+                pairs.push({ srcId, destId })
+              }
+            }
+          } else if (conn.from && conn.to) {
+            pairs.push({ srcId: conn.from.id, destId: conn.to.id })
+          }
+          for (const { srcId, destId } of pairs) {
+            const srcBlk = ladder.blocks.find(b => b.id === srcId)
+            const destBlk = ladder.blocks.find(b => b.id === destId)
+            if (!srcBlk || !destBlk) continue
+            
+            // Horizontal segment at source row (from source to dest column)
+            const minX = Math.min(srcBlk.x, destBlk.x)
+            const maxX = Math.max(srcBlk.x, destBlk.x)
+            horizontalSegments.push({ y: srcBlk.y, minX, maxX, srcId, destId })
+            
+            // For cross-row connections, add vertical segment at dest column
+            if (srcBlk.y !== destBlk.y) {
+              const minY = Math.min(srcBlk.y, destBlk.y)
+              const maxY = Math.max(srcBlk.y, destBlk.y)
+              verticalSegments.push({ x: destBlk.x, minY, maxY, srcId, destId })
+            }
+          }
+        }
+        
+        // Function to check if two segments interleave (cross)
+        const segmentsInterleave = (a1, a2, b1, b2) => {
+          const aMin = Math.min(a1, a2)
+          const aMax = Math.max(a1, a2)
+          const bMin = Math.min(b1, b2)
+          const bMax = Math.max(b1, b2)
+          // Interleave: (aMin < bMin < aMax < bMax) or (bMin < aMin < bMax < aMax)
+          return (aMin < bMin && bMin < aMax && aMax < bMax) ||
+                 (bMin < aMin && aMin < bMax && bMax < aMax)
+        }
+        
+        // Function to check if path is clear (no blocks or crossing connections)
+        const isPathClear = (sourceBlock, destBlock) => {
+          const srcX = sourceBlock.x
+          const srcY = sourceBlock.y
+          const destX = destBlock.x
+          const destY = destBlock.y
+          
+          // Destination must be strictly to the right
+          if (destX <= srcX) return false
+          
+          // Check for blocks in horizontal path at source row
+          for (const blk of ladder.blocks) {
+            if (blk.id === sourceBlock.id || blk.id === destBlock.id) continue
+            if (blk.y === srcY && blk.x > srcX && blk.x < destX) {
+              return false
+            }
+          }
+          
+          // Check if horizontal segment at source row crosses any VERTICAL connection lines
+          for (const vseg of verticalSegments) {
+            // Vertical segment must be between source and dest columns (exclusive)
+            if (vseg.x <= srcX || vseg.x >= destX) continue
+            // Source row must be within the vertical segment's range
+            if (srcY < vseg.minY || srcY > vseg.maxY) continue
+            // Skip segments connected to source or dest
+            if (vseg.srcId === sourceBlock.id || vseg.destId === sourceBlock.id) continue
+            if (vseg.srcId === destBlock.id || vseg.destId === destBlock.id) continue
+            return false
+          }
+          
+          // For cross-row, check vertical path at dest column
+          if (srcY !== destY) {
+            const minY = Math.min(srcY, destY)
+            const maxY = Math.max(srcY, destY)
+            for (const blk of ladder.blocks) {
+              if (blk.id === sourceBlock.id || blk.id === destBlock.id) continue
+              if (blk.x === destX && blk.y > minY && blk.y < maxY) {
+                return false
+              }
+            }
+          }
+          
+          // Check connection line crossings
+          // Same-row: check interleaving with horizontal segments
+          if (srcY === destY) {
+            for (const seg of horizontalSegments) {
+              if (seg.y !== srcY) continue
+              if (seg.srcId === sourceBlock.id || seg.destId === sourceBlock.id) continue
+              if (seg.srcId === destBlock.id || seg.destId === destBlock.id) continue
+              if (segmentsInterleave(srcX, destX, seg.minX, seg.maxX)) {
+                return false
+              }
+            }
+            return true
+          }
+          
+          // Cross-row: check horizontal segment at source row
+          for (const seg of horizontalSegments) {
+            if (seg.y === srcY) {
+              if (seg.srcId === sourceBlock.id || seg.destId === sourceBlock.id) continue
+              if (seg.srcId === destBlock.id || seg.destId === destBlock.id) continue
+              if (segmentsInterleave(srcX, destX, seg.minX, seg.maxX)) {
+                return false
+              }
+            }
+          }
+          
+          // Check vertical segment crossing horizontal connections
+          const minY = Math.min(srcY, destY)
+          const maxY = Math.max(srcY, destY)
+          for (const seg of horizontalSegments) {
+            if (seg.y > minY && seg.y < maxY) {
+              if (destX > seg.minX && destX < seg.maxX) {
+                return false
+              }
+            }
+          }
+          
+          return true
+        }
+        
         ladder.blocks.forEach(b => {
           if (b.id === startBlock.id) return
           
+          // Skip blocks already connected to the origin
+          if (existingConnections.has(b.id)) return
+          
           const y_mid = b.y * blockHeight + blockHeight / 2
           
-          // Check if this is a valid target based on drag direction
-          let targetX = null
+          // When dragging from RIGHT side: startBlock is SOURCE, looking for DESTINATIONS to the right
           if (startSide === 'right' && b.x > startBlock.x) {
-            // Valid target: left side of blocks to the right
-            targetX = b.x * blockWidth
-          } else if (startSide === 'left' && b.x < startBlock.x) {
-            // Valid target: right side of blocks to the left
-            targetX = (b.x + 1) * blockWidth
+            if (!isPathClear(startBlock, b)) return
+            
+            const targetX = b.x * blockWidth
+            const dist = Math.sqrt((rawEndX - targetX) ** 2 + (rawEndY - y_mid) ** 2)
+            if (dist < snapDistance) {
+              snappedX = targetX
+              snappedY = y_mid
+              snappedBlock = b
+            }
           }
           
-          if (targetX !== null) {
+          // When dragging from LEFT side: startBlock is DESTINATION, looking for SOURCES to the left
+          if (startSide === 'left' && b.x < startBlock.x) {
+            if (!isPathClear(b, startBlock)) return
+            
+            const targetX = (b.x + 1) * blockWidth
             const dist = Math.sqrt((rawEndX - targetX) ** 2 + (rawEndY - y_mid) ** 2)
             if (dist < snapDistance) {
               snappedX = targetX
@@ -2787,9 +3316,46 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         connState.wire_end_x = snappedX
         connState.wire_end_y = snappedY
         connState.snapped_block = snappedBlock
+        canvas.style.cursor = snappedBlock ? 'pointer' : 'default'
         ladderRenderer.render(editor, ladder)
         return
       }
+      
+      // Check if hovering over connection handles of the origin block
+      const selection = editor.ladder_selection
+      const hasSelection = selection && selection.ladder_id === ladderId && selection.selection?.length > 0 && selection.origin
+      let hoveringHandle = false
+      
+      if (hasSelection) {
+        const originX = selection.origin.x
+        const originY = selection.origin.y
+        const originBlock = ladder.blocks.find(b => b.x === originX && b.y === originY)
+        
+        if (originBlock) {
+          const blockWidth = getBlockWidth()
+          const blockHeight = getBlockHeight()
+          
+          // Mouse position in canvas coordinates (scaled)
+          const mouseCanvasX = mouseX * getScale()
+          const mouseCanvasY = mouseY * getScale()
+          
+          const leftHandleX = originX * blockWidth
+          const rightHandleX = (originX + 1) * blockWidth
+          const handleY = originY * blockHeight + blockHeight / 2
+          
+          const handleRadius = 8 // pixels in canvas space
+          const hoverRadius = handleRadius * 2 // detection radius
+          
+          const distToLeftHandle = Math.sqrt((mouseCanvasX - leftHandleX) ** 2 + (mouseCanvasY - handleY) ** 2)
+          const distToRightHandle = Math.sqrt((mouseCanvasX - rightHandleX) ** 2 + (mouseCanvasY - handleY) ** 2)
+          
+          if (distToLeftHandle < hoverRadius || distToRightHandle < hoverRadius) {
+            hoveringHandle = true
+          }
+        }
+      }
+      
+      canvas.style.cursor = hoveringHandle ? 'pointer' : 'default'
       
       // Trigger redraw to show/hide connection handles
       ladderRenderer.render(editor, ladder)
@@ -2946,12 +3512,19 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       // Update cursor to current drag end position
       editor.ladder_selection.cursor = { x: cellEndX, y: cellEndY }
     } else {
+      // Capture previous ladder ID before changing selection
+      const prevLadderId = editor.ladder_selection?.ladder_id
+      // Set new selection first
       editor.ladder_selection = {
         ladder_id: ladderId,
         program_id: ladder.program_id || '',
         origin: { x: cellStartX, y: cellStartY }, // Origin is where drag started
         cursor: { x: cellEndX, y: cellEndY }, // Cursor is where drag ended
         selection: [{ type: 'area', x, y, width, height }]
+      }
+      // Now re-render the previous ladder to clear its selection (after selection changed)
+      if (prevLadderId && prevLadderId !== ladderId && editor.ladder_render_registry?.[prevLadderId]) {
+        editor.ladder_render_registry[prevLadderId]()
       }
     }
     // Trigger redraw to show selection area
@@ -2965,42 +3538,35 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       const startSide = connState.wire_start_side
       const snappedBlock = connState.snapped_block
       
-      // Use snapped block if available, otherwise find target block under cursor
+      // Only use snapped block - this ensures we only connect to valid targets
+      // The snapping logic already validates: same row, not already connected, no crossing
       let targetBlock = snappedBlock
       let targetSide = null
       
       if (snappedBlock) {
         // Determine target side based on start side
         targetSide = startSide === 'right' ? 'left' : 'right'
-      } else {
-        // Find target block under cursor (fallback)
-        const cursor_x = connState.wire_end_x / getBlockWidth()
-        const cursor_y = connState.wire_end_y / getBlockHeight()
-        const target_x = Math.floor(cursor_x)
-        const target_y = Math.floor(cursor_y)
-        targetBlock = ladder.blocks.find(b => b.x === target_x && b.y === target_y)
-        
-        if (targetBlock) {
-          const x_in_cell = cursor_x - target_x
-          targetSide = x_in_cell < 0.5 ? 'left' : 'right'
-        }
       }
+      // No fallback - if not snapped to a valid target, don't create connection
       
       if (targetBlock && targetBlock.id !== startBlock.id) {
-        // Valid connection: right side of source -> left side of target
-        // Or: left side of source -> right side of target (but target must be to the left)
+        // Determine which block is source and which is destination based on drag direction
         let fromBlock, toBlock
-        if (startSide === 'right' && targetSide === 'left') {
-          // Normal forward connection
+        
+        if (startSide === 'right') {
+          // Dragging from right side: startBlock is source, targetBlock is destination
           fromBlock = startBlock
           toBlock = targetBlock
-        } else if (startSide === 'left' && targetSide === 'right') {
-          // Backward direction - swap to make it forward
+        } else {
+          // Dragging from left side: targetBlock is source, startBlock is destination
           fromBlock = targetBlock
           toBlock = startBlock
         }
         
-        if (fromBlock && toBlock && fromBlock.x < toBlock.x) {
+        // Destination must be strictly to the right of source (power flows left to right)
+        const validDirection = fromBlock && toBlock && (toBlock.x > fromBlock.x)
+        
+        if (validDirection) {
           // Check if connection already exists (handle both formats)
           const legacyConns = getLegacyConnections(ladder)
           const exists = legacyConns.some(c => 
@@ -3024,6 +3590,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
       connState.wire_start_side = null
       connState.snapped_block = null
       was_dragging_wire = true
+      canvas.style.cursor = 'default'
       ladderRenderer.render(editor, ladder)
       triggerLint() // Trigger lint after wire connection
       return
@@ -3032,14 +3599,21 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     is_dragging = false
     was_dragging = true
 
-    // Update connections after moving blocks
+    // Reset cancelled flag on mouse release
+    if (operation_cancelled) {
+      operation_cancelled = false
+      return // Don't do anything else after a cancelled operation
+    }
+
+    // Update after moving blocks (no auto-connect on move)
     if (is_moving) {
       is_moving = false
-      connectTouchingBlocks(ladder)
-      // Trigger redraw to show new connections
+      // Trigger redraw after moving blocks
       ladderRenderer.render(editor, ladder)
       triggerLint() // Trigger lint after moving blocks
       moving_elements = []
+      moving_original_positions = [] // Clear saved positions on successful move
+      moving_original_selection = null
     }
   }
 
@@ -3212,7 +3786,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     if (!edit) return
     event.preventDefault()
     last_touched = {}
-    // onRelease already handles is_moving, connectTouchingBlocks, and re-render
+    // onRelease handles is_moving and re-render (no auto-connect on move)
     onRelease()
     was_dragging = false
   })
@@ -3556,6 +4130,9 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           }
 
           ladder.nodes.push(newBlock)
+          
+          // Auto-connect the new block to adjacent blocks and split existing connections
+          connectNewBlock(ladder, newBlock)
 
           // Select the new block
           editor.ladder_selection = {
@@ -3735,8 +4312,50 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
     const shift = e.shiftKey
     const key = e.key.toLowerCase()
 
-    // Handle Escape (Always) to deselect
+    // Handle Escape - cancel operations in priority order
     if (key === 'escape') {
+      // If dragging a wire, cancel only the wire drag
+      if (connState.dragging_wire) {
+        connState.dragging_wire = false
+        connState.wire_start_block = null
+        connState.wire_start_side = null
+        connState.snapped_block = null
+        was_dragging_wire = true // Prevent selection on mouse release
+        operation_cancelled = true // Ignore mouse until released
+        canvas.style.cursor = 'default' // Reset cursor
+        ladderRenderer.render(editor, ladder)
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      // If moving blocks, cancel and restore original positions
+      if (is_moving && moving_original_positions.length > 0) {
+        // Restore block positions
+        for (const orig of moving_original_positions) {
+          const block = ladder.blocks.find(b => b.id === orig.id)
+          if (block) {
+            block.x = orig.x
+            block.y = orig.y
+          }
+        }
+        // Restore selection
+        if (moving_original_selection) {
+          editor.ladder_selection = moving_original_selection
+        }
+        // Reset move state
+        is_moving = false
+        is_dragging = false
+        moving_elements = []
+        moving_original_positions = []
+        moving_original_selection = null
+        was_dragging = true // Prevent click from selecting
+        operation_cancelled = true // Ignore mouse until released
+        ladderRenderer.render(editor, ladder)
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      // Otherwise, deselect everything
       if (editor.ladder_selection?.ladder_id === ladderId) {
         editor.ladder_selection.selection = []
         editor.ladder_selection.origin = { x: 0, y: 0 }
@@ -3852,7 +4471,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         }
         editor.ladder_selection.origin.x += dx
         editor.ladder_selection.origin.y += dy
-        connectTouchingBlocks(ladder)
+        // No auto-connect on move - connections are only made when adding new elements
         ladderRenderer.render(editor, ladder)
         triggerLint()
       } else if (shift && !ctrl) {
@@ -4094,8 +4713,12 @@ function pasteSelection(editor, ladder, pasteX, pasteY) {
   newBlocks.forEach(block => ladder.nodes.push(block))
   newConnections.forEach(conn => ladder.connections.push(conn))
 
-  // Auto-connect touching blocks
-  connectTouchingBlocks(ladder)
+  // Auto-connect each pasted block to adjacent existing blocks and split existing connections
+  // Sort by x position (left to right) to ensure proper connection ordering
+  const sortedBlocks = [...newBlocks].sort((a, b) => a.x - b.x)
+  for (const block of sortedBlocks) {
+    connectNewBlock(ladder, block)
+  }
 
   // Select the pasted blocks
   editor.ladder_selection = {
