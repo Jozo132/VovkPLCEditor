@@ -1891,6 +1891,65 @@ export const ladderRenderer = {
           { label: 'View Logic as PLCASM', name: 'view_asm', icon: 'server', type: 'item' }
         ]
 
+        /**
+         * Pretty prints JSON with smart formatting:
+         * - Objects with only simple properties (null, boolean, number, string) are printed on one line
+         * - Arrays of simple values are printed on one line
+         * - Complex objects/arrays are expanded to multiple lines
+         * @param {any} obj - The object to stringify
+         * @param {number} indent - Current indentation level
+         * @returns {string} - Formatted JSON string
+         */
+        const smartStringify = (obj, indent = 0) => {
+          const spaces = '  '.repeat(indent)
+          const nextSpaces = '  '.repeat(indent + 1)
+          
+          if (obj === null) return 'null'
+          if (obj === undefined) return 'undefined'
+          if (typeof obj === 'boolean' || typeof obj === 'number') return String(obj)
+          if (typeof obj === 'string') return JSON.stringify(obj)
+          
+          // Check if value is simple (not an object/array)
+          const isSimple = v => v === null || v === undefined || typeof v === 'boolean' || typeof v === 'number' || typeof v === 'string'
+          
+          if (Array.isArray(obj)) {
+            if (obj.length === 0) return '[]'
+            // Check if all elements are simple
+            const allSimple = obj.every(isSimple)
+            if (allSimple) {
+              return '[' + obj.map(v => v === undefined ? 'null' : JSON.stringify(v)).join(', ') + ']'
+            }
+            // Complex array - expand
+            const items = obj.map(v => nextSpaces + smartStringify(v, indent + 1))
+            return '[\n' + items.join(',\n') + '\n' + spaces + ']'
+          }
+          
+          if (typeof obj === 'object') {
+            const keys = Object.keys(obj)
+            if (keys.length === 0) return '{}'
+            // Check if all values are simple
+            const allSimple = keys.every(k => isSimple(obj[k]))
+            if (allSimple) {
+              const pairs = keys.map(k => JSON.stringify(k) + ': ' + (obj[k] === undefined ? 'null' : JSON.stringify(obj[k])))
+              return '{ ' + pairs.join(', ') + ' }'
+            }
+            // Special case: connection objects with sources/destinations arrays of simple values
+            const isConnection = keys.length === 2 && keys.includes('sources') && keys.includes('destinations') &&
+                Array.isArray(obj.sources) && Array.isArray(obj.destinations) &&
+                obj.sources.every(isSimple) && obj.destinations.every(isSimple)
+            if (isConnection) {
+              const srcArr = '[' + obj.sources.map(v => JSON.stringify(v)).join(', ') + ']'
+              const dstArr = '[' + obj.destinations.map(v => JSON.stringify(v)).join(', ') + ']'
+              return '{ "sources": ' + srcArr + ', "destinations": ' + dstArr + ' }'
+            }
+            // Complex object - expand
+            const pairs = keys.map(k => nextSpaces + JSON.stringify(k) + ': ' + smartStringify(obj[k], indent + 1))
+            return '{\n' + pairs.join(',\n') + '\n' + spaces + '}'
+          }
+          
+          return String(obj)
+        }
+
         if (editor.context_manager) {
           editor.context_manager.show(e, items, async (action) => {
             try {
@@ -1901,7 +1960,7 @@ export const ladderRenderer = {
               let titleSuffix = ''
 
               if (action === 'view_graph') {
-                finalOutput = JSON.stringify(graph, null, 2)
+                finalOutput = smartStringify(graph)
                 titleSuffix = 'Ladder Graph'
               } else {
                 if (!editor.runtime || !editor.runtime.compileLadder) {
@@ -1944,7 +2003,7 @@ export const ladderRenderer = {
 
               new Popup({
                 title: `Compiled ${titleSuffix} (${block.name})`,
-                width: '700px',
+                width: '900px',
                 content: container,
                 buttons: [{ text: 'Close', value: 'close' }]
               })
