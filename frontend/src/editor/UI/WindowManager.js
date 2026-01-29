@@ -2775,16 +2775,10 @@ export default class WindowManager {
             if (this.active_device === 'simulation') {
                 const compileSuccess = await this.handleCompile({ silent: true })
                 
+                // In simulation mode, stay connected even if compilation fails
+                // This allows viewing/editing the project while connected
                 if (!compileSuccess) {
-                    await editor.device_manager.disconnect()
-                    device_online_button.removeAttribute('disabled')
-                    if (!device_select_element_was_disabled) device_select_element.removeAttribute('disabled')
-                    // @ts-ignore
-                    device_online_button.innerText = before
-                    this._healthConnectionState = false
-                    this._stopHealthPolling()
-                    this._setHealthConnected(false)
-                    return
+                    this.logToConsole('Project compilation failed - simulation connected but no program loaded', 'warning')
                 }
 
                 const compiledBytecode = this.#editor.project?.binary
