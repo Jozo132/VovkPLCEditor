@@ -13,6 +13,9 @@ import { MiniCodeEditor } from "../MiniCodeEditor.js"
 // CONNECTION PATH ROUTING SYSTEM
 // ============================================================================
 
+// Debug flag for connection routing logs - set to true to enable verbose logging
+const DEBUG_CONNECTION_ROUTING = false
+
 /**
  * @typedef {Object} ConnectionPath
  * @property {string} srcId - Source block ID
@@ -583,12 +586,14 @@ function computeConnectionPaths(editor, ladder) {
       const pairLimit = pair.srcBlock.x + 1
       const pairDestX = pair.destBlock.x
       
-      console.log(`=== Single connection: src(${pair.srcBlock.x},${pair.srcBlock.y}) -> dest(${pair.destBlock.x},${pair.destBlock.y}) ===`)
-      console.log(`  initial cornerX = ${targetX}, pairLimit = ${pairLimit}, pairDestX = ${pairDestX}`)
+      if (DEBUG_CONNECTION_ROUTING) {
+        console.log(`=== Single connection: src(${pair.srcBlock.x},${pair.srcBlock.y}) -> dest(${pair.destBlock.x},${pair.destBlock.y}) ===`)
+        console.log(`  initial cornerX = ${targetX}, pairLimit = ${pairLimit}, pairDestX = ${pairDestX}`)
+      }
       
       // Check for block conflicts - search for ANY valid position in range
       if (cornerHitsBlock(pair, targetX)) {
-        console.log(`  -> conflict at ${targetX}, searching...`)
+        if (DEBUG_CONNECTION_ROUTING) console.log(`  -> conflict at ${targetX}, searching...`)
         // Try positions from pairLimit to pairDestX in 0.1 increments
         // Collect all valid positions and pick the one closest to targetX
         const validPositions = []
@@ -610,15 +615,15 @@ function computeConnectionPaths(editor, ladder) {
             }
           }
           targetX = bestX
-          console.log(`  -> found valid: ${targetX} (from ${validPositions.length} candidates)`)
+          if (DEBUG_CONNECTION_ROUTING) console.log(`  -> found valid: ${targetX} (from ${validPositions.length} candidates)`)
         } else {
           // No valid position found, clamp to pairLimit as fallback
           targetX = pairLimit
-          console.log(`  -> no valid position, using pairLimit: ${targetX}`)
+          if (DEBUG_CONNECTION_ROUTING) console.log(`  -> no valid position, using pairLimit: ${targetX}`)
         }
         pair.cornerX = targetX
       } else {
-        console.log(`  -> no conflict, keeping ${targetX}`)
+        if (DEBUG_CONNECTION_ROUTING) console.log(`  -> no conflict, keeping ${targetX}`)
       }
       continue
     }
@@ -637,16 +642,18 @@ function computeConnectionPaths(editor, ladder) {
       return b.destBlock.x - a.destBlock.x
     })
     
-    console.log('=== Processing conflict group ===')
-    console.log('Group size:', group.length, 'Direction:', goingUp ? 'UP' : 'DOWN')
-    console.log('Connections in group:')
-    group.forEach((p, i) => {
-      console.log(`  [${i}] src(${p.srcBlock.x},${p.srcBlock.y}) -> dest(${p.destBlock.x},${p.destBlock.y})`)
-    })
+    if (DEBUG_CONNECTION_ROUTING) {
+      console.log('=== Processing conflict group ===')
+      console.log('Group size:', group.length, 'Direction:', goingUp ? 'UP' : 'DOWN')
+      console.log('Connections in group:')
+      group.forEach((p, i) => {
+        console.log(`  [${i}] src(${p.srcBlock.x},${p.srcBlock.y}) -> dest(${p.destBlock.x},${p.destBlock.y})`)
+      })
+    }
     
     // Find the anchor (rightmost destination X among the group)
     const anchorX = Math.max(...group.map(p => p.destBlock.x))
-    console.log('anchorX (rightmost destX):', anchorX)
+    if (DEBUG_CONNECTION_ROUTING) console.log('anchorX (rightmost destX):', anchorX)
     
     // Find the left limit - right edge of source block (srcX + 1)
     // Use MAXIMUM of all srcX + 1 (rightmost source's right edge)
@@ -654,7 +661,7 @@ function computeConnectionPaths(editor, ladder) {
     for (const pair of group) {
       leftLimit = Math.max(leftLimit, pair.srcBlock.x + 1)
     }
-    console.log('leftLimit (max srcX + 1):', leftLimit)
+    if (DEBUG_CONNECTION_ROUTING) console.log('leftLimit (max srcX + 1):', leftLimit)
     
     // Calculate available space and spacing
     const availableSpace = anchorX - leftLimit
@@ -665,13 +672,15 @@ function computeConnectionPaths(editor, ladder) {
       // Calculate even spacing, but cap at 1.0 (don't spread more than 1 cell apart)
       spacing = Math.min(1.0, availableSpace / (numConnections - 1))
     }
-    console.log('availableSpace:', availableSpace)
-    console.log('numConnections:', numConnections)
-    console.log('spacing (capped at 1.0):', spacing)
+    if (DEBUG_CONNECTION_ROUTING) {
+      console.log('availableSpace:', availableSpace)
+      console.log('numConnections:', numConnections)
+      console.log('spacing (capped at 1.0):', spacing)
+    }
     
     // Distribute corners based on direction
     // Both are right-aligned (starting from anchorX), but UP reverses the index
-    console.log('Distributing corners:')
+    if (DEBUG_CONNECTION_ROUTING) console.log('Distributing corners:')
     
     // Track positions already assigned in this group to avoid overlaps
     const usedPositions = []
@@ -684,24 +693,24 @@ function computeConnectionPaths(editor, ladder) {
         // Going UP: right-aligned but top sources get leftmost (reverse index)
         const reverseI = group.length - 1 - i
         targetX = anchorX - (reverseI * spacing)
-        console.log(`  [${i}] initial targetX = ${anchorX} - (${reverseI} * ${spacing}) = ${targetX}`)
+        if (DEBUG_CONNECTION_ROUTING) console.log(`  [${i}] initial targetX = ${anchorX} - (${reverseI} * ${spacing}) = ${targetX}`)
       } else {
         // Going DOWN: right-aligned, top sources get rightmost
         targetX = anchorX - (i * spacing)
-        console.log(`  [${i}] initial targetX = ${anchorX} - (${i} * ${spacing}) = ${targetX}`)
+        if (DEBUG_CONNECTION_ROUTING) console.log(`  [${i}] initial targetX = ${anchorX} - (${i} * ${spacing}) = ${targetX}`)
       }
       
       // Enforce per-pair limit (can't go left of own srcX + 1, right edge of source)
       const pairLimit = pair.srcBlock.x + 1
       if (targetX < pairLimit) {
-        console.log(`    -> clamped to pairLimit: ${pairLimit}`)
+        if (DEBUG_CONNECTION_ROUTING) console.log(`    -> clamped to pairLimit: ${pairLimit}`)
         targetX = pairLimit
       }
       
       // Enforce pair's own destX limit (corner can't be past own destination)
       const pairDestX = pair.destBlock.x
       if (targetX > pairDestX) {
-        console.log(`    -> clamped to pair destX: ${pairDestX}`)
+        if (DEBUG_CONNECTION_ROUTING) console.log(`    -> clamped to pair destX: ${pairDestX}`)
         targetX = pairDestX
       }
       
@@ -716,7 +725,7 @@ function computeConnectionPaths(editor, ladder) {
       // Check for block conflicts OR position already used - search for valid position
       if (cornerHitsBlock(pair, targetX) || tooCloseToUsed(targetX)) {
         const reason = cornerHitsBlock(pair, targetX) ? 'block conflict' : 'too close to used'
-        console.log(`    -> ${reason} at ${targetX}, searching for valid position...`)
+        if (DEBUG_CONNECTION_ROUTING) console.log(`    -> ${reason} at ${targetX}, searching for valid position...`)
         
         // Try positions from pairLimit to pairDestX in 0.1 increments
         // Collect all valid positions (no block conflict AND not too close to used)
@@ -748,7 +757,7 @@ function computeConnectionPaths(editor, ladder) {
             }
           }
           targetX = bestX
-          console.log(`    -> found valid position: ${targetX} (from ${validPositions.length} candidates)`)
+          if (DEBUG_CONNECTION_ROUTING) console.log(`    -> found valid position: ${targetX} (from ${validPositions.length} candidates)`)
         } else if (blockConflictOnly.length > 0) {
           // Fallback: accept block conflict but avoid wire overlap
           let bestX = blockConflictOnly[0]
@@ -761,19 +770,19 @@ function computeConnectionPaths(editor, ladder) {
             }
           }
           targetX = bestX
-          console.log(`    -> fallback to block-conflict position: ${targetX} (avoids wire overlap)`)
+          if (DEBUG_CONNECTION_ROUTING) console.log(`    -> fallback to block-conflict position: ${targetX} (avoids wire overlap)`)
         } else {
           // Last resort: use pairLimit even if it overlaps
           targetX = pairLimit
-          console.log(`    -> no position found, using pairLimit: ${targetX}`)
+          if (DEBUG_CONNECTION_ROUTING) console.log(`    -> no position found, using pairLimit: ${targetX}`)
         }
       }
       
-      console.log(`  [${i}] FINAL cornerX = ${targetX}`)
+      if (DEBUG_CONNECTION_ROUTING) console.log(`  [${i}] FINAL cornerX = ${targetX}`)
       pair.cornerX = targetX
       usedPositions.push(targetX)
     }
-    console.log('=================================')
+    if (DEBUG_CONNECTION_ROUTING) console.log('=================================')
   }
   
   // STEP 3: Build final paths and segments
