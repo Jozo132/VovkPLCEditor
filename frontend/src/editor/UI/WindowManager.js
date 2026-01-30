@@ -3228,11 +3228,13 @@ export default class WindowManager {
         if (!el) return
         
         let runtimeInfo = '<span style="color: #888;">Loading runtime info...</span>'
+        let deviceSection = ''
         const showTooltip = () => {
              if (this.footerTooltip && show) {
                 const rect = el.getBoundingClientRect()
+                const editorSection = `<div style="font-size:10px; color:#666; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Editor</div>`
                 const editorInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Editor</div><div style="color:#aaa;">Version: ${VOVKPLCEDITOR_VERSION} Build ${VOVKPLCEDITOR_VERSION_BUILD}</div>`
-                this.footerTooltip.innerHTML = `${editorInfo}<hr style="border:0; border-top:1px solid #333; margin:6px 0;">${runtimeInfo}`
+                this.footerTooltip.innerHTML = `${editorSection}${editorInfo}<div style="margin-top:8px;">${runtimeInfo}</div>${deviceSection}`
                 this.footerTooltip.style.left = rect.left + 'px'
                 this.footerTooltip.style.bottom = (window.innerHeight - rect.top) + 'px'
                 this.footerTooltip.style.display = 'block'
@@ -3241,30 +3243,37 @@ export default class WindowManager {
 
         if (show) showTooltip()
 
-        // Try getting runtime version - prefer connected device info, then cached runtime info
-        const deviceInfo = this.#editor?.device_manager?.deviceInfo
+        // Runtime info should always show the WASM compiler version (used for compiling)
+        // Device info is shown separately if connected to a physical device
         const cachedInfo = this.#editor?.runtime_info
-        if (deviceInfo && deviceInfo.version) {
-            runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime</div><div style="color:#aaa;">Version: ${deviceInfo.version}${deviceInfo.arch ? `<br>Arch: ${deviceInfo.arch}` : ''}</div>`
-        } else if (cachedInfo && cachedInfo.version) {
-            runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime</div><div style="color:#aaa;">Version: ${cachedInfo.version}${cachedInfo.arch ? `<br>Arch: ${cachedInfo.arch}` : ''}</div>`
+        const deviceInfo = this.#editor?.device_manager?.deviceInfo
+        
+        // Always show WASM compiler runtime info first
+        if (cachedInfo && cachedInfo.version) {
+            runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#aaa;">Version: ${cachedInfo.version}${cachedInfo.arch ? `<br>Arch: ${cachedInfo.arch}` : ''}</div>`
         } else if (this.#editor && this.#editor.runtime && this.#editor.runtime_ready) {
              try {
                  const info = this.#editor.runtime.printInfo()
                  if (info && info.version) {
-                     runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime</div><div style="color:#aaa;">Version: ${info.version}${info.arch ? `<br>Arch: ${info.arch}` : ''}</div>`
+                     runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#aaa;">Version: ${info.version}${info.arch ? `<br>Arch: ${info.arch}` : ''}</div>`
                  } else if (typeof info === 'string' && info !== 'No info available') {
-                     runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#aaa;">${info}</div>`
+                     runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#aaa;">${info}</div>`
                  } else {
-                     runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#aaa;">Ready</div>`
+                     runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#aaa;">Ready</div>`
                  }
              } catch (e) {
-                 runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#d44;">Offline</div>`
+                 runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#d44;">Offline</div>`
              }
         } else if (this.#editor && this.#editor.runtime) {
-             runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#888;">Initializing...</div>`
+             runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#888;">Initializing...</div>`
         } else {
-             runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime</div><div style="color:#888;">Not initialized</div>`
+             runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#888;">Not initialized</div>`
+        }
+        
+        // Add connected device info if available (separate from compiler info)
+        if (deviceInfo && deviceInfo.version) {
+            const deviceName = deviceInfo.device || 'Unknown Device'
+            deviceSection = `<hr style="border:0; border-top:1px solid #333; margin:8px 0;"><div style="font-size:10px; color:#666; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Connected device</div><div style="font-weight:600; color:#fff; margin-bottom:4px;">${deviceName}</div><div style="color:#aaa;">Version: ${deviceInfo.version}${deviceInfo.arch ? `<br>Arch: ${deviceInfo.arch}` : ''}</div>`
         }
 
         if (show && this.footerTooltip && this.footerTooltip.style.display !== 'none') {
