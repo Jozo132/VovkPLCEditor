@@ -127,6 +127,30 @@ export default class Menu {
 
         const showSubmenu = () => {
           clearAncestorTimeouts(submenu)
+          
+          // Immediately hide all sibling submenus (those that share the same parent)
+          // Siblings are submenus with the same _parentSubmenu reference
+          // For top-level submenus, _parentSubmenu is null, so they're all siblings
+          this.#submenus.forEach(otherSub => {
+            if (otherSub !== submenu && otherSub._parentSubmenu === submenu._parentSubmenu) {
+              // Clear any pending hide timeout
+              if (otherSub._hideTimeout) {
+                clearTimeout(otherSub._hideTimeout)
+                otherSub._hideTimeout = null
+              }
+              // Immediately hide this sibling and its children
+              otherSub.style.display = 'none'
+              const hideChildren = (sub) => {
+                const children = sub._childSubmenus || []
+                children.forEach(child => {
+                  child.style.display = 'none'
+                  hideChildren(child)
+                })
+              }
+              hideChildren(otherSub)
+            }
+          })
+          
           const rect = div.getBoundingClientRect()
           const subWidth = submenu.offsetWidth
           const spaceRight = window.innerWidth - rect.right
