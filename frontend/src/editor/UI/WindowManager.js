@@ -3076,8 +3076,13 @@ export default class WindowManager {
             
             // Create filename from project info or use default
             const projectName = projectToExport.info?.name || 'project'
+            const projectVersion = projectToExport.info?.version || ''
             const timestamp = new Date().toISOString().slice(0, 10)
-            const filename = `${projectName}_${timestamp}.vovkplc`
+            // Escape version for valid filename (replace invalid chars with underscore)
+            const safeVersion = projectVersion.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_')
+            const filename = safeVersion 
+                ? `${projectName}_v${safeVersion}_${timestamp}.vovkplc`
+                : `${projectName}_${timestamp}.vovkplc`
             
             // Create and download file
             const json = JSON.stringify(projectToExport, null, 2)
