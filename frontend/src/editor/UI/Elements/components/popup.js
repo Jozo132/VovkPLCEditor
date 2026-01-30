@@ -324,10 +324,11 @@ export class Popup {
     /**
      * @typedef {{ name: string, label?: string, readonly?: boolean, margin?: string, onChange?: (data: any) => void }} InputCommon
      * @typedef {InputCommon & { type: 'text', value?: string, placeholder?: string }} TextInput
+     * @typedef {InputCommon & { type: 'textarea', value?: string, placeholder?: string, rows?: number }} TextareaInput
      * @typedef {InputCommon & { type: 'number', value?: number }} NumberInput
      * @typedef {InputCommon & { type: 'integer', value?: number }} IntegerInput
      * @typedef {InputCommon & { type: 'select', value?: string, options: { value: string, label: string }[] }} SelectInput
-     * @typedef { TextInput | NumberInput | IntegerInput | SelectInput } InputField
+     * @typedef { TextInput | TextareaInput | NumberInput | IntegerInput | SelectInput } InputField
      *
      * @typedef { PopupOptions & { inputs: InputField[] }} FormOptions
      */
@@ -351,12 +352,13 @@ export class Popup {
 
         inputs.forEach(input => {
             const {type, label, name, value, margin, readonly, onChange} = input
-            if (!['text', 'number', 'integer', 'select'].includes(type)) throw new Error(`Invalid input type: ${type}`)
+            if (!['text', 'textarea', 'number', 'integer', 'select'].includes(type)) throw new Error(`Invalid input type: ${type}`)
             if (!input.name) throw new Error(`Input name is required`)
             if (input.value && typeof input.value !== 'string' && type === 'text') throw new Error(`Invalid input value: ${input.value}`)
+            if (input.value && typeof input.value !== 'string' && type === 'textarea') throw new Error(`Invalid input value: ${input.value}`)
             if (input.value && typeof input.value !== 'string' && type === 'select') throw new Error(`Invalid input value: ${input.value}`)
             if (input.value && typeof input.value !== 'number' && (type === 'number' || type === 'integer')) throw new Error(`Invalid input value: ${input.value}`)
-            const placeholder = type === 'text' ? input.placeholder || '' : ''
+            const placeholder = (type === 'text' || type === 'textarea') ? input.placeholder || '' : ''
 
             let typeName = type
             if (type === 'integer') typeName = 'number'
@@ -370,6 +372,9 @@ export class Popup {
                     `<option value="${opt.value}"${opt.value === value ? ' selected' : ''}>${opt.label}</option>`
                 ).join('')
                 input_element = ElementSynthesis(/*HTML*/ `<select id="${name}" name="${name}">${optionsHtml}</select>`)
+            } else if (type === 'textarea') {
+                const rows = input.rows || 4
+                input_element = ElementSynthesis(/*HTML*/ `<textarea id="${name}" name="${name}" rows="${rows}" placeholder="${placeholder}">${value || ''}</textarea>`)
             } else if (readonly) {
                 input_element = ElementSynthesis(/*HTML*/ `<div class="readonly" id="${name}" name="${name}" readonly style="background: none;" tabindex="-1" disabled></div>`)
             } else {

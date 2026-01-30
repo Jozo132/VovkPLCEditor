@@ -48,7 +48,7 @@ const custom_item_html = ({ draggable, selected, type }) => {
 /** @type {{ files: PLC_ProjectItem[], folders: string[] }} */
 const default_root_state = {
     files: [
-        { id: 'setup', type: 'setup', name: 'setup', path: '/', full_path: '/setup', comment: 'Device Configuration', blocks: [] },
+        // Setup moved to Settings menu
         { id: 'symbols', type: 'symbols', name: 'symbols', path: '/', full_path: '/symbols', comment: 'Symbols Table', blocks: [] },
         { id: 'memory', type: 'memory', name: 'memory', path: '/', full_path: '/memory', comment: 'Memory Map', blocks: [] },
         { type: 'program', name: 'main', path: '/', full_path: '/main', comment: '', blocks: [] },
@@ -65,8 +65,6 @@ const sortTree = (a, b) => {
     // Sort by depth, where higher depth has higher priority
     if (a.depth === 0) return 0
     if (a.depth !== b.depth) return a.depth - b.depth
-    if (a.full_path === '/setup') return -1
-    if (b.full_path === '/setup') return 1
     if (a.full_path === '/symbols') return -1
     if (b.full_path === '/symbols') return 1
     if (a.full_path === '/memory') return -1
@@ -446,7 +444,7 @@ export default class NavigationTreeManager {
 
             const item = this.findItem(element)
             const full_path = item ? item.full_path : ''
-            const fixed = new Set(['/main', '/project', '/symbols', '/setup', '/memory'])
+            const fixed = new Set(['/main', '/project', '/symbols', '/memory'])
             const is_fixed = fixed.has(full_path)
 
             if (className === 'plc-navigation-folder') {
@@ -454,7 +452,7 @@ export default class NavigationTreeManager {
                 if (is_fixed) return ctx_fixed_folder
                 return ctx_edit_folder
             }
-            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-symbols' || className === 'plc-navigation-setup' || className === 'plc-navigation-memory') {
+            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-symbols' || className === 'plc-navigation-memory') {
                 if (connected) return ctx_online_program
                 if (is_fixed) return ctx_fixed_program
                 return ctx_edit_program
@@ -710,6 +708,13 @@ export default class NavigationTreeManager {
         const container = this.container
         container.innerHTML = ''
 
+        // Update panel title with project name if available
+        const projectName = editor.project?.info?.name
+        const titleElement = this.panel?.querySelector('.plc-navigation-panel-title')
+        if (titleElement) {
+            titleElement.textContent = projectName || 'Project'
+        }
+
         const container_handler = {
             depth: 0,
             appendChild: (child) => {
@@ -726,7 +731,8 @@ export default class NavigationTreeManager {
             default_root_state.folders.forEach(path => this.createTreeItem({ path, recursive: true, fixed: true, redraw: false }))
 
             empty_folders.forEach(path => this.createTreeItem({ path, recursive: true, redraw: false }))
-            files.forEach(item => this.createTreeItem({ item, recursive: true, redraw: false }))
+            // Filter out setup from project files (setup moved to Settings menu)
+            files.filter(f => f.type !== 'setup' && f.full_path !== '/setup').forEach(item => this.createTreeItem({ item, recursive: true, redraw: false }))
         }
 
         // Evaluate each item in the root and set the depth
@@ -846,8 +852,14 @@ export default class NavigationTreeManager {
     }
 
     highlightItem = (filter) => {
+        // Special windows (symbols, setup, memory) may not be in the tree
+        const isSpecialWindow = filter === 'symbols' || filter === 'setup' || filter === 'memory'
         const rootItem = this.findItem(filter)
-        if (!rootItem) return console.error('Item not found in root')
+        if (!rootItem) {
+            // Don't log error for special windows that aren't in tree (like setup)
+            if (!isSpecialWindow) console.error('Item not found in root')
+            return
+        }
         const item = rootItem.item
         if (!item) return console.error('Item not found')
         this.root.forEach(item => {

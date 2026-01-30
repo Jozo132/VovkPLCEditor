@@ -145,3 +145,24 @@
     border-color: #dc3545;
     box-shadow: 0 0 5px rgba(220, 53, 69, 0.5);
 }
+
+.plc-popup-form textarea {
+    font-size: 14px;
+    font-family: Arial, sans-serif;
+    padding: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 100%;
+    box-sizing: border-box;
+    outline: none;
+    resize: vertical;
+    min-height: 60px;
+}
+.plc-popup-form textarea:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+}
+.plc-popup-form textarea.error {
+    border-color: #dc3545;
+    box-shadow: 0 0 5px rgba(220, 53, 69, 0.5);
+}

@@ -7,6 +7,7 @@ import { getSymbolValue, setSymbolBit } from "../BlockLogic.js"
 import { ensureOffsets } from "../../utils/offsets.js"
 import { Popup } from "../../editor/UI/Elements/components/popup.js"
 import { MiniCodeEditor } from "../MiniCodeEditor.js"
+import { getIconType } from "../../editor/UI/Elements/components/icons.js"
 
 
 // ============================================================================
@@ -4874,7 +4875,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
             {
               type: 'submenu', name: 'insert', label: 'Insert', items: [
                 {
-                  type: 'submenu', name: 'insert_contacts', label: 'Contacts', items: [
+                  type: 'submenu', name: 'insert_contacts', label: 'Contacts', className: `plc-icon ${getIconType('ladder-contact')}`, items: [
                     { type: 'item', name: 'insert_contact', label: 'Contact (NO)' },
                     { type: 'item', name: 'insert_contact_nc', label: 'Contact (NC)' },
                     { type: 'item', name: 'insert_contact_rising', label: 'Rising Edge (P)' },
@@ -4882,7 +4883,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
                   ]
                 },
                 {
-                  type: 'submenu', name: 'insert_coils', label: 'Coils', items: [
+                  type: 'submenu', name: 'insert_coils', label: 'Coils', className: `plc-icon ${getIconType('ladder-coil')}`, items: [
                     { type: 'item', name: 'insert_coil', label: 'Coil (=)' },
                     { type: 'item', name: 'insert_coil_inverted', label: 'Inverted Coil (/)' },
                     { type: 'item', name: 'insert_coil_set', label: 'Set Coil (S)' },
@@ -4890,20 +4891,20 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
                   ]
                 },
                 {
-                  type: 'submenu', name: 'insert_timers', label: 'Timers', items: [
+                  type: 'submenu', name: 'insert_timers', label: 'Timers', className: `plc-icon ${getIconType('ladder-timer')}`, items: [
                     { type: 'item', name: 'insert_timer_ton', label: 'TON (On Delay)' },
                     { type: 'item', name: 'insert_timer_tof', label: 'TOF (Off Delay)' },
                     { type: 'item', name: 'insert_timer_tp', label: 'TP (Pulse)' },
                   ]
                 },
                 {
-                  type: 'submenu', name: 'insert_counters', label: 'Counters', items: [
+                  type: 'submenu', name: 'insert_counters', label: 'Counters', className: `plc-icon ${getIconType('ladder-counter')}`, items: [
                     { type: 'item', name: 'insert_counter_u', label: 'CTU (Count Up)' },
                     { type: 'item', name: 'insert_counter_d', label: 'CTD (Count Down)' },
                   ]
                 },
                 {
-                  type: 'submenu', name: 'insert_math', label: 'Math Operations', items: [
+                  type: 'submenu', name: 'insert_math', label: 'Math Operations', className: `plc-icon ${getIconType('ladder-math')}`, items: [
                     { type: 'item', name: 'insert_fb_add', label: 'ADD (Addition)' },
                     { type: 'item', name: 'insert_fb_sub', label: 'SUB (Subtraction)' },
                     { type: 'item', name: 'insert_fb_mul', label: 'MUL (Multiply)' },
@@ -4917,7 +4918,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
                   ]
                 },
                 {
-                  type: 'submenu', name: 'insert_compare', label: 'Compare Operations', items: [
+                  type: 'submenu', name: 'insert_compare', label: 'Compare Operations', className: `plc-icon ${getIconType('ladder-compare')}`, items: [
                     { type: 'item', name: 'insert_fb_cmp_eq', label: 'EQ (Equal)' },
                     { type: 'item', name: 'insert_fb_cmp_neq', label: 'NEQ (Not Equal)' },
                     { type: 'item', name: 'insert_fb_cmp_gt', label: 'GT (Greater Than)' },
@@ -4927,7 +4928,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
                   ]
                 },
                 {
-                  type: 'submenu', name: 'insert_move', label: 'Move/Transfer', items: [
+                  type: 'submenu', name: 'insert_move', label: 'Move/Transfer', className: `plc-icon ${getIconType('ladder-move')}`, items: [
                     { type: 'item', name: 'insert_fb_move', label: 'MOVE (Transfer)' },
                   ]
                 },
@@ -5039,15 +5040,15 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         // Edit mode: Delete, Cut, Copy, Paste
         if (edit && (selected.length > 0 || blockAtPosition)) {
           menuItems.push(
-            { type: 'item', name: 'delete', label: 'Delete' },
+            { type: 'item', name: 'delete', label: 'Delete', className: `plc-icon ${getIconType('delete')}` },
             { type: 'separator' },
-            { type: 'item', name: 'cut', label: 'Cut' },
-            { type: 'item', name: 'copy', label: 'Copy' }
+            { type: 'item', name: 'cut', label: 'Cut', className: `plc-icon ${getIconType('cut')}` },
+            { type: 'item', name: 'copy', label: 'Copy', className: `plc-icon ${getIconType('copy')}` }
           )
         }
 
         if (edit) {
-          menuItems.push({ type: 'item', name: 'paste', label: 'Paste' })
+          menuItems.push({ type: 'item', name: 'paste', label: 'Paste', className: `plc-icon ${getIconType('paste')}` })
         }
 
         menuItems.push(

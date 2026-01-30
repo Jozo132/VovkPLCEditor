@@ -114,7 +114,25 @@ export default class WindowManager {
 
         this.workspace_body = ElementSynthesisMany(/*HTML*/ `
             <div class="plc-workspace-header">
-                <p></p>
+                <div class="plc-menu-bar">
+                    <div class="plc-menu-item" data-menu="file">
+                        <span class="plc-menu-label">File</span>
+                        <div class="plc-menu-dropdown">
+                            <div class="plc-menu-option" data-action="new-project"><span class="plc-icon plc-icon-add" style="margin-right:8px;"></span>New Project</div>
+                            <div class="plc-menu-option" data-action="open-project"><span class="plc-icon plc-icon-folder" style="margin-right:8px;"></span>Open Project...</div>
+                            <div class="plc-menu-separator"></div>
+                            <div class="plc-menu-option" data-action="export-project"><span class="plc-icon plc-icon-download" style="margin-right:8px;"></span>Export Project...</div>
+                            <div class="plc-menu-separator"></div>
+                            <div class="plc-menu-option" data-action="project-properties"><span class="plc-icon plc-icon-project-properties" style="margin-right:8px;"></span>Project Properties...</div>
+                        </div>
+                    </div>
+                    <div class="plc-menu-item" data-menu="settings">
+                        <span class="plc-menu-label">Settings</span>
+                        <div class="plc-menu-dropdown">
+                            <div class="plc-menu-option" data-action="setup"><span class="plc-icon plc-icon-setup" style="margin-right:8px;"></span>Device Setup</div>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="plc-workspace-body">
                 <div class="plc-navigation no-select resizable">
@@ -2900,6 +2918,260 @@ export default class WindowManager {
         this.active_device = device
     }
 
+    _initializeMenuBar() {
+        const workspace = this.#editor.workspace
+        const menuBar = workspace.querySelector('.plc-menu-bar')
+        if (!menuBar) return
+        
+        const menuItems = menuBar.querySelectorAll('.plc-menu-item')
+        let openMenu = null
+        
+        // Close all menus
+        const closeAllMenus = () => {
+            menuItems.forEach(item => item.classList.remove('open'))
+            openMenu = null
+        }
+        
+        // Toggle menu on click
+        menuItems.forEach(item => {
+            const label = item.querySelector('.plc-menu-label')
+            if (label) {
+                label.addEventListener('click', (e) => {
+                    e.stopPropagation()
+                    if (item.classList.contains('open')) {
+                        closeAllMenus()
+                    } else {
+                        closeAllMenus()
+                        item.classList.add('open')
+                        openMenu = item
+                    }
+                })
+                
+                // Hover to switch menus when one is open
+                label.addEventListener('mouseenter', () => {
+                    if (openMenu && openMenu !== item) {
+                        closeAllMenus()
+                        item.classList.add('open')
+                        openMenu = item
+                    }
+                })
+            }
+        })
+        
+        // Close menus on click outside
+        document.addEventListener('click', (e) => {
+            if (!menuBar.contains(e.target)) {
+                closeAllMenus()
+            }
+        })
+        
+        // Close menus on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && openMenu) {
+                closeAllMenus()
+            }
+        })
+        
+        // Handle menu option clicks
+        menuBar.addEventListener('click', async (e) => {
+            const option = e.target.closest('.plc-menu-option')
+            if (!option) return
+            
+            const action = option.dataset.action
+            closeAllMenus()
+            
+            switch (action) {
+                case 'new-project':
+                    this._menuNewProject()
+                    break
+                case 'open-project':
+                    this._menuOpenProject()
+                    break
+                case 'export-project':
+                    this._menuExportProject()
+                    break
+                case 'project-properties':
+                    this._menuProjectProperties()
+                    break
+                case 'setup':
+                    this.openProgram('setup')
+                    break
+            }
+        })
+    }
+    
+    _menuNewProject() {
+        // Confirm if there's existing work
+        const hasContent = this.#editor.project?.files?.length > 0
+        if (hasContent) {
+            if (!confirm('Create a new project? Any unsaved changes will be lost.')) {
+                return
+            }
+        }
+        
+        // Clear localStorage and reload
+        localStorage.removeItem('vovk_plc_project')
+        localStorage.removeItem('vovk_plc_symbols_collapsed')
+        window.location.reload()
+    }
+    
+    _menuOpenProject() {
+        // Create file input to select JSON file
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = '.json,.vovkplc'
+        input.style.display = 'none'
+        
+        input.addEventListener('change', async (e) => {
+            const file = input.files?.[0]
+            if (!file) return
+            
+            try {
+                const text = await file.text()
+                const project = JSON.parse(text)
+                
+                // Validate basic structure
+                if (!project || typeof project !== 'object') {
+                    throw new Error('Invalid project file format')
+                }
+                
+                // Load the project
+                this.#editor.project_manager.ensureSystemSymbols(project)
+                this.#editor.project_manager.load(project)
+                this.#editor.project_manager.last_saved_state = ''
+                this.#editor.project_manager.checkAndSave()
+                
+                this.logToConsole?.(`Opened project from ${file.name}`, 'success')
+            } catch (err) {
+                console.error('Failed to open project:', err)
+                this.logToConsole?.(`Failed to open project: ${err.message}`, 'error')
+                alert(`Failed to open project: ${err.message}`)
+            }
+            
+            input.remove()
+        })
+        
+        document.body.appendChild(input)
+        input.click()
+    }
+    
+    _menuExportProject() {
+        try {
+            // Force save current state
+            this.#editor.project_manager.collectProjectState()
+            
+            // Get the project data (same as saved to localStorage)
+            const projectToExport = { ...this.#editor.project }
+            
+            // Filter out system symbols but keep user symbols
+            if (projectToExport.symbols) {
+                projectToExport.symbols = projectToExport.symbols.filter(s => !s.readonly && !s.device)
+            }
+            
+            // Keep device_symbols in export so they can be restored
+            // (they will be merged/updated when connecting to device)
+            
+            // Keep connectionMode and selectedDevice for device configuration
+            // These are already in projectToExport
+            
+            // Create filename from project info or use default
+            const projectName = projectToExport.info?.name || 'project'
+            const timestamp = new Date().toISOString().slice(0, 10)
+            const filename = `${projectName}_${timestamp}.vovkplc`
+            
+            // Create and download file
+            const json = JSON.stringify(projectToExport, null, 2)
+            const blob = new Blob([json], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            
+            const a = document.createElement('a')
+            a.href = url
+            a.download = filename
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+            
+            this.logToConsole?.(`Exported project to ${filename}`, 'success')
+        } catch (err) {
+            console.error('Failed to export project:', err)
+            this.logToConsole?.(`Failed to export project: ${err.message}`, 'error')
+        }
+    }
+
+    async _menuProjectProperties() {
+        const project = this.#editor.project
+        const info = project.info || {}
+        
+        const result = await Popup.form({
+            title: 'Project Properties',
+            width: '450px',
+            buttons: [
+                { text: 'Save', value: 'confirm', background: '#007acc', color: 'white' },
+                { text: 'Cancel', value: 'cancel' }
+            ],
+            inputs: [
+                {
+                    name: 'name',
+                    label: 'Project Title',
+                    type: 'text',
+                    value: info.name || '',
+                    placeholder: 'My PLC Project'
+                },
+                {
+                    name: 'version',
+                    label: 'Version',
+                    type: 'text',
+                    value: info.version || '0.0.0',
+                    placeholder: '0.0.0'
+                },
+                {
+                    name: 'author',
+                    label: 'Author',
+                    type: 'text',
+                    value: info.author || '',
+                    placeholder: 'Your name'
+                },
+                {
+                    name: 'description',
+                    label: 'Description',
+                    type: 'textarea',
+                    value: info.description || '',
+                    placeholder: 'Enter project description...',
+                    rows: 4
+                }
+            ]
+        })
+        
+        if (!result) return
+        
+        // Update project info
+        project.info = project.info || {}
+        project.info.name = result.name?.trim() || ''
+        project.info.version = result.version?.trim() || '0.0.0'
+        project.info.author = result.author?.trim() || ''
+        project.info.description = result.description?.trim() || ''
+        
+        // Trigger save
+        this.#editor.project_manager.save()
+        
+        // Update tree title and page title
+        this.tree_manager.draw_navigation_tree()
+        this.updatePageTitle()
+        
+        this.logToConsole?.(`Project properties updated`, 'success')
+    }
+
+    /** Update the browser page title based on project name */
+    updatePageTitle() {
+        const projectName = this.#editor.project?.info?.name
+        if (projectName) {
+            document.title = `${projectName} - VovkPLC Editor`
+        } else {
+            document.title = 'VovkPLC Editor'
+        }
+    }
+
     get_focusable_elements = () => {
         const workspace = this.#editor.workspace
         const elems = [...workspace.querySelectorAll('[tabindex]')]
@@ -2917,6 +3189,12 @@ export default class WindowManager {
         const workspace = this.#editor.workspace
 
         this.tree_manager.initialize()
+        
+        // Initialize menu bar
+        this._initializeMenuBar()
+        
+        // Set page title based on project name
+        this.updatePageTitle()
 
         // On ESC remove all selections
         workspace.addEventListener('keydown', event => {
@@ -3796,8 +4074,10 @@ export default class WindowManager {
 
     /** @param {string} id */
     restoreLazyTab(id) {
+        // Special windows (symbols, setup, memory) that don't live in the project tree
+        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory'
         const prog = this.#editor.findProgram(id)
-        if (!prog) return
+        if (!prog && !isSpecialWindow) return
         this.tab_manager.addLazyTab(id)
     }
 
@@ -3806,14 +4086,31 @@ export default class WindowManager {
         const editor = this.#editor
         if (!id) throw new Error('Program ID not found')
 
-        if (id === 'symbols' || id === 'setup' || id === 'memory') {
+        // Special windows (symbols, setup, memory) that don't live in the project tree
+        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory'
+        
+        if (isSpecialWindow) {
             if (typeof editor._pushWindowHistory === 'function') {
                 editor._pushWindowHistory(id)
             }
         }
 
         const existingTab = this.tab_manager.tabs.get(id)
-        const existingProgram = editor.findProgram(id)
+        let existingProgram = editor.findProgram(id)
+        
+        // For special windows not in tree, create a virtual program entry
+        if (!existingProgram && isSpecialWindow) {
+            existingProgram = { 
+                id, 
+                type: id, 
+                name: id, 
+                path: '/', 
+                full_path: `/${id}`, 
+                comment: id === 'setup' ? 'Device Configuration' : id === 'symbols' ? 'Symbols Table' : 'Memory Map',
+                blocks: [] 
+            }
+        }
+        
         const existingHost = existingProgram?.host || existingTab?.host
         if (existingTab && existingHost && existingProgram) {
             this.active_tab = id
@@ -3836,7 +4133,7 @@ export default class WindowManager {
             this.active_program.host?.hide()
         }
         this.active_tab = id
-        this.active_program = editor.findProgram(id)
+        this.active_program = existingProgram || editor.findProgram(id)
         if (!this.active_program) throw new Error(`Program not found: ${id}`)
         const host = this.active_program.host || this.createEditorWindow(id)
         if (!host) throw new Error('Host not found')

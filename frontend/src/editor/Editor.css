@@ -158,6 +158,79 @@ ul {
     width: 100%;
     min-width: 400px;
     background-color: #343434;
+    height: 30px;
+    min-height: 30px;
+}
+
+/* Menu Bar */
+.plc-menu-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 100%;
+    padding: 0 4px;
+}
+
+.plc-menu-item {
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.plc-menu-label {
+    padding: 0 10px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 13px;
+    color: #ccc;
+    user-select: none;
+}
+
+.plc-menu-label:hover,
+.plc-menu-item.open .plc-menu-label {
+    background-color: #454545;
+    color: #fff;
+}
+
+.plc-menu-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 200px;
+    background-color: #252526;
+    border: 1px solid #454545;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    z-index: 10000;
+    padding: 4px 0;
+}
+
+.plc-menu-item.open .plc-menu-dropdown {
+    display: block;
+}
+
+.plc-menu-option {
+    padding: 6px 16px;
+    font-size: 13px;
+    color: #ccc;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.plc-menu-option:hover {
+    background-color: #094771;
+    color: #fff;
+}
+
+.plc-menu-separator {
+    height: 1px;
+    background-color: #454545;
+    margin: 4px 0;
 }
 
 /* Ensure the workspace body takes full available height but doesn't push elements out */

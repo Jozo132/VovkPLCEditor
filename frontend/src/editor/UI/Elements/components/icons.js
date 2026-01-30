@@ -168,6 +168,135 @@ const monitor_icon_source = {
     `
 }
 
+// Ladder icon - Contact (NO) - two vertical lines with horizontal connections
+const ladder_contact_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <line stroke="#3AD" stroke-width="2" x1="2" y1="12" x2="7" y2="12"/>
+        <line stroke="#3AD" stroke-width="2" x1="7" y1="6" x2="7" y2="18"/>
+        <line stroke="#3AD" stroke-width="2" x1="17" y1="6" x2="17" y2="18"/>
+        <line stroke="#3AD" stroke-width="2" x1="17" y1="12" x2="22" y2="12"/>
+    `
+}
+
+// Ladder icon - Coil - circle with horizontal connections
+const ladder_coil_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <line stroke="#F93" stroke-width="2" x1="2" y1="12" x2="7" y2="12"/>
+        <circle fill="none" stroke="#F93" stroke-width="2" cx="12" cy="12" r="5"/>
+        <line stroke="#F93" stroke-width="2" x1="17" y1="12" x2="22" y2="12"/>
+    `
+}
+
+// Ladder icon - Timer - box with clock symbol
+const ladder_timer_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <rect fill="none" stroke="#9C7" stroke-width="2" x="4" y="4" width="16" height="16" rx="2"/>
+        <circle fill="none" stroke="#9C7" stroke-width="1.5" cx="12" cy="12" r="5"/>
+        <line stroke="#9C7" stroke-width="1.5" x1="12" y1="12" x2="12" y2="8"/>
+        <line stroke="#9C7" stroke-width="1.5" x1="12" y1="12" x2="15" y2="12"/>
+    `
+}
+
+// Ladder icon - Counter - box with counter symbol
+const ladder_counter_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <rect fill="none" stroke="#C7A" stroke-width="2" x="4" y="4" width="16" height="16" rx="2"/>
+        <line stroke="#C7A" stroke-width="2" x1="12" y1="7" x2="12" y2="13"/>
+        <line stroke="#C7A" stroke-width="2" x1="9" y1="10" x2="15" y2="10"/>
+        <line stroke="#C7A" stroke-width="2" x1="9" y1="17" x2="15" y2="17"/>
+    `
+}
+
+// Ladder icon - Math operations - box with + and - signs
+const ladder_math_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <rect fill="none" stroke="#7CF" stroke-width="2" x="4" y="4" width="16" height="16" rx="2"/>
+        <line stroke="#7CF" stroke-width="2" x1="8" y1="9" x2="14" y2="9"/>
+        <line stroke="#7CF" stroke-width="2" x1="11" y1="6" x2="11" y2="12"/>
+        <line stroke="#7CF" stroke-width="2" x1="8" y1="16" x2="14" y2="16"/>
+    `
+}
+
+// Ladder icon - Compare operations - box with < >
+const ladder_compare_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <rect fill="none" stroke="#FA7" stroke-width="2" x="4" y="4" width="16" height="16" rx="2"/>
+        <polyline fill="none" stroke="#FA7" stroke-width="2" points="10,8 7,12 10,16"/>
+        <polyline fill="none" stroke="#FA7" stroke-width="2" points="14,8 17,12 14,16"/>
+    `
+}
+
+// Ladder icon - Move/Transfer - box with arrow
+const ladder_move_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <rect fill="none" stroke="#A9F" stroke-width="2" x="4" y="4" width="16" height="16" rx="2"/>
+        <line stroke="#A9F" stroke-width="2" x1="8" y1="12" x2="16" y2="12"/>
+        <polyline fill="none" stroke="#A9F" stroke-width="2" points="13,9 16,12 13,15"/>
+    `
+}
+
+// Project Properties icon - document with lines
+const project_properties_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <path fill="none" stroke="#ddd" stroke-width="2" d="M6 2 L6 22 L18 22 L18 8 L12 2 Z"/>
+        <path fill="none" stroke="#ddd" stroke-width="2" d="M12 2 L12 8 L18 8"/>
+        <line stroke="#ddd" stroke-width="1.5" x1="8" y1="12" x2="16" y2="12"/>
+        <line stroke="#ddd" stroke-width="1.5" x1="8" y1="15" x2="16" y2="15"/>
+        <line stroke="#ddd" stroke-width="1.5" x1="8" y1="18" x2="13" y2="18"/>
+    `
+}
+
+// Cut icon - scissors
+const cut_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <circle fill="none" stroke="#ddd" stroke-width="2" cx="7" cy="17" r="3"/>
+        <circle fill="none" stroke="#ddd" stroke-width="2" cx="17" cy="17" r="3"/>
+        <line stroke="#ddd" stroke-width="2" x1="9" y1="15" x2="17" y2="5"/>
+        <line stroke="#ddd" stroke-width="2" x1="15" y1="15" x2="7" y2="5"/>
+    `
+}
+
+// Copy icon - two overlapping documents
+const copy_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <rect fill="none" stroke="#ddd" stroke-width="2" x="8" y="8" width="12" height="14" rx="1"/>
+        <path fill="none" stroke="#ddd" stroke-width="2" d="M4 16 L4 4 L14 4"/>
+    `
+}
+
+// Paste icon - clipboard
+const paste_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <rect fill="none" stroke="#ddd" stroke-width="2" x="5" y="4" width="14" height="18" rx="1"/>
+        <rect fill="#ddd" x="8" y="2" width="8" height="4" rx="1"/>
+        <line stroke="#ddd" stroke-width="1.5" x1="8" y1="11" x2="16" y2="11"/>
+        <line stroke="#ddd" stroke-width="1.5" x1="8" y1="14" x2="16" y2="14"/>
+        <line stroke="#ddd" stroke-width="1.5" x1="8" y1="17" x2="12" y2="17"/>
+    `
+}
+
 await icon_dealer.importIcon({ type: 'folder', name: 'plc-icon-folder', image: `url('${ImageRenderer.renderSVG(folder_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'program', name: 'plc-icon-gears', image: `url('${ImageRenderer.renderSVG(program_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'symbols', name: 'plc-icon-symbols', image: `url('${ImageRenderer.renderSVG(symbols_icon_source)}')` })
@@ -181,3 +310,14 @@ await icon_dealer.importIcon({ type: 'sidebar-project', name: 'plc-icon-sidebar-
 await icon_dealer.importIcon({ type: 'sidebar-health', name: 'plc-icon-sidebar-health', image: `url('${ImageRenderer.renderSVG(sidebar_health_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'sidebar-watch', name: 'plc-icon-sidebar-watch', image: `url('${ImageRenderer.renderSVG(sidebar_watch_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'monitor', name: 'plc-icon-monitor', image: `url('${ImageRenderer.renderSVG(monitor_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-contact', name: 'plc-icon-ladder-contact', image: `url('${ImageRenderer.renderSVG(ladder_contact_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-coil', name: 'plc-icon-ladder-coil', image: `url('${ImageRenderer.renderSVG(ladder_coil_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-timer', name: 'plc-icon-ladder-timer', image: `url('${ImageRenderer.renderSVG(ladder_timer_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-counter', name: 'plc-icon-ladder-counter', image: `url('${ImageRenderer.renderSVG(ladder_counter_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-math', name: 'plc-icon-ladder-math', image: `url('${ImageRenderer.renderSVG(ladder_math_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-compare', name: 'plc-icon-ladder-compare', image: `url('${ImageRenderer.renderSVG(ladder_compare_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-move', name: 'plc-icon-ladder-move', image: `url('${ImageRenderer.renderSVG(ladder_move_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'project-properties', name: 'plc-icon-project-properties', image: `url('${ImageRenderer.renderSVG(project_properties_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'cut', name: 'plc-icon-cut', image: `url('${ImageRenderer.renderSVG(cut_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'copy', name: 'plc-icon-copy', image: `url('${ImageRenderer.renderSVG(copy_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'paste', name: 'plc-icon-paste', image: `url('${ImageRenderer.renderSVG(paste_icon_source)}')` })

@@ -20,7 +20,23 @@ export default class TabManager {
     }
 
     _createTabElement(id) {
-        const program = this.#editor.findProgram(id);
+        // Special windows (symbols, setup, memory) that don't live in the project tree
+        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory'
+        let program = this.#editor.findProgram(id);
+        
+        // For special windows not in tree, create a virtual program entry
+        if (!program && isSpecialWindow) {
+            program = { 
+                id, 
+                type: id, 
+                name: id, 
+                path: '/', 
+                full_path: `/${id}`, 
+                comment: id === 'setup' ? 'Device Configuration' : id === 'symbols' ? 'Symbols Table' : 'Memory Map',
+                blocks: [] 
+            }
+        }
+        
         if (!program) throw new Error(`Program not found: ${id}`)
         const { name } = program
 
@@ -83,7 +99,23 @@ export default class TabManager {
             return
         }
 
-        const program = this.#editor.findProgram(id);
+        // Special windows (symbols, setup, memory) that don't live in the project tree
+        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory'
+        let program = this.#editor.findProgram(id);
+        
+        // For special windows not in tree, create a virtual program entry
+        if (!program && isSpecialWindow) {
+            program = { 
+                id, 
+                type: id, 
+                name: id, 
+                path: '/', 
+                full_path: `/${id}`, 
+                comment: id === 'setup' ? 'Device Configuration' : id === 'symbols' ? 'Symbols Table' : 'Memory Map',
+                blocks: [] 
+            }
+        }
+        
         if (!program) throw new Error(`Program not found: ${id}`)
 
         this.#editor.window_manager.highlightItem(id)

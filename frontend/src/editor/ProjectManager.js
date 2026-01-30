@@ -312,12 +312,15 @@ export default class ProjectManager {
             // Restore Tabs
             if (open_tabs && Array.isArray(open_tabs)) {
                 open_tabs.forEach(id => {
-                    // Check if file still exists in project
+                    // Special windows (symbols, setup, memory) that don't live in the project tree
+                    const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory'
+                    
+                    // Check if file still exists in project (or is a special window)
                     // The openTab method needs the file to exist in the tree/project structure
                     // We assume openProject has already populated the tree
                     try {
-                        // Check if it exists
-                        const exists = this.#editor.findProgram(id)
+                        // Check if it exists or is a special window
+                        const exists = this.#editor.findProgram(id) || isSpecialWindow
                         if (exists) {
                             // Restore as lazy tab initially
                             // The active tab will be fully loaded by switchTo below
