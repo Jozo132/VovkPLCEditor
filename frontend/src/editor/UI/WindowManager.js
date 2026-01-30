@@ -3792,11 +3792,11 @@ export default class WindowManager {
             }
         }, 3000)
 
-        // Open main program
-        // if (project.files) {
-        //     const main = project.files.find(f => f.name === 'main' && f.path === '/' && f.type === 'program')
-        //     if (main && main.id) this.openProgram(main.id)
-        // }
+        // Open main program for fresh projects (no UI state to restore)
+        if (project.files && !project._ui_state) {
+            const main = project.files.find(f => f.name === 'main' && f.path === '/' && f.type === 'program')
+            if (main && main.id) this.openProgram(main.id)
+        }
     }
 
     /** @type { (id: string) => (WindowType | undefined) } */

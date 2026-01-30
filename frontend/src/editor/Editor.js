@@ -374,14 +374,7 @@ export class VovkPLCEditor {
                 system: {offset: 48, size: 16},
                 marker: {offset: 64, size: 16},
             },
-            symbols: [
-                {name: 'button1', location: 'input', type: 'bit', address: 0.0, initial_value: 0, comment: 'Test input'},
-                {name: 'button2', location: 'input', type: 'bit', address: 0.1, initial_value: 0, comment: 'Test input'},
-                {name: 'button3', location: 'input', type: 'bit', address: 0.2, initial_value: 0, comment: 'Test input'},
-                {name: 'button4', location: 'input', type: 'bit', address: 0.3, initial_value: 0, comment: 'Test input'},
-                {name: 'light1', location: 'output', type: 'bit', address: 0.0, initial_value: 0, comment: 'Test output'},
-                {name: 'light2', location: 'output', type: 'bit', address: 0.1, initial_value: 0, comment: 'Test output'},
-            ],
+            symbols: [],
             // folders: ['/programs/test/b', '/programs/test/a', '/programs/test/c'],
             files: [
                 {
@@ -389,6 +382,15 @@ export class VovkPLCEditor {
                     type: 'program',
                     name: 'main',
                     full_path: '/main',
+                    blocks: [
+                        {
+                            type: 'ladder',
+                            name: 'Network 1',
+                            comment: '',
+                            blocks: [],
+                            connections: []
+                        }
+                    ],
                 },
             ],
         }

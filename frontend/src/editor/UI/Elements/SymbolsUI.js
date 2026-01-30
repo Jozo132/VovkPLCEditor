@@ -465,10 +465,22 @@ export default class SymbolsUI {
         
         // Only render symbols if not collapsed
         if (!isCollapsed) {
-            sectionSymbols.forEach((symbol) => {
-                const index = allSymbols.indexOf(symbol)
-                this._renderSymbolRow(symbol, index)
-            })
+            if (sectionSymbols.length === 0) {
+                // Show "No symbols defined" placeholder row
+                const emptyTr = document.createElement('tr')
+                emptyTr.classList.add('symbol-empty-row')
+                const emptyTd = document.createElement('td')
+                emptyTd.colSpan = 8
+                emptyTd.style.cssText = 'color: #666; font-style: italic; padding: 8px 12px; text-align: center;'
+                emptyTd.textContent = sectionType === 'project' ? 'No symbols defined' : 'No symbols available'
+                emptyTr.appendChild(emptyTd)
+                this.tbody.appendChild(emptyTr)
+            } else {
+                sectionSymbols.forEach((symbol) => {
+                    const index = allSymbols.indexOf(symbol)
+                    this._renderSymbolRow(symbol, index)
+                })
+            }
         }
     }
     
