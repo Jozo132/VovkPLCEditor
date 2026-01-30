@@ -16,6 +16,7 @@ import {CSSimporter, debug_components, ElementSynthesis, ElementSynthesisMany, t
  *     width?: string,
  *     height?: string,
  *     draggable?: boolean,
+ *     hideHeader?: boolean,
  *     container?: Element | HTMLElement,
  *     backdrop?: boolean,
  *     closeButton?: boolean,
@@ -102,6 +103,11 @@ export class Popup {
 
         const header = (this.header = querySelect(modal, '.plc-popup-header'))
         const footer = (this.footer = querySelect(modal, '.plc-popup-footer'))
+
+        // Hide entire header if requested
+        if (options.hideHeader) {
+            header.style.display = 'none'
+        }
 
         const title = querySelect(modal, '.plc-popup-title')
         const description = querySelect(modal, '.plc-popup-description')

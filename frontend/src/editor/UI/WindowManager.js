@@ -1,5 +1,5 @@
 import {PLC_Project, PLCEditor} from '../../utils/types.js'
-import VOVKPLCEDITOR_VERSION_BUILD, { VOVKPLCEDITOR_VERSION } from '../BuildNumber.js'
+import VOVKPLCEDITOR_VERSION_BUILD, {VOVKPLCEDITOR_VERSION} from '../BuildNumber.js'
 import {ElementSynthesisMany, getEventPath, isVisible} from '../../utils/tools.js'
 import {ensureOffsets} from '../../utils/offsets.js'
 import {Popup} from './Elements/components/popup.js'
@@ -22,7 +22,7 @@ export default class WindowManager {
     /** @type {'simulation' | 'device'} */
     active_device = 'simulation'
     _monitoringActive = false
-    _monitoringAvailable = true  // Always available - can toggle in any state
+    _monitoringAvailable = true // Always available - can toggle in any state
     _liveEditEnabled = false
     _monitoringConnectionState = null
     _healthConnectionState = null
@@ -45,64 +45,64 @@ export default class WindowManager {
     removeHighlight = () => this.tree_manager.removeHighlight()
 
     // Serial Polling Methods
-    _handleSerialEvent = (event) => {
-         // console.log('[WindowManager] Serial event detected:', event.type)
-         // Delay slightly to allow system to register port availability
-         if (this.connectionMode === 'serial') {
-             setTimeout(() => {
-                 this.updateDeviceDropdown()
-             }, 200)
-             setTimeout(() => {
-                 this.updateDeviceDropdown()
-             }, 1000)
-         }
+    _handleSerialEvent = event => {
+        // console.log('[WindowManager] Serial event detected:', event.type)
+        // Delay slightly to allow system to register port availability
+        if (this.connectionMode === 'serial') {
+            setTimeout(() => {
+                this.updateDeviceDropdown()
+            }, 200)
+            setTimeout(() => {
+                this.updateDeviceDropdown()
+            }, 1000)
+        }
     }
 
     _startSerialPolling = () => {
-         const hasSerial = 'serial' in navigator;
-         // console.log(`[WindowManager] _startSerialPolling called. Existing Timer: ${this.serialDevicePollingTimer}, Has Serial: ${hasSerial}`)
-         
-         // Always clear to ensure fresh start
-         if (this.serialDevicePollingTimer) {
-             clearInterval(this.serialDevicePollingTimer)
-             this.serialDevicePollingTimer = null
-         }
-         
-         // Remove existing listeners just in case
-         if (hasSerial) {
-             navigator.serial.removeEventListener('connect', this._handleSerialEvent)
-             navigator.serial.removeEventListener('disconnect', this._handleSerialEvent)
-             
-             // Add listeners
-             navigator.serial.addEventListener('connect', this._handleSerialEvent)
-             navigator.serial.addEventListener('disconnect', this._handleSerialEvent)
-             // console.log('[WindowManager] Serial Event Listeners Attached')
-         } else {
-             // console.warn('[WindowManager] serial API not available in navigator')
-         }
-         
-         // Poll for changes
-         this.serialDevicePollingTimer = setInterval(() => {
-             // Only update if mode is serial
-             if (this.connectionMode === 'serial' && hasSerial) {
-                 const isReconnecting = this.device_online_button && this.device_online_button.title === 'Cancel reconnect'
-                 if (!isReconnecting) {
-                     this.updateDeviceDropdown()
-                 }
-             }
-         }, 1000)
+        const hasSerial = 'serial' in navigator
+        // console.log(`[WindowManager] _startSerialPolling called. Existing Timer: ${this.serialDevicePollingTimer}, Has Serial: ${hasSerial}`)
+
+        // Always clear to ensure fresh start
+        if (this.serialDevicePollingTimer) {
+            clearInterval(this.serialDevicePollingTimer)
+            this.serialDevicePollingTimer = null
+        }
+
+        // Remove existing listeners just in case
+        if (hasSerial) {
+            navigator.serial.removeEventListener('connect', this._handleSerialEvent)
+            navigator.serial.removeEventListener('disconnect', this._handleSerialEvent)
+
+            // Add listeners
+            navigator.serial.addEventListener('connect', this._handleSerialEvent)
+            navigator.serial.addEventListener('disconnect', this._handleSerialEvent)
+            // console.log('[WindowManager] Serial Event Listeners Attached')
+        } else {
+            // console.warn('[WindowManager] serial API not available in navigator')
+        }
+
+        // Poll for changes
+        this.serialDevicePollingTimer = setInterval(() => {
+            // Only update if mode is serial
+            if (this.connectionMode === 'serial' && hasSerial) {
+                const isReconnecting = this.device_online_button && this.device_online_button.title === 'Cancel reconnect'
+                if (!isReconnecting) {
+                    this.updateDeviceDropdown()
+                }
+            }
+        }, 1000)
     }
 
     _stopSerialPolling = () => {
-         // console.log('[WindowManager] Stopping Serial Polling')
-         if (this.serialDevicePollingTimer) {
-             clearInterval(this.serialDevicePollingTimer)
-             this.serialDevicePollingTimer = null
-         }
-         if ('serial' in navigator) {
-             navigator.serial.removeEventListener('connect', this._handleSerialEvent)
-             navigator.serial.removeEventListener('disconnect', this._handleSerialEvent)
-         }
+        // console.log('[WindowManager] Stopping Serial Polling')
+        if (this.serialDevicePollingTimer) {
+            clearInterval(this.serialDevicePollingTimer)
+            this.serialDevicePollingTimer = null
+        }
+        if ('serial' in navigator) {
+            navigator.serial.removeEventListener('connect', this._handleSerialEvent)
+            navigator.serial.removeEventListener('disconnect', this._handleSerialEvent)
+        }
     }
 
     #editor
@@ -130,6 +130,15 @@ export default class WindowManager {
                         <span class="plc-menu-label">Settings</span>
                         <div class="plc-menu-dropdown">
                             <div class="plc-menu-option" data-action="setup"><span class="plc-icon plc-icon-setup" style="margin-right:8px;"></span>Device Setup</div>
+                        </div>
+                    </div>
+                    <div class="plc-menu-item" data-menu="help">
+                        <span class="plc-menu-label">Help</span>
+                        <div class="plc-menu-dropdown">
+                            <div class="plc-menu-option" data-action="about"><span class="codicon codicon-info" style="margin-right:8px;"></span>About</div>
+                            <div class="plc-menu-option" data-action="version-history"><span class="codicon codicon-history" style="margin-right:8px;"></span>Change History</div>
+                            <div class="plc-menu-separator"></div>
+                            <div class="plc-menu-option" data-action="disclaimer"><span class="codicon codicon-warning" style="margin-right:8px;"></span>Disclaimer</div>
                         </div>
                     </div>
                 </div>
@@ -333,13 +342,13 @@ export default class WindowManager {
                 boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
                 borderRadius: '3px',
                 minWidth: '200px',
-                pointerEvents: 'none'
+                pointerEvents: 'none',
             })
             workspace.appendChild(this.footerTooltip)
 
             // Remove native tooltip
             footerVersion.removeAttribute('title')
-            
+
             footerVersion.addEventListener('mouseenter', () => this._updateFooterVersionTooltip(footerVersion, true))
             footerVersion.addEventListener('mouseleave', () => {
                 if (this.footerTooltip) this.footerTooltip.style.display = 'none'
@@ -435,8 +444,8 @@ export default class WindowManager {
                     editor.ladder_selection = {
                         ladder_id: null,
                         program_id: null,
-                        origin: { x: 0, y: 0 },
-                        selection: []
+                        origin: {x: 0, y: 0},
+                        selection: [],
                     }
                     // Re-render the ladder to clear the visual selection
                     if (ladder.props?.ctx) {
@@ -728,11 +737,11 @@ export default class WindowManager {
                         const run = async () => {
                             // For ladder blocks, we use token to find cell position
                             const isLadderBlock = problem.blockType === 'ladder'
-                            
+
                             // Text editors need start/end, ladder blocks can use token or line/column
                             if (!problem.blockId) return
                             if (!isLadderBlock && (typeof problem.start !== 'number' || typeof problem.end !== 'number')) return
-                            
+
                             const findTarget = () => {
                                 const programs = this.#editor?._getLintPrograms?.() || []
                                 for (const program of programs) {
@@ -824,7 +833,7 @@ export default class WindowManager {
                                 // Resolve cell position from token or fallback to line/column
                                 let cellX = (problem.column || 1) - 1
                                 let cellY = (problem.line || 1) - 1
-                                
+
                                 if (problem.token) {
                                     const nodes = targetBlock.nodes || targetBlock.blocks || []
                                     const node = nodes.find(n => n.id === problem.token)
@@ -833,7 +842,7 @@ export default class WindowManager {
                                         cellY = node.y
                                     }
                                 }
-                                
+
                                 if (isSelected) {
                                     // Select the cell
                                     if (typeof targetBlock.props?.selectCell === 'function') {
@@ -990,7 +999,7 @@ export default class WindowManager {
             })
         }
 
-        consoleHeader.style.touchAction = 'none';
+        consoleHeader.style.touchAction = 'none'
         consoleHeader.addEventListener('pointerdown', e => {
             if (e.button !== 0) return
             if (e.target.closest('button') || e.target.closest('.plc-console-tab') || e.target.closest('.plc-console-actions')) return
@@ -999,90 +1008,90 @@ export default class WindowManager {
             consoleHeader.setPointerCapture(e.pointerId)
             const startY = e.clientY
             const startHeight = consoleBody.getBoundingClientRect().height
-            
+
             let isDragging = false
 
             const centerCol = workspace.querySelector('.plc-center-column')
             const rect = centerCol.getBoundingClientRect()
 
-            const onPointerMove = (evt) => {
-                 const diff = startY - evt.clientY
-                 if (!isDragging && Math.abs(diff) > 5) {
-                     isDragging = true
-                     document.body.style.cursor = 'ns-resize'
-                     consoleHeader.style.cursor = 'ns-resize'
-                 }
+            const onPointerMove = evt => {
+                const diff = startY - evt.clientY
+                if (!isDragging && Math.abs(diff) > 5) {
+                    isDragging = true
+                    document.body.style.cursor = 'ns-resize'
+                    consoleHeader.style.cursor = 'ns-resize'
+                }
 
-                 if (isDragging) {
-                     let newHeight = startHeight + diff
-                     
-                     const minExpandedHeight = 150
-                     const triggerThreshold = minExpandedHeight / 2 // 75px
+                if (isDragging) {
+                    let newHeight = startHeight + diff
 
-                     // Snap Logic
-                     if (newHeight < triggerThreshold) {
-                         // Dragging below half min-height -> Visual Minimize
-                         consoleBody.classList.add('minimized')
-                         consoleState.minimized = true
-                         // Force visual height to header height so it looks minimized
-                         // But we might want to keep tracking 'newHeight' virtually?
-                         // Actually, standard behavior is usually to clamp visual feedback till drop?
-                         // User wants: "force it to minimize if we drag ... below 1/2"
-                         // And "allow to unminimize it when dragging it back up"
-                         
-                         // We will act immediately based on threshold
-                         consoleBody.style.height = `${consoleHeaderHeight}px`
-                     } else {
-                         // Above threshold
-                         consoleBody.classList.remove('minimized')
-                         consoleState.minimized = false
+                    const minExpandedHeight = 150
+                    const triggerThreshold = minExpandedHeight / 2 // 75px
 
-                         // Clamp to min expanded height or max
-                         if (newHeight < minExpandedHeight) newHeight = minExpandedHeight
-                         
-                         const maxHeight = rect.height - 100
-                         if (newHeight > maxHeight) newHeight = maxHeight
-                         
-                         consoleBody.style.height = newHeight + 'px'
-                         consoleState.lastHeight = newHeight
-                     }
-                 }
+                    // Snap Logic
+                    if (newHeight < triggerThreshold) {
+                        // Dragging below half min-height -> Visual Minimize
+                        consoleBody.classList.add('minimized')
+                        consoleState.minimized = true
+                        // Force visual height to header height so it looks minimized
+                        // But we might want to keep tracking 'newHeight' virtually?
+                        // Actually, standard behavior is usually to clamp visual feedback till drop?
+                        // User wants: "force it to minimize if we drag ... below 1/2"
+                        // And "allow to unminimize it when dragging it back up"
+
+                        // We will act immediately based on threshold
+                        consoleBody.style.height = `${consoleHeaderHeight}px`
+                    } else {
+                        // Above threshold
+                        consoleBody.classList.remove('minimized')
+                        consoleState.minimized = false
+
+                        // Clamp to min expanded height or max
+                        if (newHeight < minExpandedHeight) newHeight = minExpandedHeight
+
+                        const maxHeight = rect.height - 100
+                        if (newHeight > maxHeight) newHeight = maxHeight
+
+                        consoleBody.style.height = newHeight + 'px'
+                        consoleState.lastHeight = newHeight
+                    }
+                }
             }
 
-            const onPointerUp = (evt) => {
-                 consoleHeader.releasePointerCapture(evt.pointerId)
-                 consoleHeader.removeEventListener('pointermove', onPointerMove)
-                 consoleHeader.removeEventListener('pointerup', onPointerUp)
-                 document.body.style.cursor = ''
-                 consoleHeader.style.cursor = ''
+            const onPointerUp = evt => {
+                consoleHeader.releasePointerCapture(evt.pointerId)
+                consoleHeader.removeEventListener('pointermove', onPointerMove)
+                consoleHeader.removeEventListener('pointerup', onPointerUp)
+                document.body.style.cursor = ''
+                consoleHeader.style.cursor = ''
 
-                 if (!isDragging) {
-                     // Click Toggle
-                     if (consoleBody.classList.contains('minimized')) {
+                if (!isDragging) {
+                    // Click Toggle
+                    if (consoleBody.classList.contains('minimized')) {
                         openConsole()
-                     } else {
+                    } else {
                         consoleState.lastHeight = parseFloat(getComputedStyle(consoleBody).height) || 150
                         if (consoleState.lastHeight < 150) consoleState.lastHeight = 150
-                        
+
                         consoleState.minimized = true
                         consoleBody.classList.add('minimized')
                         consoleBody.style.height = `${consoleHeaderHeight}px`
-                     }
-                 } else {
-                     // Drag End
-                     const h = parseFloat(consoleBody.style.height)
-                     if (h <= consoleHeaderHeight + 5) {
-                          consoleState.minimized = true;
-                          consoleBody.classList.add('minimized')
-                          consoleBody.style.height = `${consoleHeaderHeight}px`
-                     } else {
-                          consoleState.minimized = false
-                          consoleBody.classList.remove('minimized')
-                          consoleState.lastHeight = h
-                     }
-                 }
+                    }
+                } else {
+                    // Drag End
+                    const h = parseFloat(consoleBody.style.height)
+                    if (h <= consoleHeaderHeight + 5) {
+                        consoleState.minimized = true
+                        consoleBody.classList.add('minimized')
+                        consoleBody.style.height = `${consoleHeaderHeight}px`
+                    } else {
+                        consoleState.minimized = false
+                        consoleBody.classList.remove('minimized')
+                        consoleState.lastHeight = h
+                    }
+                }
             }
-            
+
             consoleHeader.addEventListener('pointermove', onPointerMove)
             consoleHeader.addEventListener('pointerup', onPointerUp)
         })
@@ -1131,7 +1140,7 @@ export default class WindowManager {
 
         this.device_health_charts = {}
         const metrics = ['cycle', 'period', 'jitter', 'ram']
-        
+
         // Create shared tooltip element
         let tooltip = document.getElementById('plc-health-tooltip')
         if (!tooltip) {
@@ -1142,35 +1151,35 @@ export default class WindowManager {
         }
 
         for (const m of metrics) {
-             const el = device_health.querySelector(`[data-metric="${m}"]`)
-             if (el) {
-                 this.device_health_charts[m] = {
-                     container: el,
-                     fill: el.querySelector('.health-bar-fill'),
-                     range: el.querySelector('.health-range-indicator'),
-                     valMin: el.querySelector('.health-value-min'),
-                     valMax: el.querySelector('.health-value-max'),
-                     value: el.querySelector('.health-value')
-                 }
-                 
-                 // Tooltip events
-                 el.addEventListener('mouseenter', () => {
-                     const text = el.getAttribute('data-tooltip')
-                     if (text) {
-                         tooltip.textContent = text
-                         tooltip.style.display = 'block'
-                     }
-                 })
-                 el.addEventListener('mouseleave', () => {
-                     tooltip.style.display = 'none'
-                 })
-                 el.addEventListener('mousemove', (e) => {
-                     tooltip.style.left = (e.pageX + 10) + 'px'
-                     tooltip.style.top = (e.pageY + 10) + 'px'
-                 })
-             }
+            const el = device_health.querySelector(`[data-metric="${m}"]`)
+            if (el) {
+                this.device_health_charts[m] = {
+                    container: el,
+                    fill: el.querySelector('.health-bar-fill'),
+                    range: el.querySelector('.health-range-indicator'),
+                    valMin: el.querySelector('.health-value-min'),
+                    valMax: el.querySelector('.health-value-max'),
+                    value: el.querySelector('.health-value'),
+                }
+
+                // Tooltip events
+                el.addEventListener('mouseenter', () => {
+                    const text = el.getAttribute('data-tooltip')
+                    if (text) {
+                        tooltip.textContent = text
+                        tooltip.style.display = 'block'
+                    }
+                })
+                el.addEventListener('mouseleave', () => {
+                    tooltip.style.display = 'none'
+                })
+                el.addEventListener('mousemove', e => {
+                    tooltip.style.left = e.pageX + 10 + 'px'
+                    tooltip.style.top = e.pageY + 10 + 'px'
+                })
+            }
         }
-        
+
         const device_health_reset = device_health.querySelector('.plc-device-health-reset')
         if (!device_health_reset) throw new Error('Device health reset button not found')
         device_health_reset.addEventListener('click', () => this.#on_device_health_reset_click())
@@ -1181,7 +1190,7 @@ export default class WindowManager {
         const watchContainer = workspace.querySelector('.plc-watch-container')
         if (!watchContainer) throw new Error('Watch container not found')
         this.watch_panel = new WatchPanel(editor, watchContainer)
-        
+
         // Restore monitoring state from localStorage
         try {
             const savedMonitoringState = localStorage.getItem('vovk_plc_monitoring_active')
@@ -1199,17 +1208,16 @@ export default class WindowManager {
         } catch (e) {
             console.warn('Failed to restore monitoring state', e)
         }
-        
-        // Save on change
-        this.watch_panel.onListChange = (items) => {
-             if (editor.project) {
-                 editor.project.watch = items
-                 if (editor.project_manager?.forceSave) {
-                     editor.project_manager.forceSave()
-                 }
-             }
-        }
 
+        // Save on change
+        this.watch_panel.onListChange = items => {
+            if (editor.project) {
+                editor.project.watch = items
+                if (editor.project_manager?.forceSave) {
+                    editor.project_manager.forceSave()
+                }
+            }
+        }
 
         // Connection mode switching
         this.connectionMode = 'simulation'
@@ -1217,14 +1225,14 @@ export default class WindowManager {
         const deviceSelectContainer = workspace.querySelector('.plc-device-select-container')
         const simulationLabel = workspace.querySelector('.plc-simulation-label')
         const newDeviceBtn = workspace.querySelector('.plc-new-device-btn')
-        
+
         if (!modeSelect || !deviceSelectContainer) throw new Error('Mode or device select not found')
-        
+
         this.modeSelect = modeSelect
         this.deviceSelectContainer = deviceSelectContainer
         this.simulationLabel = simulationLabel
         this.newDeviceBtn = newDeviceBtn
-        
+
         // Restore connection mode and device from project
         if (editor.project?.connectionMode) {
             this.connectionMode = editor.project.connectionMode
@@ -1240,12 +1248,12 @@ export default class WindowManager {
                 this.simulationLabel.style.display = this.connectionMode === 'simulation' ? 'flex' : 'none'
             }
         } else {
-             // Default state (simulation)
-             if (this.simulationLabel) {
+            // Default state (simulation)
+            if (this.simulationLabel) {
                 this.simulationLabel.style.display = 'flex'
-             }
+            }
         }
-        
+
         // Initialize CustomDropdown
         this.deviceDropdown = new CustomDropdown({
             container: deviceSelectContainer,
@@ -1257,7 +1265,7 @@ export default class WindowManager {
                         await this.#editor.device_manager.disconnect(true)
                         this.active_mode = 'edit'
                     }
-                    
+
                     // Set device and connect
                     this.active_device = 'serial'
                     await this.#on_device_online_click()
@@ -1266,7 +1274,7 @@ export default class WindowManager {
 
                 // Store selected value for connect button
                 this.selectedDeviceValue = value
-                
+
                 // Track serial preference separately
                 if (value !== '_simulation' && value !== '_none' && value !== '_error' && !value.toString().startsWith('_action')) {
                     this._savedSerialDevice = value
@@ -1274,7 +1282,7 @@ export default class WindowManager {
                         editor.project.selectedSerialDevice = value
                     }
                 }
-                
+
                 // Trigger UI update to refresh button state immediately
                 this.updateDeviceDropdown()
 
@@ -1285,9 +1293,9 @@ export default class WindowManager {
                         editor.project_manager.forceSave()
                     }
                 }
-            }
+            },
         })
-        
+
         // Restore selected device from project
         if (editor.project?.selectedDevice) {
             this.selectedDeviceValue = editor.project.selectedDevice
@@ -1295,11 +1303,11 @@ export default class WindowManager {
         if (editor.project?.selectedSerialDevice) {
             this._savedSerialDevice = editor.project.selectedSerialDevice
         }
-        
+
         // Serial device polling and events
         // this.serialDevicePollingTimer = null // Moved to initialization to avoid overwrite if startup happens early
         // Methods moved to class fields: _startSerialPolling, _stopSerialPolling, _handleSerialEvent
-        
+
         modeSelect.addEventListener('change', () => {
             this.connectionMode = modeSelect.value
             // Save to project
@@ -1310,7 +1318,7 @@ export default class WindowManager {
                 }
             }
             this.updateDeviceDropdown()
-            
+
             // Show/hide new device button based on mode
             if (newDeviceBtn) {
                 newDeviceBtn.style.display = 'none' // button moved to dropdown
@@ -1323,7 +1331,7 @@ export default class WindowManager {
             if (this.simulationLabel) {
                 this.simulationLabel.style.display = modeSelect.value === 'simulation' ? 'flex' : 'none'
             }
-            
+
             // Start/stop polling based on mode
             if (this.connectionMode === 'serial') {
                 this._startSerialPolling()
@@ -1331,12 +1339,12 @@ export default class WindowManager {
                 this._stopSerialPolling()
             }
         })
-        
+
         // Start polling if serial mode is active
         if (this.connectionMode === 'serial') {
             this._startSerialPolling()
         }
-        
+
         // New device button handler
         if (newDeviceBtn) {
             newDeviceBtn.addEventListener('click', async () => {
@@ -1345,7 +1353,7 @@ export default class WindowManager {
                     await this.#editor.device_manager.disconnect(true)
                     this.active_mode = 'edit'
                 }
-                
+
                 // Set device and connect
                 this.active_device = 'serial'
                 await this.#on_device_online_click()
@@ -1372,7 +1380,7 @@ export default class WindowManager {
                 }
 
                 const selectedValue = this.selectedDeviceValue
-                
+
                 if (selectedValue === '_simulation') {
                     this.active_device = 'simulation'
                     await this.#on_device_online_click()
@@ -1383,30 +1391,30 @@ export default class WindowManager {
                 } else if (selectedValue.startsWith('_usb_')) {
                     // Paired device selected via USB Key
                     if (!('serial' in navigator)) return
-                    
+
                     const usbKey = selectedValue.replace('_usb_', '')
                     const [vidStr, pidStr] = usbKey.split(':')
                     const vid = parseInt(vidStr, 16)
                     const pid = parseInt(pidStr, 16)
-                    
+
                     try {
                         const ports = await navigator.serial.getPorts()
                         const targetPortIndex = ports.findIndex(p => {
                             const info = p.getInfo()
                             return info.usbVendorId === vid && info.usbProductId === pid
                         })
-                        
+
                         if (targetPortIndex >= 0) {
-                             await this.connectToPairedDevice(targetPortIndex)
-                             // Force an immediate update to reflect connection status
-                             setTimeout(() => this.updateDeviceDropdown(), 500) 
+                            await this.connectToPairedDevice(targetPortIndex)
+                            // Force an immediate update to reflect connection status
+                            setTimeout(() => this.updateDeviceDropdown(), 500)
                         } else {
                             // Device is selected but physically offline
                             // We can't connect to it
-                             this.logToConsole('Device is offline. Please plug it in.', 'warning')
+                            this.logToConsole('Device is offline. Please plug it in.', 'warning')
                         }
                     } catch (e) {
-                         this.logToConsole('Error finding device: ' + e.message, 'error')
+                        this.logToConsole('Error finding device: ' + e.message, 'error')
                     }
                 } else if (selectedValue && selectedValue.toString().startsWith('_offline_')) {
                     // Legacy Offline device (should be handled by _usb_ now, but keeping for safety)
@@ -1422,14 +1430,14 @@ export default class WindowManager {
         const device_select_element = null // Removed old dropdown
         const device_online_button = deviceButton
         this.device_online_button = device_online_button
-        
+
         // Initial device dropdown population
         this.updateDeviceDropdown()
 
         // Listen for device info updates to refresh dropdown with device names
-        workspace.addEventListener('plc-device-update', (e) => {
+        workspace.addEventListener('plc-device-update', e => {
             const detail = e.detail || {}
-            
+
             // Handle reconnection state (UI Feedback)
             if (this.device_online_button && (detail.reconnecting !== undefined || detail.connected !== undefined)) {
                 if (detail.reconnecting) {
@@ -1439,7 +1447,7 @@ export default class WindowManager {
                     this.device_online_button.style.background = '#FFA500' // Orange
                     this.device_online_button.style.color = '#fff'
                     this.device_online_button.removeAttribute('disabled')
-                    
+
                     // Disable dropdown during reconnect
                     if (this.deviceDropdown) {
                         // We can't easily disable the whole custom dropdown, but we can make it ignore clicks or appear disabled
@@ -1467,7 +1475,7 @@ export default class WindowManager {
             if (detail.connected && detail.info && this.connectionMode === 'serial') {
                 const info = detail.info
                 const editor = this.#editor
-                
+
                 if (editor.device_manager?.connection?.serial?.port) {
                     const port = editor.device_manager.connection.serial.port
                     const portInfo = port.getInfo()
@@ -1479,12 +1487,12 @@ export default class WindowManager {
                         const deviceLabel = info.device || 'Unnamed'
                         const arch = info.arch || ''
                         const fullName = arch ? `${deviceLabel} [${arch}]` : deviceLabel
-                        
+
                         // Store as object with timestamps
                         const existing = editor.project.serialDeviceNames[portKey]
                         const now = Date.now()
                         let created = now
-                        
+
                         if (typeof existing === 'string') {
                             // Legacy string format
                             created = now // resetting created as we don't know
@@ -1495,7 +1503,7 @@ export default class WindowManager {
                         editor.project.serialDeviceNames[portKey] = {
                             name: fullName,
                             created: created,
-                            lastConnected: now
+                            lastConnected: now,
                         }
 
                         // Save project to persist device names
@@ -1504,7 +1512,7 @@ export default class WindowManager {
                         }
                     }
                 }
-                
+
                 // Device info received, update dropdown to show device name
                 setTimeout(() => this.updateDeviceDropdown(), 100)
             }
@@ -1535,7 +1543,7 @@ export default class WindowManager {
                 downloadBtn.style.opacity = connected ? '1' : '0.5'
                 downloadBtn.style.pointerEvents = connected ? 'all' : 'none'
             }
-            
+
             // Disable mode selector, new device button, and device dropdown when connected
             if (this.modeSelect) {
                 if (connected) {
@@ -1587,7 +1595,7 @@ export default class WindowManager {
                     this._setHealthConnected(false)
                 }
             }
-            
+
             // Auto-transition to offline mode when connection is lost
             if (!connected && this.active_mode === 'online') {
                 this.active_mode = 'edit'
@@ -1605,7 +1613,7 @@ export default class WindowManager {
                     device_info.innerHTML = ''
                 }
             }
-            
+
             // Auto-transition to online mode when connection is restored (auto-reconnect)
             if (connected && this.active_mode === 'edit') {
                 this.active_mode = 'online'
@@ -1627,9 +1635,9 @@ export default class WindowManager {
                     `
                 }
             }
-            
+
             this.updateLiveMonitorState()
-            
+
             // Update paired devices list when connection status changes
             if (this.connectionMode === 'serial') {
                 this.updateDeviceDropdown()
@@ -1638,7 +1646,7 @@ export default class WindowManager {
 
         // Listen to device connection events
         workspace.addEventListener('plc-device-update', updateConnectionStatus)
-        
+
         // Initial status update
         updateConnectionStatus()
 
@@ -1658,29 +1666,37 @@ export default class WindowManager {
 
         this.tree_manager = new NavigationTreeManager(editor)
         this.tab_manager = new TabManager(editor)
-        
+
         this.data_fetcher = new DataFetcher(editor)
         editor.data_fetcher = this.data_fetcher
 
         // Horizontal scrolling for tabs
         const tabs_element = workspace.querySelector('.plc-window-tabs')
         if (tabs_element) {
-            tabs_element.addEventListener('wheel', (evt) => {
-                if (evt.deltaY !== 0) {
-                    evt.preventDefault()
-                    tabs_element.scrollLeft += evt.deltaY
-                }
-            }, { passive: false })
+            tabs_element.addEventListener(
+                'wheel',
+                evt => {
+                    if (evt.deltaY !== 0) {
+                        evt.preventDefault()
+                        tabs_element.scrollLeft += evt.deltaY
+                    }
+                },
+                {passive: false},
+            )
         }
 
         // Clear problem selection when clicking anywhere in the program window area
-        window_frame.addEventListener('mousedown', (evt) => {
-            // Clear problem panel selection to focus on user interaction
-            if (typeof this.clearProblemSelection === 'function') {
-                this.clearProblemSelection()
-            }
-        }, { capture: true })
-        
+        window_frame.addEventListener(
+            'mousedown',
+            evt => {
+                // Clear problem panel selection to focus on user interaction
+                if (typeof this.clearProblemSelection === 'function') {
+                    this.clearProblemSelection()
+                }
+            },
+            {capture: true},
+        )
+
         this.#initPanelResizables(workspace)
         this.#initContextMenus(workspace)
         // Initialize initial state
@@ -1696,16 +1712,16 @@ export default class WindowManager {
             this.#editor.context_manager.addListener({
                 target: connectionHeader,
                 onOpen: () => [
-                    { type: 'item', label: this.active_device === 'simulation' ? 'Switch to Device' : 'Switch to Simulation', name: 'toggle_device' },
-                    { type: 'item', label: this.active_mode === 'online' ? 'Disconnect' : 'Connect', name: 'toggle_online' }
+                    {type: 'item', label: this.active_device === 'simulation' ? 'Switch to Device' : 'Switch to Simulation', name: 'toggle_device'},
+                    {type: 'item', label: this.active_mode === 'online' ? 'Disconnect' : 'Connect', name: 'toggle_online'},
                 ],
-                onClose: (key) => {
+                onClose: key => {
                     if (key === 'toggle_device') {
-                       const next = this.active_device === 'simulation' ? 'device' : 'simulation'
-                       this.setActiveDevice(next)
+                        const next = this.active_device === 'simulation' ? 'device' : 'simulation'
+                        this.setActiveDevice(next)
                     }
                     if (key === 'toggle_online') this.#on_device_online_click()
-                }
+                },
             })
         }
 
@@ -1713,15 +1729,15 @@ export default class WindowManager {
         const projectHeader = workspace.querySelector('.plc-navigation-panel-header')
         if (projectHeader) {
             this.#editor.context_manager.addListener({
-                 target: projectHeader,
-                 onOpen: () => [
-                     // { type: 'item', label: 'Refresh', name: 'refresh' },
-                     { type: 'item', label: 'Collapse All', name: 'collapse_all' }
-                 ],
-                 onClose: (key) => {
-                     // if (key === 'refresh') this.tree_manager?.refresh?.()
-                     if (key === 'collapse_all') this.tree_manager?.collapseItems?.()
-                 }
+                target: projectHeader,
+                onOpen: () => [
+                    // { type: 'item', label: 'Refresh', name: 'refresh' },
+                    {type: 'item', label: 'Collapse All', name: 'collapse_all'},
+                ],
+                onClose: key => {
+                    // if (key === 'refresh') this.tree_manager?.refresh?.()
+                    if (key === 'collapse_all') this.tree_manager?.collapseItems?.()
+                },
             })
         }
 
@@ -1730,49 +1746,40 @@ export default class WindowManager {
         if (healthHeader) {
             this.#editor.context_manager.addListener({
                 target: healthHeader,
-                onOpen: () => [
-                    { type: 'item', label: 'Reset Max Values', name: 'reset' }
-                ],
-                onClose: (key) => {
-                     if (key === 'reset') this.#on_device_health_reset_click()
-                }
+                onOpen: () => [{type: 'item', label: 'Reset Max Values', name: 'reset'}],
+                onClose: key => {
+                    if (key === 'reset') this.#on_device_health_reset_click()
+                },
             })
         }
-        
+
         // Watch Panel Header
         const watchHeader = workspace.querySelector('.plc-device-watch-header')
         if (watchHeader) {
-             this.#editor.context_manager.addListener({
+            this.#editor.context_manager.addListener({
                 target: watchHeader,
-                onOpen: () => [
-                     { type: 'item', label: 'Clear Watch Table', name: 'clear' }
-                ],
-                onClose: (key) => {
+                onOpen: () => [{type: 'item', label: 'Clear Watch Table', name: 'clear'}],
+                onClose: key => {
                     if (key === 'clear') {
-                         this.watch_panel?.setEntries?.([])
+                        this.watch_panel?.setEntries?.([])
                     }
-                }
-             })
+                },
+            })
         }
     }
 
     #initPanelResizables(workspace) {
-        const wrappers = [
-             { el: workspace.querySelector('#wrapper-connection') },
-             { el: workspace.querySelector('#wrapper-project') },
-             { el: workspace.querySelector('#wrapper-health') },
-             { el: workspace.querySelector('#wrapper-watch') }
-        ]
+        const wrappers = [{el: workspace.querySelector('#wrapper-connection')}, {el: workspace.querySelector('#wrapper-project')}, {el: workspace.querySelector('#wrapper-health')}, {el: workspace.querySelector('#wrapper-watch')}]
         const resizers = Array.from(workspace.querySelectorAll('.plc-panel-resizer'))
         if (wrappers.some(w => !w.el)) return
 
         // State tracking: stored as normalized flex ratios (pixels)
         // Default: roughly equal or standard distribution
         let state = [
-            { minimized: false, flex: 100 },
-            { minimized: false, flex: 200 },
-            { minimized: false, flex: 200 },
-            { minimized: false, flex: 200 }
+            {minimized: false, flex: 100},
+            {minimized: false, flex: 200},
+            {minimized: false, flex: 200},
+            {minimized: false, flex: 200},
         ]
 
         // Load Persistence
@@ -1786,7 +1793,9 @@ export default class WindowManager {
                     state = parsed
                 }
             }
-        } catch(e) { console.warn('Failed to load layout', e) }
+        } catch (e) {
+            console.warn('Failed to load layout', e)
+        }
 
         const applyLayout = () => {
             wrappers.forEach((w, i) => {
@@ -1794,31 +1803,31 @@ export default class WindowManager {
                 const header = w.el.querySelector('.plc-connection-header, .plc-navigation-panel-header, .plc-device-health-header, .plc-device-watch-header')
                 const chevron = header ? header.querySelector('.codicon') : null
                 const content = w.el.querySelector('.plc-connection-body, .plc-navigation-panel-content, .plc-device-health-body, .plc-device-watch-content')
-                
+
                 if (s.minimized) {
-                     // Minimized: fixed height
-                     w.el.style.flex = "0 0 22px"
-                     w.el.style.overflow = "hidden"
-                     w.el.classList.add('minimized')
-                     
-                     if (content) content.style.display = 'none'
-                     if (chevron) chevron.classList.replace('codicon-chevron-down', 'codicon-chevron-right')
+                    // Minimized: fixed height
+                    w.el.style.flex = '0 0 22px'
+                    w.el.style.overflow = 'hidden'
+                    w.el.classList.add('minimized')
+
+                    if (content) content.style.display = 'none'
+                    if (chevron) chevron.classList.replace('codicon-chevron-down', 'codicon-chevron-right')
                 } else {
-                     // Expanded: flex grow proportional to last size
-                     const flexVal = Math.max(s.flex, 50) // Ensure at least some weight
-                     w.el.style.flex = `${flexVal} 1 0px`
-                     w.el.style.overflow = "hidden" // Keep content contained
-                     w.el.classList.remove('minimized')
-                     
-                     if (content) content.style.display = ''
-                     if (chevron) chevron.classList.replace('codicon-chevron-right', 'codicon-chevron-down')
+                    // Expanded: flex grow proportional to last size
+                    const flexVal = Math.max(s.flex, 50) // Ensure at least some weight
+                    w.el.style.flex = `${flexVal} 1 0px`
+                    w.el.style.overflow = 'hidden' // Keep content contained
+                    w.el.classList.remove('minimized')
+
+                    if (content) content.style.display = ''
+                    if (chevron) chevron.classList.replace('codicon-chevron-right', 'codicon-chevron-down')
                 }
             })
             // Save state
             localStorage.setItem('vovk_plc_layout', JSON.stringify(state))
         }
 
-        const togglePanel = (index) => {
+        const togglePanel = index => {
             state[index].minimized = !state[index].minimized
             applyLayout()
         }
@@ -1827,7 +1836,7 @@ export default class WindowManager {
         wrappers.forEach((w, i) => {
             const header = w.el.querySelector('.plc-connection-header, .plc-navigation-panel-header, .plc-device-health-header, .plc-device-watch-header')
             if (header) {
-                header.onclick = (e) => {
+                header.onclick = e => {
                     if (e.target.closest('button, input, select')) return
                     togglePanel(i)
                 }
@@ -1837,7 +1846,7 @@ export default class WindowManager {
 
         let isResizing = false
         let currentResizerIndex = -1
-        
+
         const handleMouseDown = (e, index) => {
             isResizing = true
             currentResizerIndex = index
@@ -1845,10 +1854,10 @@ export default class WindowManager {
             e.preventDefault()
         }
 
-        const handleMouseMove = (e) => {
+        const handleMouseMove = e => {
             if (!isResizing) return
             e.preventDefault()
-            
+
             // wrappers[index] vs wrappers[index+1]
             const topIndex = currentResizerIndex
             const bottomIndex = currentResizerIndex + 1
@@ -1857,22 +1866,22 @@ export default class WindowManager {
 
             const topRect = topWrapper.getBoundingClientRect()
             const bottomRect = bottomWrapper.getBoundingClientRect()
-            
+
             const totalHeight = topRect.height + bottomRect.height
             const topTop = topRect.top
-            
-            let newTopHeight = (e.clientY - topTop)
-            
+
+            let newTopHeight = e.clientY - topTop
+
             // Constraints
             if (newTopHeight < 22) newTopHeight = 22
             if (newTopHeight > totalHeight - 22) newTopHeight = totalHeight - 22
-            
+
             const newBottomHeight = totalHeight - newTopHeight
 
             // Update State: Use pixel height as the new flex-grow weight
             state[topIndex].flex = newTopHeight
             state[bottomIndex].flex = newBottomHeight
-            
+
             // Auto-expand/minimize based on drag
             if (newTopHeight > 28 && state[topIndex].minimized) {
                 state[topIndex].minimized = false
@@ -1887,7 +1896,7 @@ export default class WindowManager {
             if (newBottomHeight <= 24 && !state[bottomIndex].minimized) {
                 state[bottomIndex].minimized = true
             }
-            
+
             applyLayout()
         }
 
@@ -1900,12 +1909,12 @@ export default class WindowManager {
         }
 
         resizers.forEach((resizer, i) => {
-            resizer.addEventListener('mousedown', (e) => handleMouseDown(e, i))
+            resizer.addEventListener('mousedown', e => handleMouseDown(e, i))
         })
 
         document.addEventListener('mousemove', handleMouseMove)
         document.addEventListener('mouseup', handleMouseUp)
-        
+
         // Initial Draw
         applyLayout()
     }
@@ -1958,127 +1967,126 @@ export default class WindowManager {
 
     _renderDeviceHealth(health) {
         if (!this.device_health_charts) return
-        
+
         const updateChart = (metric, last, min, max, unit, isRam = false) => {
-             const chart = this.device_health_charts[metric]
-             if (!chart) return
-             
-             if (!health || last === undefined) {
-                 chart.value.textContent = '-'
-                 chart.valMin.textContent = ''
-                 chart.valMax.textContent = ''
-                 chart.fill.style.height = '0%'
-                 chart.range.style.bottom = '0%'
-                 chart.range.style.height = '0%'
-                 chart.container.removeAttribute('data-tooltip')
-                 chart.container.removeAttribute('title')
-                 return
-             }
-             
-             const fmt = (v) => {
-                 if (isRam) {
-                     if (v >= 1024 * 1024) return (v / (1024 * 1024)).toFixed(1) + 'MB'
-                     else if (v >= 1024) return (v / 1024).toFixed(1) + 'kB'
-                     else return Math.trunc(v) + 'B'
-                 } else {
-                     return Math.trunc(v) + unit
-                 }
-             }
-             
-             let displayLast = last
-             let displayMin = min
-             let displayMax = max
-             let scale = 1
-             let tooltip = ''
+            const chart = this.device_health_charts[metric]
+            if (!chart) return
 
-             if (isRam) {
-                 const totalRam = health.total_ram_size || 0
-                 
-                 if (totalRam > 0) {
-                     // Standard RAM Usage Bar Logic
-                     scale = totalRam
-                     
-                     // Calculate Used values
-                     // Free is what comes in as last, min, max
-                     // Used = Total - Free
-                     
-                     const usedLast = totalRam - last
-                     const usedMax = totalRam - min // Min free = Max used
-                     const usedMin = totalRam - max // Max free = Min used
-                     
-                     displayLast = usedLast
-                     displayMin = usedMin
-                     displayMax = usedMax
-                     
-                     // Show total capacity on top
-                     chart.valMin.textContent = '' 
-                     chart.valMax.textContent = fmt(totalRam)
-                     
-                     // Show usage in % on bottom
-                     const percent = Math.round((usedLast / totalRam) * 100)
-                     chart.value.textContent = percent + '%'
-                     
-                     // Comprehensive Tooltip
-                     tooltip = `RAM USAGE\nUsed: ${fmt(usedLast)} / ${fmt(totalRam)} (${percent}%)\nFree: ${fmt(last)}\n\nHistory:\nMax Used: ${fmt(usedMax)}\nMin Used: ${fmt(usedMin)}`
+            if (!health || last === undefined) {
+                chart.value.textContent = '-'
+                chart.valMin.textContent = ''
+                chart.valMax.textContent = ''
+                chart.fill.style.height = '0%'
+                chart.range.style.bottom = '0%'
+                chart.range.style.height = '0%'
+                chart.container.removeAttribute('data-tooltip')
+                chart.container.removeAttribute('title')
+                return
+            }
 
-                 } else {
-                     // Fallback if total_ram_size is missing (older firmware logic)
-                     const bestCase = max // Max Free
-                     scale = bestCase || 1
-                     displayLast = bestCase - last
-                     displayMin = bestCase - max // 0
-                     displayMax = bestCase - min // Worst case used
-                     
-                     chart.valMin.textContent = 'Min:' + fmt(displayMin)
-                     chart.valMax.textContent = 'Max:' + fmt(displayMax)
-                     chart.value.textContent = fmt(displayLast)
-                     
-                     tooltip = `RAM (Relative)\nUsed Est: ${fmt(displayLast)}\nMin Used: ${fmt(displayMin)}\nMax Used: ${fmt(displayMax)}`
-                 }
-             } else {
-                 // Non-RAM metrics: Scale is 0 to max
-                 // Bottom label shows min, top shows max
-                 // The red range indicator shows the min-max variance range
-                 chart.valMin.textContent = fmt(min)
-                 chart.valMax.textContent = fmt(max)
-                 chart.value.textContent = fmt(last)
-                 
-                 scale = (max || 0)
-                 if (scale === 0) scale = 100
-                 
-                 tooltip = `${metric.toUpperCase()}\nLast: ${fmt(last)}\nMin: ${fmt(min)}\nMax: ${fmt(max)}`
-             }
+            const fmt = v => {
+                if (isRam) {
+                    if (v >= 1024 * 1024) return (v / (1024 * 1024)).toFixed(1) + 'MB'
+                    else if (v >= 1024) return (v / 1024).toFixed(1) + 'kB'
+                    else return Math.trunc(v) + 'B'
+                } else {
+                    return Math.trunc(v) + unit
+                }
+            }
 
-             chart.container.setAttribute('data-tooltip', tooltip)
-             chart.container.removeAttribute('title')
-             
-             // Remove title from children if present to prevent double tooltip
-             if (chart.fill && chart.fill.parentElement) {
-                 chart.fill.parentElement.removeAttribute('title')
-             }
+            let displayLast = last
+            let displayMin = min
+            let displayMax = max
+            let scale = 1
+            let tooltip = ''
 
-             const pLast = Math.min(100, Math.max(0, (displayLast / scale) * 100))
-             const pMin = Math.min(100, Math.max(0, (displayMin / scale) * 100))
-             const pMax = Math.min(100, Math.max(0, (displayMax / scale) * 100))
-             
-             if (isRam) {
-                 // RAM: bar fills from 0 to used amount
-                 chart.fill.style.bottom = '0%'
-                 chart.fill.style.height = `${pLast}%`
-             } else {
-                 // Timing metrics: bar fills from min to last (shows value above minimum)
-                 chart.fill.style.bottom = `${pMin}%`
-                 chart.fill.style.height = `${Math.max(1, pLast - pMin)}%`
-             }
-             chart.range.style.bottom = `${pMin}%`
-             chart.range.style.height = `${Math.max(0, pMax - pMin)}%`
-             
-             // Color warning for RAM if usage is high (>90%)
-             if (isRam && pLast > 90) {
-                 chart.fill.style.background = '#d63030' // Red warning
-             } else if (isRam) {
-                 chart.fill.style.background = '' // Default
-             }
+            if (isRam) {
+                const totalRam = health.total_ram_size || 0
+
+                if (totalRam > 0) {
+                    // Standard RAM Usage Bar Logic
+                    scale = totalRam
+
+                    // Calculate Used values
+                    // Free is what comes in as last, min, max
+                    // Used = Total - Free
+
+                    const usedLast = totalRam - last
+                    const usedMax = totalRam - min // Min free = Max used
+                    const usedMin = totalRam - max // Max free = Min used
+
+                    displayLast = usedLast
+                    displayMin = usedMin
+                    displayMax = usedMax
+
+                    // Show total capacity on top
+                    chart.valMin.textContent = ''
+                    chart.valMax.textContent = fmt(totalRam)
+
+                    // Show usage in % on bottom
+                    const percent = Math.round((usedLast / totalRam) * 100)
+                    chart.value.textContent = percent + '%'
+
+                    // Comprehensive Tooltip
+                    tooltip = `RAM USAGE\nUsed: ${fmt(usedLast)} / ${fmt(totalRam)} (${percent}%)\nFree: ${fmt(last)}\n\nHistory:\nMax Used: ${fmt(usedMax)}\nMin Used: ${fmt(usedMin)}`
+                } else {
+                    // Fallback if total_ram_size is missing (older firmware logic)
+                    const bestCase = max // Max Free
+                    scale = bestCase || 1
+                    displayLast = bestCase - last
+                    displayMin = bestCase - max // 0
+                    displayMax = bestCase - min // Worst case used
+
+                    chart.valMin.textContent = 'Min:' + fmt(displayMin)
+                    chart.valMax.textContent = 'Max:' + fmt(displayMax)
+                    chart.value.textContent = fmt(displayLast)
+
+                    tooltip = `RAM (Relative)\nUsed Est: ${fmt(displayLast)}\nMin Used: ${fmt(displayMin)}\nMax Used: ${fmt(displayMax)}`
+                }
+            } else {
+                // Non-RAM metrics: Scale is 0 to max
+                // Bottom label shows min, top shows max
+                // The red range indicator shows the min-max variance range
+                chart.valMin.textContent = fmt(min)
+                chart.valMax.textContent = fmt(max)
+                chart.value.textContent = fmt(last)
+
+                scale = max || 0
+                if (scale === 0) scale = 100
+
+                tooltip = `${metric.toUpperCase()}\nLast: ${fmt(last)}\nMin: ${fmt(min)}\nMax: ${fmt(max)}`
+            }
+
+            chart.container.setAttribute('data-tooltip', tooltip)
+            chart.container.removeAttribute('title')
+
+            // Remove title from children if present to prevent double tooltip
+            if (chart.fill && chart.fill.parentElement) {
+                chart.fill.parentElement.removeAttribute('title')
+            }
+
+            const pLast = Math.min(100, Math.max(0, (displayLast / scale) * 100))
+            const pMin = Math.min(100, Math.max(0, (displayMin / scale) * 100))
+            const pMax = Math.min(100, Math.max(0, (displayMax / scale) * 100))
+
+            if (isRam) {
+                // RAM: bar fills from 0 to used amount
+                chart.fill.style.bottom = '0%'
+                chart.fill.style.height = `${pLast}%`
+            } else {
+                // Timing metrics: bar fills from min to last (shows value above minimum)
+                chart.fill.style.bottom = `${pMin}%`
+                chart.fill.style.height = `${Math.max(1, pLast - pMin)}%`
+            }
+            chart.range.style.bottom = `${pMin}%`
+            chart.range.style.height = `${Math.max(0, pMax - pMin)}%`
+
+            // Color warning for RAM if usage is high (>90%)
+            if (isRam && pLast > 90) {
+                chart.fill.style.background = '#d63030' // Red warning
+            } else if (isRam) {
+                chart.fill.style.background = '' // Default
+            }
         }
 
         if (!health) {
@@ -2088,23 +2096,23 @@ export default class WindowManager {
             updateChart('ram')
             return
         }
-        
+
         updateChart('cycle', health.last_cycle_time_us, health.min_cycle_time_us, health.max_cycle_time_us, 'us')
         updateChart('period', health.last_period_us, health.min_period_us, health.max_period_us, 'us')
         updateChart('jitter', health.last_jitter_us, health.min_jitter_us, health.max_jitter_us, 'us')
         updateChart('ram', health.ram_free, health.min_ram_free, health.max_ram_free, '', true)
 
         if (this._last_known_health_dimmed) {
-             Object.values(this.device_health_charts).forEach(c => c.container.style.opacity = '0.5')
+            Object.values(this.device_health_charts).forEach(c => (c.container.style.opacity = '0.5'))
         } else {
-             Object.values(this.device_health_charts).forEach(c => c.container.style.opacity = '1')
+            Object.values(this.device_health_charts).forEach(c => (c.container.style.opacity = '1'))
         }
     }
-    
+
     setHealthDimmed(dimmed) {
         this._last_known_health_dimmed = dimmed
         if (this.device_health_charts) {
-              Object.values(this.device_health_charts).forEach(c => c.container.style.opacity = dimmed ? '0.5' : '1')
+            Object.values(this.device_health_charts).forEach(c => (c.container.style.opacity = dimmed ? '0.5' : '1'))
         }
     }
 
@@ -2250,14 +2258,14 @@ export default class WindowManager {
                     if (silentOnSuccess && typeof this.setConsoleTab === 'function') this.setConsoleTab('output')
                     const p = result.problem
                     this.logToConsole(`Compilation failed: ${p.message}`, 'error')
-                    
+
                     // Show location info if available
                     const locationParts = []
                     if (p.program) locationParts.push(`Program: ${p.program}`)
                     if (p.block) locationParts.push(`Block: ${p.block}`)
                     if (p.line) locationParts.push(`Line ${p.line}${p.column ? `:${p.column}` : ''}`)
                     if (p.compiler && p.compiler !== 'UNKNOWN') locationParts.push(`(${p.compiler})`)
-                    
+
                     if (locationParts.length > 0) {
                         this.logToConsole(`  ${locationParts.join(' | ')}`, 'error')
                     }
@@ -2270,7 +2278,7 @@ export default class WindowManager {
             }
 
             // Store result for download
-            this.#editor.project.binary = ((str) => {
+            this.#editor.project.binary = (str => {
                 const matches = str.match(/.{1,2}/g) || []
                 return matches.map(hex => parseInt(hex, 16))
             })(result.output)
@@ -2293,7 +2301,6 @@ export default class WindowManager {
                 const filled_bars = Math.round((Math.min(100, percent) / 100) * total_bars)
                 const empty_bars = total_bars - filled_bars
                 const bar = '[' + '='.repeat(filled_bars) + ' '.repeat(empty_bars) + ']'
-
 
                 // Calculate Checksum
                 let checksumMsg = ''
@@ -2325,7 +2332,7 @@ export default class WindowManager {
                 }
                 this.logToConsole('----------------------------------------', 'info')
             }
-            
+
             // Auto-scan for patchable constants after successful compilation (always run, even in silent mode)
             if (this.#editor.program_patcher) {
                 try {
@@ -2337,7 +2344,7 @@ export default class WindowManager {
                     console.warn('Failed to scan patchable constants:', e)
                 }
             }
-            
+
             return true
         } catch (e) {
             if (!silent) {
@@ -2358,7 +2365,7 @@ export default class WindowManager {
         }
 
         // Always compile before download, showing console only on error
-        const compiled = await this.handleCompile({ silentOnSuccess: true })
+        const compiled = await this.handleCompile({silentOnSuccess: true})
         if (!compiled) return
 
         const compiledBytecode = this.#editor.project.compiledBytecode
@@ -2455,7 +2462,7 @@ export default class WindowManager {
             this.logToConsole('Program uploaded successfully.', 'success')
             this.logToConsole(`Upload took ${(endTime - startTime).toFixed(0)}ms`, 'info')
             this.logToConsole('----------------------------------------', 'info')
-            
+
             // Reset data fetcher to clear stale memory cache
             if (this.#editor.data_fetcher) {
                 this.#editor.data_fetcher.reset()
@@ -2486,17 +2493,17 @@ export default class WindowManager {
      */
     async patchConstant(bytecodeOffset, newValue) {
         if (!this.#editor.program_patcher) {
-            return { success: false, message: 'Bytecode patcher not initialized' }
+            return {success: false, message: 'Bytecode patcher not initialized'}
         }
 
         const result = await this.#editor.program_patcher.patchConstant(bytecodeOffset, newValue)
-        
+
         if (result.success) {
             this.logToConsole(result.message, 'success')
         } else {
             this.logToConsole(result.message, 'error')
         }
-        
+
         return result
     }
 
@@ -2507,7 +2514,7 @@ export default class WindowManager {
      */
     async readConstant(bytecodeOffset) {
         if (!this.#editor.program_patcher) {
-            return { success: false, message: 'Bytecode patcher not initialized' }
+            return {success: false, message: 'Bytecode patcher not initialized'}
         }
         return await this.#editor.program_patcher.readConstant(bytecodeOffset)
     }
@@ -2518,7 +2525,7 @@ export default class WindowManager {
     async openPatchDialog() {
         // Scan for patchable constants
         const constants = await this.scanPatchableConstants()
-        
+
         if (constants.length === 0) {
             new Popup({
                 title: 'No Patchable Constants',
@@ -2529,7 +2536,7 @@ export default class WindowManager {
                     2. Used instructions with constant parameters<br>
                     <span style="color: #888;">(e.g., TON M69 #500, u8.const 100)</span>
                 </div>`,
-                buttons: [{ text: 'OK', value: 'ok', background: '#007bff', color: 'white' }]
+                buttons: [{text: 'OK', value: 'ok', background: '#007bff', color: 'white'}],
             })
             return
         }
@@ -2537,12 +2544,12 @@ export default class WindowManager {
         // Create list of constants
         const listContainer = document.createElement('div')
         listContainer.style.cssText = 'max-height: 300px; overflow-y: auto; margin: 10px 0;'
-        
+
         const list = document.createElement('div')
         list.style.cssText = 'display: flex; flex-direction: column; gap: 5px;'
-        
+
         let selectedIndex = -1
-        
+
         constants.forEach((c, i) => {
             const item = document.createElement('div')
             item.style.cssText = `
@@ -2554,18 +2561,19 @@ export default class WindowManager {
                 transition: all 0.2s;
                 font-family: 'Consolas', 'Courier New', monospace;
             `
-            
+
             let desc = `<div style="color: #4fc1ff; font-weight: 600; margin-bottom: 4px;">${c.name}</div>`
             desc += `<div style="color: #fff;">Value: <span style="color: #b5cea8;">${c.current_value}</span></div>`
-            
-            if (c.flags & 0x10) { // IR_FLAG_TIMER
+
+            if (c.flags & 0x10) {
+                // IR_FLAG_TIMER
                 desc += `<div style="color: #888; font-size: 11px;">${c.instruction_name} at M${c.timer_address}, line ${c.source_line}</div>`
             } else {
                 desc += `<div style="color: #888; font-size: 11px;">${c.operand_type}, line ${c.source_line}:${c.source_column}</div>`
             }
-            
+
             item.innerHTML = desc
-            
+
             item.addEventListener('mouseenter', () => {
                 if (selectedIndex !== i) {
                     item.style.background = '#3c3c3c'
@@ -2589,10 +2597,10 @@ export default class WindowManager {
                 item.style.background = '#0078d4'
                 item.style.borderColor = '#0078d4'
             })
-            
+
             list.appendChild(item)
         })
-        
+
         listContainer.appendChild(list)
 
         const selectedConstant = await Popup.promise({
@@ -2601,20 +2609,19 @@ export default class WindowManager {
             content: listContainer,
             width: '500px',
             buttons: [
-                { text: 'Next', value: 'next', background: '#007bff', color: 'white', 
-                  verify: () => selectedIndex !== -1 },
-                { text: 'Cancel', value: 'cancel' }
-            ]
+                {text: 'Next', value: 'next', background: '#007bff', color: 'white', verify: () => selectedIndex !== -1},
+                {text: 'Cancel', value: 'cancel'},
+            ],
         })
-        
+
         if (selectedConstant !== 'next' || selectedIndex === -1) return
 
         const constant = constants[selectedIndex]
-        
+
         // Create value input dialog
         const inputContainer = document.createElement('div')
         inputContainer.style.cssText = 'display: flex; flex-direction: column; gap: 12px;'
-        
+
         // Info display
         const info = document.createElement('div')
         info.style.cssText = 'background: #2d2d2d; padding: 12px; border-radius: 4px; font-family: "Consolas", monospace; font-size: 12px; line-height: 1.6;'
@@ -2626,7 +2633,7 @@ export default class WindowManager {
             <div style="color: #888; font-size: 11px; margin-top: 6px;">Source: Line ${constant.source_line}, Column ${constant.source_column}</div>
             <div style="color: #666; font-size: 11px;">Bytecode: 0x${constant.bytecode_offset.toString(16).toUpperCase()}</div>
         `
-        
+
         const valueInput = document.createElement('input')
         valueInput.type = 'number'
         valueInput.value = constant.current_value.toString()
@@ -2640,7 +2647,7 @@ export default class WindowManager {
             font-family: 'Consolas', monospace;
         `
         valueInput.placeholder = constant.flags & 0x10 ? 'Enter time in milliseconds' : `Enter ${constant.operand_type} value`
-        
+
         inputContainer.appendChild(info)
         inputContainer.appendChild(valueInput)
 
@@ -2650,41 +2657,41 @@ export default class WindowManager {
             content: inputContainer,
             width: '450px',
             buttons: [
-                { text: 'Patch', value: 'patch', background: '#0078d4', color: 'white',
-                  verify: () => {
-                    const val = constant.operand_type === 'f32' || constant.operand_type === 'f64' 
-                        ? parseFloat(valueInput.value) 
-                        : parseInt(valueInput.value)
-                    if (!Number.isFinite(val)) {
-                        valueInput.style.borderColor = 'red'
-                        return false
-                    }
-                    valueInput.style.borderColor = '#3c3c3c'
-                    return true
-                  }
+                {
+                    text: 'Patch',
+                    value: 'patch',
+                    background: '#0078d4',
+                    color: 'white',
+                    verify: () => {
+                        const val = constant.operand_type === 'f32' || constant.operand_type === 'f64' ? parseFloat(valueInput.value) : parseInt(valueInput.value)
+                        if (!Number.isFinite(val)) {
+                            valueInput.style.borderColor = 'red'
+                            return false
+                        }
+                        valueInput.style.borderColor = '#3c3c3c'
+                        return true
+                    },
                 },
-                { text: 'Cancel', value: 'cancel' }
+                {text: 'Cancel', value: 'cancel'},
             ],
             onOpen: () => {
                 valueInput.focus()
                 valueInput.select()
-            }
+            },
         })
-        
+
         if (result !== 'patch') return
-        
-        const newValue = constant.operand_type === 'f32' || constant.operand_type === 'f64' 
-            ? parseFloat(valueInput.value) 
-            : parseInt(valueInput.value)
+
+        const newValue = constant.operand_type === 'f32' || constant.operand_type === 'f64' ? parseFloat(valueInput.value) : parseInt(valueInput.value)
 
         const patchResult = await this.patchConstant(constant.bytecode_offset, newValue)
-        
+
         new Popup({
             title: patchResult.success ? 'Success' : 'Error',
             description: patchResult.message,
-            buttons: [{ text: 'OK', value: 'ok', background: patchResult.success ? '#28a745' : '#dc3545', color: 'white' }]
+            buttons: [{text: 'OK', value: 'ok', background: patchResult.success ? '#28a745' : '#dc3545', color: 'white'}],
         })
-        
+
         if (patchResult.success && this.isMonitoringActive()) {
             this.updateWatchValues()
         }
@@ -2744,7 +2751,7 @@ export default class WindowManager {
                     <div class="device-name">${info.device || 'Unknown Device'}</div>
                     <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
                 `
-                
+
                 // Store device name and info in project for future reference
                 if (this.connectionMode === 'serial' && editor.device_manager?.connection?.serial?.port) {
                     const port = editor.device_manager.connection.serial.port
@@ -2757,12 +2764,12 @@ export default class WindowManager {
                         const deviceLabel = info.device || 'Unnamed'
                         const arch = info.arch || ''
                         const fullName = arch ? `${deviceLabel} [${arch}]` : deviceLabel
-                        
+
                         // Store as object with timestamps
                         const existing = editor.project.serialDeviceNames[portKey]
                         const now = Date.now()
                         let created = now
-                        
+
                         if (typeof existing === 'string') {
                             created = now
                         } else if (existing && existing.created) {
@@ -2772,7 +2779,7 @@ export default class WindowManager {
                         editor.project.serialDeviceNames[portKey] = {
                             name: fullName,
                             created: created,
-                            lastConnected: now
+                            lastConnected: now,
                         }
 
                         // Save project to persist device names
@@ -2783,16 +2790,15 @@ export default class WindowManager {
                         this.updateDeviceDropdown()
                     }
                 }
-            }
-            else device_info.innerHTML = 'Unknown device'
+            } else device_info.innerHTML = 'Unknown device'
             this._healthConnectionState = true
             this._setHealthConnected(true)
             this._startHealthPolling()
 
             // Simulation Auto-Load Sequence
             if (this.active_device === 'simulation') {
-                const compileSuccess = await this.handleCompile({ silent: true })
-                
+                const compileSuccess = await this.handleCompile({silent: true})
+
                 // In simulation mode, stay connected even if compilation fails
                 // This allows viewing/editing the project while connected
                 if (!compileSuccess) {
@@ -2801,32 +2807,26 @@ export default class WindowManager {
 
                 const compiledBytecode = this.#editor.project?.binary
                 if (compiledBytecode) {
-                         // Delay 1: After Compile, Before Offsets
-                         await new Promise(r => setTimeout(r, 200))
-                         
-                         if (this.#editor.device_manager?.connection && typeof this.#editor.device_manager.connection.plc?.setRuntimeOffsets === 'function') {
-                              const normalized = ensureOffsets(this.#editor.project.offsets || {})
-                              await this.#editor.device_manager.connection.plc.setRuntimeOffsets(
-                                  normalized.control.offset,
-                                  normalized.input.offset,
-                                  normalized.output.offset,
-                                  normalized.system.offset,
-                                  normalized.marker.offset
-                              )
-                         }
-    
-                         // Delay 2: After Offsets, Before Download
-                         await new Promise(r => setTimeout(r, 200))
-                         await this.#editor.device_manager.connection.downloadProgram(compiledBytecode)
-                         
-                         // Reset data fetcher after program download
-                         if (this.#editor.data_fetcher) {
-                             this.#editor.data_fetcher.reset()
-                         }
-                         
-                         // Delay 3: After Download, Before Monitoring
-                         await new Promise(r => setTimeout(r, 200))
-                         this.setMonitoringActive(true)
+                    // Delay 1: After Compile, Before Offsets
+                    await new Promise(r => setTimeout(r, 200))
+
+                    if (this.#editor.device_manager?.connection && typeof this.#editor.device_manager.connection.plc?.setRuntimeOffsets === 'function') {
+                        const normalized = ensureOffsets(this.#editor.project.offsets || {})
+                        await this.#editor.device_manager.connection.plc.setRuntimeOffsets(normalized.control.offset, normalized.input.offset, normalized.output.offset, normalized.system.offset, normalized.marker.offset)
+                    }
+
+                    // Delay 2: After Offsets, Before Download
+                    await new Promise(r => setTimeout(r, 200))
+                    await this.#editor.device_manager.connection.downloadProgram(compiledBytecode)
+
+                    // Reset data fetcher after program download
+                    if (this.#editor.data_fetcher) {
+                        this.#editor.data_fetcher.reset()
+                    }
+
+                    // Delay 3: After Download, Before Monitoring
+                    await new Promise(r => setTimeout(r, 200))
+                    this.setMonitoringActive(true)
                 }
             }
         } else {
@@ -2852,7 +2852,7 @@ export default class WindowManager {
         }
         this.active_mode = mode
         this.updateLiveMonitorState()
-        
+
         // Only clear active_device when going offline, preserve it while online
         if (mode !== 'online') {
             this.active_device = null
@@ -2922,21 +2922,21 @@ export default class WindowManager {
         const workspace = this.#editor.workspace
         const menuBar = workspace.querySelector('.plc-menu-bar')
         if (!menuBar) return
-        
+
         const menuItems = menuBar.querySelectorAll('.plc-menu-item')
         let openMenu = null
-        
+
         // Close all menus
         const closeAllMenus = () => {
             menuItems.forEach(item => item.classList.remove('open'))
             openMenu = null
         }
-        
+
         // Toggle menu on click
         menuItems.forEach(item => {
             const label = item.querySelector('.plc-menu-label')
             if (label) {
-                label.addEventListener('click', (e) => {
+                label.addEventListener('click', e => {
                     e.stopPropagation()
                     if (item.classList.contains('open')) {
                         closeAllMenus()
@@ -2946,7 +2946,7 @@ export default class WindowManager {
                         openMenu = item
                     }
                 })
-                
+
                 // Hover to switch menus when one is open
                 label.addEventListener('mouseenter', () => {
                     if (openMenu && openMenu !== item) {
@@ -2957,29 +2957,29 @@ export default class WindowManager {
                 })
             }
         })
-        
+
         // Close menus on click outside
-        document.addEventListener('click', (e) => {
+        document.addEventListener('click', e => {
             if (!menuBar.contains(e.target)) {
                 closeAllMenus()
             }
         })
-        
+
         // Close menus on Escape key
-        document.addEventListener('keydown', (e) => {
+        document.addEventListener('keydown', e => {
             if (e.key === 'Escape' && openMenu) {
                 closeAllMenus()
             }
         })
-        
+
         // Handle menu option clicks
-        menuBar.addEventListener('click', async (e) => {
+        menuBar.addEventListener('click', async e => {
             const option = e.target.closest('.plc-menu-option')
             if (!option) return
-            
+
             const action = option.dataset.action
             closeAllMenus()
-            
+
             switch (action) {
                 case 'new-project':
                     this._menuNewProject()
@@ -2996,10 +2996,366 @@ export default class WindowManager {
                 case 'setup':
                     this.openProgram('setup')
                     break
+                case 'about':
+                    this._menuAbout()
+                    break
+                case 'version-history':
+                    this._menuVersionHistory()
+                    break
+                case 'disclaimer':
+                    this._menuDisclaimer()
+                    break
             }
         })
     }
-    
+
+    /**
+     * Show disclaimer popup
+     * @param {{ requireAcceptance?: boolean }} options
+     */
+    async _menuDisclaimer(options = {}) {
+        const {requireAcceptance = false} = options
+
+        // Create a dark overlay for required acceptance
+        let overlay = null
+        if (requireAcceptance) {
+            overlay = document.createElement('div')
+            overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 9998;'
+            document.body.appendChild(overlay)
+        }
+
+        await Popup.promise({
+            title: 'Disclaimer',
+            width: '600px',
+            closeButton: !requireAcceptance,
+            backdrop: !requireAcceptance,
+            closeOnESC: !requireAcceptance,
+            draggable: !requireAcceptance,
+            buttons: [
+                {
+                    text: requireAcceptance ? 'I Understand' : 'OK',
+                    value: 'accept',
+                    background: '#0e639c',
+                    color: 'white',
+                },
+            ],
+            content: /*HTML*/ `
+                <div style="line-height: 1.6; color: #ccc;">
+                    <div style="background: #3a2a1a; border: 1px solid #ff9800; border-radius: 4px; padding: 12px; margin-bottom: 16px;">
+                        <div style="color: #ff9800; font-weight: bold; margin-bottom: 8px;">⚠️ USE AT YOUR OWN RISK</div>
+                        <p style="margin: 0; color: #ddd; font-size: 13px;">
+                            This software is provided "as is", without warranty of any kind, express or implied. 
+                            The authors are not responsible for any damage, data loss, or other issues that may arise from using this software.
+                        </p>
+                    </div>
+                    
+                    <div style="background: #2a2a3a; border: 1px solid #666; border-radius: 4px; padding: 12px; margin-bottom: 16px;">
+                        <div style="color: #4ec9b0; font-weight: bold; margin-bottom: 8px;">🚧 Development Status</div>
+                        <p style="margin: 0; color: #ddd; font-size: 13px;">
+                            This is a project under active development. <strong>Breaking changes happen regularly.</strong> 
+                            Project files, APIs, and features may change without notice between versions.
+                        </p>
+                    </div>
+                    
+                    <div style="background: #1e1e2e; border: 1px solid #555; border-radius: 4px; padding: 12px;">
+                        <div style="color: #dcdcaa; font-weight: bold; margin-bottom: 8px;">📜 License</div>
+                        <p style="margin: 0; color: #ddd; font-size: 13px;">
+                            This software is licensed under the <strong>GPL-3.0</strong> license. 
+                            See the LICENSE file for full details.
+                        </p>
+                    </div>
+                </div>
+            `,
+        })
+
+        // Remove overlay if it was created
+        if (overlay) {
+            overlay.remove()
+        }
+
+        // If this was a required acceptance, store it
+        if (requireAcceptance) {
+            localStorage.setItem('vovkplc_disclaimer_accepted', 'true')
+        }
+    }
+
+    _checkDisclaimerAcceptance() {
+        const accepted = localStorage.getItem('vovkplc_disclaimer_accepted')
+        if (!accepted) {
+            // Show disclaimer with required acceptance
+            this._menuDisclaimer({requireAcceptance: true})
+        }
+    }
+
+    async _menuAbout() {
+        const editorVersion = VOVKPLCEDITOR_VERSION || '0.1.0'
+        const editorBuild = VOVKPLCEDITOR_VERSION_BUILD || ''
+        const runtimeInfo = this.#editor?.runtime_info
+        const runtimeVersion = runtimeInfo?.version || this.#editor.runtime?.version || '?'
+        const runtimeArch = runtimeInfo?.arch || ''
+
+        await Popup.promise({
+            hideHeader: true,
+            width: '640px',
+            content: /*HTML*/ `
+                <div style="line-height: 1.6; color: #ECECEC;">
+                    <!-- Header -->
+                    <div style="text-align: center; margin-bottom: 20px; padding: 20px; padding-bottom: 0px; padding-top: 0px;">
+                        <div style="font-size: 28px; font-weight: bold; color: #4682B4;">VovkPLC</div>
+                        <div style="color: #888; font-size: 12px; margin-top: 4px; letter-spacing: 2px;">EDITOR & RUNTIME</div>
+                    </div>
+                    
+                    
+                    <!-- Version boxes - Editor left, Runtime right -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                        <a href="https://github.com/jozo132/VovkPLCEditor" target="_blank" style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 12px; text-decoration: none; display: block; transition: border-color 0.2s;">
+                            <div style="font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Editor</div>
+                            <div style="font-weight: 600; color: #4682B4; margin-bottom: 4px;">VovkPLC Editor</div>
+                            <div style="color: #aaa; font-size: 12px;">Version: ${editorVersion}${editorBuild ? ` Build ${editorBuild}` : ''}</div>
+                        </a>
+                        <a href="https://github.com/jozo132/VovkPLCRuntime" target="_blank" style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 12px; text-decoration: none; display: block; transition: border-color 0.2s;">
+                            <div style="font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Runtime</div>
+                            <div style="font-weight: 600; color: #4682B4; margin-bottom: 4px;">VovkPLC Runtime</div>
+                            <div style="color: #aaa; font-size: 12px;">Version: ${runtimeVersion}${runtimeArch ? `<br>Arch: ${runtimeArch}` : ''}</div>
+                        </a>
+                    </div>
+                    
+                    <!-- Project Vision -->
+                    <div style="background: #1a1a1a; border: 1px solid #4682B4; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                        <div style="color: #4682B4; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🎯 Project Vision</div>
+                        <p style="margin: 0 0 10px 0; color: #ECECEC; font-size: 12px; line-height: 1.7;">
+                            This project was created to give <strong>anyone</strong> access to learn and use PLCs — with <strong>free simulation</strong> 
+                            and very low-cost Arduino-compatible development boards that can run real PLC programs.
+                        </p>
+                        <p style="margin: 0 0 10px 0; color: #ECECEC; font-size: 12px; line-height: 1.7;">
+                            Programs can be <strong>live inspected, diagnosed, debugged and patched</strong> in real-time, 
+                            equivalent to advanced industrial systems - but without the cost.
+                        </p>
+                        <p style="margin: 0 0 10px 0; color: #aaa; font-size: 11px; line-height: 1.6;">
+                            The VovkPLC Runtime is a C++ header-only stack based virtual machine executing specialized PLC bytecode. 
+                            The WASM build of the runtime includes the compiler, simulator and unit tester. 
+                            The embedded build of the runtime only includes the virtual machine which runs and was tested on the following devices: STM32 F1 F4 H7 G4 WB55, ESP8266, ESP32+C3 S3,
+                            RP2040, RP2350, RA4M1.
+                            It used to fit on the Arduino Nano but I need to reduce the extended instruction set for advanced PLC tasks to make it 
+                            fit again and limit the compiler to avoid those instructions in tiny embedded devices.
+                        </p>
+                        <p style="margin: 0; color: #aaa; font-size: 11px; line-height: 1.6;">
+                            The Editor provides deep insight into the device and program state. It's not yet professional-grade tooling 
+                            — there are features missing and hidden bugs — but it's decent and getting better. 
+                            Support for more text and graphical programming languages is coming soon.
+                        </p>
+                    </div>
+                    
+                    <!-- Footer -->
+                    <div style="text-align: center; padding-top: 12px; border-top: 1px solid #333; color: #666; font-size: 10px;">
+                        Licensed under GPL-3.0 • © 2024-2026 <a href="https://github.com/jozo132" target="_blank" style="color: #4682B4; text-decoration: none;">J.Vovk &lt;jozo132@gmail.com&gt;</a>
+                    </div>
+                </div>
+            `,
+        })
+    }
+
+    async _menuVersionHistory() {
+        const cacheKey = 'vovkplc_commits_cache'
+        const cacheDurationMinutes = 5
+
+        const getCommitCount = async (username, repo, branch) => {
+            const url = `https://api.github.com/repos/${username}/${repo}/commits?sha=${branch}&per_page=1&page=1`
+            try {
+                const response = await fetch(url)
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`)
+                const linkHeader = response.headers.get('Link')
+                if (!linkHeader) return 1
+                const match = linkHeader.match(/&page=(\d+)>; rel="last"/)
+                return match ? parseInt(match[1], 10) : 1
+            } catch (error) {
+                console.error('Error fetching commit count:', error)
+                return 0
+            }
+        }
+
+        const getCommits = async (username, repo, branch, limit = 10) => {
+            const res = await fetch(`https://api.github.com/repos/${username}/${repo}/commits?sha=${branch}&per_page=${limit}`)
+            const commits = await res.json()
+            return commits
+        }
+
+        const formatCommits = (commits, total) => {
+            if (!Array.isArray(commits)) return []
+            return commits.map((c, i) => {
+                const {commit, author, sha, html_url} = c
+                const date = commit?.committer?.date || ''
+                const message = commit?.message?.split('\n')[0] || '' // First line only
+                const login = author?.login || 'unknown'
+                const avatar = author?.avatar_url || ''
+                const authorUrl = author?.html_url || '#'
+                return {
+                    index: total - i,
+                    date: date.replace('T', ' ').replace('Z', '').slice(0, 16),
+                    sha: sha?.substring(0, 7) || '',
+                    shaUrl: html_url || '#',
+                    login,
+                    avatar,
+                    authorUrl,
+                    message,
+                }
+            })
+        }
+
+        const renderTable = (commits, loading = false, error = null) => {
+            if (error) return `<div style="color: #f88; padding: 10px;">${error}</div>`
+            if (loading) return `<div style="color: #888; padding: 10px;">Loading commits...</div>`
+            if (!commits.length) return `<div style="color: #888; padding: 10px;">No commits found</div>`
+
+            return `
+                <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                    <thead>
+                        <tr style="background: #151515; color: #888; text-align: left;">
+                            <th style="padding: 6px 8px; width: 35px;">#</th>
+                            <th style="padding: 6px 8px; width: 110px;">Date</th>
+                            <th style="padding: 6px 8px; width: 70px;">Commit</th>
+                            <th style="padding: 6px 8px; width: 100px;">Author</th>
+                            <th style="padding: 6px 8px;">Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${commits
+                            .map(
+                                c => `
+                            <tr style="border-bottom: 1px solid #333;">
+                                <td style="padding: 5px 8px; color: #666;">${c.index}</td>
+                                <td style="padding: 5px 8px; color: #aaa;">${c.date}</td>
+                                <td style="padding: 5px 8px;"><a href="${c.shaUrl}" target="_blank" style="color: #4682B4; text-decoration: none;">${c.sha}</a></td>
+                                <td style="padding: 5px 8px;">
+                                    <a href="${c.authorUrl}" target="_blank" style="color: #ECECEC; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                                        <img src="${c.avatar}" alt="${c.login}" style="width: 16px; height: 16px; border-radius: 50%;">
+                                        <span style="color: #aaa;">${c.login}</span>
+                                    </a>
+                                </td>
+                                <td style="padding: 5px 8px; color: #ECECEC; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="${c.message.replace(/"/g, '&quot;')}">${c.message}</td>
+                            </tr>
+                        `,
+                            )
+                            .join('')}
+                    </tbody>
+                </table>
+            `
+        }
+
+        // Show popup with loading state
+        let runtimeCommits = []
+        let editorCommits = []
+        let runtimeTotal = 0
+        let editorTotal = 0
+        let runtimeError = null
+        let editorError = null
+        let loading = true
+
+        const updateContent = () => `
+            <div style="color: #ECECEC;">
+                <div style="margin-bottom: 16px;">
+                    <div style="color: #4682B4; font-weight: bold; margin-bottom: 8px; font-size: 12px;">⚙️ Runtime Changes (VovkPLCRuntime)</div>
+                    <div style="background: #0d0d0d; border: 1px solid #555; border-radius: 6px; max-height: 200px; overflow-y: auto;">
+                        ${renderTable(runtimeCommits, loading, runtimeError)}
+                    </div>
+                </div>
+                <div>
+                    <div style="color: #4682B4; font-weight: bold; margin-bottom: 8px; font-size: 12px;">📝 Editor Changes (VovkPLCEditor)</div>
+                    <div style="background: #0d0d0d; border: 1px solid #555; border-radius: 6px; max-height: 200px; overflow-y: auto;">
+                        ${renderTable(editorCommits, loading, editorError)}
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 12px; color: #555; font-size: 10px;">
+                    Data cached for ${cacheDurationMinutes} minutes to avoid GitHub API rate limits
+                </div>
+            </div>
+        `
+
+        let closePopup = null
+        const popup = new Popup({
+            title: 'Change History',
+            width: '800px',
+            content: updateContent(),
+            closeHandler: close => {
+                closePopup = close
+            },
+        })
+
+        // Check cache
+        let useCache = false
+        try {
+            const cached = localStorage.getItem(cacheKey)
+            if (cached) {
+                const data = JSON.parse(cached)
+                const age = (Date.now() - data.updated) / 1000 / 60
+                if (age < cacheDurationMinutes) {
+                    useCache = true
+                    runtimeCommits = data.runtimeCommits || []
+                    editorCommits = data.editorCommits || []
+                    runtimeTotal = data.runtimeTotal || 0
+                    editorTotal = data.editorTotal || 0
+                    loading = false
+                    popup.modal.querySelector('.plc-popup-content > div').innerHTML = updateContent()
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to read commits cache:', e)
+        }
+
+        if (!useCache) {
+            try {
+                // Fetch both in parallel
+                const [runtimeData, editorData, runtimeCount, editorCount] = await Promise.all([
+                    getCommits('jozo132', 'VovkPLCRuntime', 'main', 10).catch(e => {
+                        runtimeError = e.message
+                        return []
+                    }),
+                    getCommits('jozo132', 'VovkPLCEditor', 'main', 10).catch(e => {
+                        editorError = e.message
+                        return []
+                    }),
+                    getCommitCount('jozo132', 'VovkPLCRuntime', 'main'),
+                    getCommitCount('jozo132', 'VovkPLCEditor', 'main'),
+                ])
+
+                runtimeTotal = runtimeCount
+                editorTotal = editorCount
+
+                if (Array.isArray(runtimeData)) {
+                    if (runtimeData.message) runtimeError = runtimeData.message
+                    else runtimeCommits = formatCommits(runtimeData, runtimeTotal)
+                }
+                if (Array.isArray(editorData)) {
+                    if (editorData.message) editorError = editorData.message
+                    else editorCommits = formatCommits(editorData, editorTotal)
+                }
+
+                // Cache the results
+                try {
+                    localStorage.setItem(
+                        cacheKey,
+                        JSON.stringify({
+                            updated: Date.now(),
+                            runtimeCommits,
+                            editorCommits,
+                            runtimeTotal,
+                            editorTotal,
+                        }),
+                    )
+                } catch (e) {
+                    console.warn('Failed to cache commits:', e)
+                }
+            } catch (e) {
+                runtimeError = editorError = e.message
+            }
+
+            loading = false
+            // Update popup content
+            const contentDiv = popup.modal.querySelector('.plc-popup-content > div')
+            if (contentDiv) contentDiv.innerHTML = updateContent()
+        }
+    }
+
     _menuNewProject() {
         // Confirm if there's existing work
         const hasContent = this.#editor.project?.files?.length > 0
@@ -3008,87 +3364,85 @@ export default class WindowManager {
                 return
             }
         }
-        
+
         // Clear localStorage and reload
         localStorage.removeItem('vovk_plc_project')
         localStorage.removeItem('vovk_plc_symbols_collapsed')
         window.location.reload()
     }
-    
+
     _menuOpenProject() {
         // Create file input to select JSON file
         const input = document.createElement('input')
         input.type = 'file'
         input.accept = '.json,.vovkplc'
         input.style.display = 'none'
-        
-        input.addEventListener('change', async (e) => {
+
+        input.addEventListener('change', async e => {
             const file = input.files?.[0]
             if (!file) return
-            
+
             try {
                 const text = await file.text()
                 const project = JSON.parse(text)
-                
+
                 // Validate basic structure
                 if (!project || typeof project !== 'object') {
                     throw new Error('Invalid project file format')
                 }
-                
+
                 // Load the project
                 this.#editor.project_manager.ensureSystemSymbols(project)
                 this.#editor.project_manager.load(project)
                 this.#editor.project_manager.last_saved_state = ''
                 this.#editor.project_manager.checkAndSave()
-                
+
                 this.logToConsole?.(`Opened project from ${file.name}`, 'success')
             } catch (err) {
                 console.error('Failed to open project:', err)
                 this.logToConsole?.(`Failed to open project: ${err.message}`, 'error')
                 alert(`Failed to open project: ${err.message}`)
             }
-            
+
             input.remove()
         })
-        
+
         document.body.appendChild(input)
         input.click()
     }
-    
+
     _menuExportProject() {
         try {
             // Force save current state
             this.#editor.project_manager.collectProjectState()
-            
+
             // Get the project data (same as saved to localStorage)
-            const projectToExport = { ...this.#editor.project }
-            
+            const projectToExport = {...this.#editor.project}
+
             // Filter out system symbols but keep user symbols
             if (projectToExport.symbols) {
                 projectToExport.symbols = projectToExport.symbols.filter(s => !s.readonly && !s.device)
             }
-            
+
             // Keep device_symbols in export so they can be restored
             // (they will be merged/updated when connecting to device)
-            
+
             // Keep connectionMode and selectedDevice for device configuration
             // These are already in projectToExport
-            
+
             // Create filename from project info or use default
             const projectName = projectToExport.info?.name || 'project'
             const projectVersion = projectToExport.info?.version || ''
             const timestamp = new Date().toISOString().slice(0, 10)
             // Escape version for valid filename (replace invalid chars with underscore)
             const safeVersion = projectVersion.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_')
-            const filename = safeVersion 
-                ? `${projectName}_v${safeVersion}_${timestamp}.vovkplc`
-                : `${projectName}_${timestamp}.vovkplc`
-            
+            const filename = safeVersion ? `${projectName}_v${safeVersion}_${timestamp}.vovkplc` : `${projectName}_${timestamp}.vovkplc`
+
             // Create and download file
             const json = JSON.stringify(projectToExport, null, 2)
-            const blob = new Blob([json], { type: 'application/json' })
+            const blob = new Blob([json], {type: 'application/json'})
             const url = URL.createObjectURL(blob)
-            
+
             const a = document.createElement('a')
             a.href = url
             a.download = filename
@@ -3096,7 +3450,7 @@ export default class WindowManager {
             a.click()
             document.body.removeChild(a)
             URL.revokeObjectURL(url)
-            
+
             this.logToConsole?.(`Exported project to ${filename}`, 'success')
         } catch (err) {
             console.error('Failed to export project:', err)
@@ -3107,13 +3461,13 @@ export default class WindowManager {
     async _menuProjectProperties() {
         const project = this.#editor.project
         const info = project.info || {}
-        
+
         const result = await Popup.form({
             title: 'Project Properties',
             width: '450px',
             buttons: [
-                { text: 'Save', value: 'confirm', background: '#007acc', color: 'white' },
-                { text: 'Cancel', value: 'cancel' }
+                {text: 'Save', value: 'confirm', background: '#007acc', color: 'white'},
+                {text: 'Cancel', value: 'cancel'},
             ],
             inputs: [
                 {
@@ -3121,21 +3475,21 @@ export default class WindowManager {
                     label: 'Project Title',
                     type: 'text',
                     value: info.name || '',
-                    placeholder: 'My PLC Project'
+                    placeholder: 'My PLC Project',
                 },
                 {
                     name: 'version',
                     label: 'Version',
                     type: 'text',
                     value: info.version || '0.0.0',
-                    placeholder: '0.0.0'
+                    placeholder: '0.0.0',
                 },
                 {
                     name: 'author',
                     label: 'Author',
                     type: 'text',
                     value: info.author || '',
-                    placeholder: 'Your name'
+                    placeholder: 'Your name',
                 },
                 {
                     name: 'description',
@@ -3143,27 +3497,27 @@ export default class WindowManager {
                     type: 'textarea',
                     value: info.description || '',
                     placeholder: 'Enter project description...',
-                    rows: 4
-                }
-            ]
+                    rows: 4,
+                },
+            ],
         })
-        
+
         if (!result) return
-        
+
         // Update project info
         project.info = project.info || {}
         project.info.name = result.name?.trim() || ''
         project.info.version = result.version?.trim() || '0.0.0'
         project.info.author = result.author?.trim() || ''
         project.info.description = result.description?.trim() || ''
-        
+
         // Trigger save
         this.#editor.project_manager.save()
-        
+
         // Update tree title and page title
         this.tree_manager.draw_navigation_tree()
         this.updatePageTitle()
-        
+
         this.logToConsole?.(`Project properties updated`, 'success')
     }
 
@@ -3194,12 +3548,15 @@ export default class WindowManager {
         const workspace = this.#editor.workspace
 
         this.tree_manager.initialize()
-        
+
         // Initialize menu bar
         this._initializeMenuBar()
-        
+
         // Set page title based on project name
         this.updatePageTitle()
+
+        // Show disclaimer on first visit
+        this._checkDisclaimerAcceptance()
 
         // On ESC remove all selections
         workspace.addEventListener('keydown', event => {
@@ -3379,7 +3736,7 @@ export default class WindowManager {
             if (this.simulationLabel) {
                 this.simulationLabel.style.display = this.connectionMode === 'simulation' ? 'flex' : 'none'
             }
-            
+
             // Ensure polling state matches mode
             if (this.connectionMode === 'serial') {
                 if (!this.serialDevicePollingTimer) this._startSerialPolling()
@@ -3387,10 +3744,10 @@ export default class WindowManager {
                 if (this.serialDevicePollingTimer) this._stopSerialPolling()
             }
         }
-        
+
         if (project.selectedDevice) {
             this.selectedDeviceValue = project.selectedDevice
-            
+
             // Validate selection against mode
             if (this.connectionMode === 'serial' && this.selectedDeviceValue === '_simulation') {
                 this.selectedDeviceValue = null
@@ -3413,9 +3770,11 @@ export default class WindowManager {
                 } else if (typeof this.watch_panel.refresh === 'function') {
                     this.watch_panel.refresh()
                 }
-            } catch(e) { console.warn('Failed to load watch items', e) }
+            } catch (e) {
+                console.warn('Failed to load watch items', e)
+            }
         }
-        
+
         // Compile project to generate IR data and scan for patchable constants
         // Wait for runtime to fully initialize and warmup to complete
         setTimeout(async () => {
@@ -3423,10 +3782,10 @@ export default class WindowManager {
                 console.log('[WindowManager] Runtime not ready yet, waiting...')
                 return
             }
-            
+
             try {
                 console.log('[WindowManager] Running automatic compilation for IR scan...')
-                const success = await this.handleCompile({ silent: true })
+                const success = await this.handleCompile({silent: true})
                 console.log('[WindowManager] Automatic compilation result:', success)
             } catch (err) {
                 console.warn('Failed to compile on project load:', err)
@@ -3509,19 +3868,19 @@ export default class WindowManager {
 
     async _updateFooterVersionTooltip(el, show = false) {
         if (!el) return
-        
+
         let runtimeInfo = '<span style="color: #888;">Loading runtime info...</span>'
         let deviceSection = ''
         const showTooltip = () => {
-             if (this.footerTooltip && show) {
+            if (this.footerTooltip && show) {
                 const rect = el.getBoundingClientRect()
                 const editorSection = `<div style="font-size:10px; color:#666; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Editor</div>`
                 const editorInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Editor</div><div style="color:#aaa;">Version: ${VOVKPLCEDITOR_VERSION} Build ${VOVKPLCEDITOR_VERSION_BUILD}</div>`
                 this.footerTooltip.innerHTML = `${editorSection}${editorInfo}<div style="margin-top:8px;">${runtimeInfo}</div>${deviceSection}`
                 this.footerTooltip.style.left = rect.left + 'px'
-                this.footerTooltip.style.bottom = (window.innerHeight - rect.top) + 'px'
+                this.footerTooltip.style.bottom = window.innerHeight - rect.top + 'px'
                 this.footerTooltip.style.display = 'block'
-             }
+            }
         }
 
         if (show) showTooltip()
@@ -3530,29 +3889,29 @@ export default class WindowManager {
         // Device info is shown separately if connected to a physical device
         const cachedInfo = this.#editor?.runtime_info
         const deviceInfo = this.#editor?.device_manager?.deviceInfo
-        
+
         // Always show WASM compiler runtime info first
         if (cachedInfo && cachedInfo.version) {
             runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#aaa;">Version: ${cachedInfo.version}${cachedInfo.arch ? `<br>Arch: ${cachedInfo.arch}` : ''}</div>`
         } else if (this.#editor && this.#editor.runtime && this.#editor.runtime_ready) {
-             try {
-                 const info = this.#editor.runtime.printInfo()
-                 if (info && info.version) {
-                     runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#aaa;">Version: ${info.version}${info.arch ? `<br>Arch: ${info.arch}` : ''}</div>`
-                 } else if (typeof info === 'string' && info !== 'No info available') {
-                     runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#aaa;">${info}</div>`
-                 } else {
-                     runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#aaa;">Ready</div>`
-                 }
-             } catch (e) {
-                 runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#d44;">Offline</div>`
-             }
+            try {
+                const info = this.#editor.runtime.printInfo()
+                if (info && info.version) {
+                    runtimeInfo = `<div style="font-weight:600; color:#fff; margin-bottom:4px;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#aaa;">Version: ${info.version}${info.arch ? `<br>Arch: ${info.arch}` : ''}</div>`
+                } else if (typeof info === 'string' && info !== 'No info available') {
+                    runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#aaa;">${info}</div>`
+                } else {
+                    runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#aaa;">Ready</div>`
+                }
+            } catch (e) {
+                runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#d44;">Offline</div>`
+            }
         } else if (this.#editor && this.#editor.runtime) {
-             runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#888;">Initializing...</div>`
+            runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#888;">Initializing...</div>`
         } else {
-             runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#888;">Not initialized</div>`
+            runtimeInfo = `<div style="font-weight:600; color:#fff;">VovkPLC Runtime <span style="font-weight:400; font-size:11px; color:#888;">(compiler and simulator)</span></div><div style="color:#888;">Not initialized</div>`
         }
-        
+
         // Add connected device info if available (separate from compiler info)
         if (deviceInfo && deviceInfo.version) {
             const deviceName = deviceInfo.device || 'Unknown Device'
@@ -3572,14 +3931,14 @@ export default class WindowManager {
         const next = !!active
         if (this._monitoringActive === next) return
         this._monitoringActive = next
-        
+
         // Save state to localStorage
         try {
             localStorage.setItem('vovk_plc_monitoring_active', JSON.stringify(next))
         } catch (e) {
             console.warn('Failed to save monitoring state', e)
         }
-        
+
         // Clear ALL render caches when toggling monitor mode to force fresh pill generation
         const editor = this.#editor
         if (editor?.project_manager?.project?.blocks) {
@@ -3593,7 +3952,7 @@ export default class WindowManager {
                 block.cached_symbols_checksum = null
             }
         }
-        
+
         // Don't auto-lock when monitoring starts - let user control lock explicitly
 
         for (const win of this.windows.values()) {
@@ -3610,15 +3969,15 @@ export default class WindowManager {
 
     toggleLiveEdit(enabled) {
         if (enabled !== undefined) {
-             this._liveEditEnabled = !!enabled
+            this._liveEditEnabled = !!enabled
         } else {
-             this._liveEditEnabled = !this._liveEditEnabled
+            this._liveEditEnabled = !this._liveEditEnabled
         }
-        
+
         for (const win of this.windows.values()) {
-             // Let updateLiveMonitorState handle the UI updates via setEditLock and other mechanisms
+            // Let updateLiveMonitorState handle the UI updates via setEditLock and other mechanisms
         }
-        
+
         this.updateLiveMonitorState()
     }
 
@@ -3636,7 +3995,7 @@ export default class WindowManager {
         const connected = !!editor?.device_manager?.connected
         const monitoring = this._monitoringActive
         const shouldMonitor = !!connected && monitoring
-        
+
         // Locking Logic:
         // Unlock editing when Connected (Online), but Lock when Monitoring.
         // If Live Edit is enabled, we force unlock.
@@ -3644,18 +4003,18 @@ export default class WindowManager {
         // So we strictly lock when monitoring is active, ignoring liveEditEnabled for code editing.
         const isLocked = shouldMonitor // && !this._liveEditEnabled
         if (this._edit_lock_state !== isLocked) {
-             this._edit_lock_state = isLocked
-             if (typeof editor.setEditLock === 'function') {
-                 editor.setEditLock(isLocked)
-             }
+            this._edit_lock_state = isLocked
+            if (typeof editor.setEditLock === 'function') {
+                editor.setEditLock(isLocked)
+            }
         }
-        
+
         // Notify all windows about monitoring state (which updates the lock button visibility)
         for (const win of this.windows.values()) {
             if (win && typeof win.updateMonitoringState === 'function') {
                 win.updateMonitoringState(monitoring)
             }
-             if (win && typeof win.updateLiveEditState === 'function') {
+            if (win && typeof win.updateLiveEditState === 'function') {
                 win.updateLiveEditState(this._liveEditEnabled)
             }
         }
@@ -3665,25 +4024,25 @@ export default class WindowManager {
         if (watchPanelInstance && typeof watchPanelInstance.setMonitoringState === 'function') {
             watchPanelInstance.setMonitoringState(shouldMonitor)
         }
-        
+
         const memoryWin = this.windows.get('memory')
         if (memoryWin && typeof memoryWin.setMonitoringState === 'function') {
             memoryWin.setMonitoringState(shouldMonitor)
         }
-        
+
         if (shouldMonitor) {
             if (this.data_fetcher && !this.data_fetcher.fetching) this.data_fetcher.start()
             this._startLiveMemoryMonitor()
             if (editor && typeof editor.setMonitoringDimmed === 'function') {
-                 editor.setMonitoringDimmed(false)
+                editor.setMonitoringDimmed(false)
             }
             // Enable visual feedback for monitoring
             if (editor && typeof editor.setMonitoringVisuals === 'function') {
-                 editor.setMonitoringVisuals(true)
+                editor.setMonitoringVisuals(true)
             }
             this.setHealthDimmed(false)
             this._pollDeviceHealth()
-            
+
             // Refresh all editor values
             if (editor.project && editor.project.files) {
                 editor.project.files.forEach(file => {
@@ -3697,17 +4056,17 @@ export default class WindowManager {
                 })
             }
         } else {
-             if (this.data_fetcher && this.data_fetcher.fetching) this.data_fetcher.stop()
-             if (editor && typeof editor.setMonitoringDimmed === 'function') {
-                 editor.setMonitoringDimmed(true)
-             }
-             if (editor && typeof editor.setMonitoringVisuals === 'function') {
-                 editor.setMonitoringVisuals(false)
-             }
-             this.setHealthDimmed(true)
-             
-             // Refresh all editor values to hide pills when monitoring stops
-             if (editor.project && editor.project.files) {
+            if (this.data_fetcher && this.data_fetcher.fetching) this.data_fetcher.stop()
+            if (editor && typeof editor.setMonitoringDimmed === 'function') {
+                editor.setMonitoringDimmed(true)
+            }
+            if (editor && typeof editor.setMonitoringVisuals === 'function') {
+                editor.setMonitoringVisuals(false)
+            }
+            this.setHealthDimmed(true)
+
+            // Refresh all editor values to hide pills when monitoring stops
+            if (editor.project && editor.project.files) {
                 editor.project.files.forEach(file => {
                     if (file.blocks) {
                         file.blocks.forEach(block => {
@@ -3720,13 +4079,13 @@ export default class WindowManager {
             }
         }
     }
-    
+
     // Helper to find watch panel instance (since we didn't save it)
     _getWatchPanelInstance() {
-         // It might be attached to the DOM element property if we were using web components, but we are not.
-         // We should have saved it in constructor.
-         // Let's assume we can fix constructor to save it.
-         return this.watch_panel
+        // It might be attached to the DOM element property if we were using web components, but we are not.
+        // We should have saved it in constructor.
+        // Let's assume we can fix constructor to save it.
+        return this.watch_panel
     }
 
     _startLiveMemoryMonitor() {
@@ -3752,13 +4111,13 @@ export default class WindowManager {
     _updateCodeMonitorRegistrations() {
         const editor = this.#editor
         if (!editor?.device_manager?.connected) return
-        
+
         const projectSymbols = editor.project?.symbols || []
         const offsets = ensureOffsets(editor.project?.offsets || {})
         const addressRefs = typeof editor._getAsmAddressRefsForLive === 'function' ? editor._getAsmAddressRefsForLive(offsets) : []
         const symbolEntries = []
         const seenNames = new Set()
-        
+
         projectSymbols.forEach(symbol => {
             if (!symbol || !symbol.name) return
             seenNames.add(symbol.name)
@@ -3777,7 +4136,7 @@ export default class WindowManager {
                 bit: typeof ref.bit === 'number' ? ref.bit : null,
             })
         })
-        
+
         if (!symbolEntries.length) return
         const memoryLimitValue = Number(editor.device_manager?.deviceInfo?.memory)
         const memoryLimit = Number.isFinite(memoryLimitValue) && memoryLimitValue > 0 ? memoryLimitValue : null
@@ -3820,15 +4179,15 @@ export default class WindowManager {
             const addrVal = parseFloat(symbol?.address) || 0
             const explicitBit = typeof symbol?.bit === 'number' ? symbol.bit : null
             // Timer uses 9 bytes per unit, Counter uses 5 bytes per unit
-            const structSize = (locationKey === 'timer') ? 9 : (locationKey === 'counter') ? 5 : 1
+            const structSize = locationKey === 'timer' ? 9 : locationKey === 'counter' ? 5 : 1
 
             if (symbol?.type === 'bit' || explicitBit !== null) {
                 const byte = Math.floor(addrVal)
                 const bit = explicitBit !== null ? explicitBit : Math.round((addrVal - byte) * 10)
-                return {absolute: baseOffset + (byte * structSize), bit, size: 1}
+                return {absolute: baseOffset + byte * structSize, bit, size: 1}
             }
             const size = typeSizes[symbol?.type] || 1
-            return {absolute: baseOffset + (Math.floor(addrVal) * structSize), bit: null, size}
+            return {absolute: baseOffset + Math.floor(addrVal) * structSize, bit: null, size}
         }
 
         symbolEntries.forEach(symbol => {
@@ -3855,7 +4214,7 @@ export default class WindowManager {
             const size = Math.max(0, readEnd - readStart)
             if (!size) continue
 
-            this.data_fetcher.register('code-monitor', readStart, size, (data) => {
+            this.data_fetcher.register('code-monitor', readStart, size, data => {
                 this._processMonitorData(data, readStart, group.items)
             })
         }
@@ -3881,20 +4240,17 @@ export default class WindowManager {
             const type = symbol.type || 'byte'
             let value = null
             let text = '-'
-            
+
             if (offset < 0 || offset >= bytes.length) {
-                // Do not overwrite with null if partial update fails for some reason, 
-                // but actually if offset is out of bounds of *this* chunk, it shouldn't happen 
+                // Do not overwrite with null if partial update fails for some reason,
+                // but actually if offset is out of bounds of *this* chunk, it shouldn't happen
                 // because we registered based on items range.
                 return
             }
-            
+
             // Check end bound
-            const size = (['bit', 'byte', 'u8', 'i8'].includes(type) || type === 'bit' || type === 'byte') ? 1 : 
-                         (['int', 'u16', 'i16', 'word'].includes(type) || type === 'int') ? 2 : 
-                         (['dint', 'u32', 'i32', 'real', 'float', 'f32', 'dword'].includes(type) || type === 'dint' || type === 'real') ? 4 : 
-                         (['u64', 'i64', 'f64', 'lword'].includes(type)) ? 8 : 1
-            
+            const size = ['bit', 'byte', 'u8', 'i8'].includes(type) || type === 'bit' || type === 'byte' ? 1 : ['int', 'u16', 'i16', 'word'].includes(type) || type === 'int' ? 2 : ['dint', 'u32', 'i32', 'real', 'float', 'f32', 'dword'].includes(type) || type === 'dint' || type === 'real' ? 4 : ['u64', 'i64', 'f64', 'lword'].includes(type) ? 8 : 1
+
             if (offset + size > bytes.length) return
 
             if (type === 'bit') {
@@ -3928,19 +4284,22 @@ export default class WindowManager {
                 text = Number.isFinite(value) ? value.toFixed(3) : String(value)
             } else if (type === 'u64' || type === 'i64' || type === 'lword') {
                 try {
-                    value = (type === 'u64' || type === 'lword') ? view.getBigUint64(offset, true) : view.getBigInt64(offset, true)
+                    value = type === 'u64' || type === 'lword' ? view.getBigUint64(offset, true) : view.getBigInt64(offset, true)
                     text = String(value)
-                } catch(e) { /* fallback */ value = 0n; text = '0' }
+                } catch (e) {
+                    /* fallback */ value = 0n
+                    text = '0'
+                }
             } else {
                 value = bytes[offset]
                 text = String(value)
             }
             liveValues.set(symbol.name, {
-                value, 
-                text, 
-                type, 
-                absoluteAddress: layout.absolute, 
-                timestamp: Date.now() 
+                value,
+                text,
+                type,
+                absoluteAddress: layout.absolute,
+                timestamp: Date.now(),
             })
         })
 
@@ -4093,7 +4452,7 @@ export default class WindowManager {
 
         // Special windows (symbols, setup, memory) that don't live in the project tree
         const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory'
-        
+
         if (isSpecialWindow) {
             if (typeof editor._pushWindowHistory === 'function') {
                 editor._pushWindowHistory(id)
@@ -4102,20 +4461,20 @@ export default class WindowManager {
 
         const existingTab = this.tab_manager.tabs.get(id)
         let existingProgram = editor.findProgram(id)
-        
+
         // For special windows not in tree, create a virtual program entry
         if (!existingProgram && isSpecialWindow) {
-            existingProgram = { 
-                id, 
-                type: id, 
-                name: id, 
-                path: '/', 
-                full_path: `/${id}`, 
+            existingProgram = {
+                id,
+                type: id,
+                name: id,
+                path: '/',
+                full_path: `/${id}`,
                 comment: id === 'setup' ? 'Device Configuration' : id === 'symbols' ? 'Symbols Table' : 'Memory Map',
-                blocks: [] 
+                blocks: [],
             }
         }
-        
+
         const existingHost = existingProgram?.host || existingTab?.host
         if (existingTab && existingHost && existingProgram) {
             this.active_tab = id
@@ -4159,161 +4518,161 @@ export default class WindowManager {
     }
 
     #initOuterLayout(workspace) {
-        const nav = workspace.querySelector('.plc-navigation');
-        const tools = workspace.querySelector('.plc-tools');
+        const nav = workspace.querySelector('.plc-navigation')
+        const tools = workspace.querySelector('.plc-tools')
         // resizers removed from HTML
-        const navBar = workspace.querySelector('.plc-navigation-bar');
-        const toolsBar = workspace.querySelector('.plc-tools-bar');
+        const navBar = workspace.querySelector('.plc-navigation-bar')
+        const toolsBar = workspace.querySelector('.plc-tools-bar')
 
         let state = {
-            nav: { width: 300, minimized: false },
-            tools: { width: 250, minimized: true }
-        };
+            nav: {width: 300, minimized: false},
+            tools: {width: 250, minimized: true},
+        }
 
         try {
-            const saved = localStorage.getItem('vovk_plc_outer_layout');
+            const saved = localStorage.getItem('vovk_plc_outer_layout')
             if (saved) {
-                const parsed = JSON.parse(saved);
-                if (parsed.nav) state.nav = { ...state.nav, ...parsed.nav };
-                if (parsed.tools) state.tools = { ...state.tools, ...parsed.tools };
+                const parsed = JSON.parse(saved)
+                if (parsed.nav) state.nav = {...state.nav, ...parsed.nav}
+                if (parsed.tools) state.tools = {...state.tools, ...parsed.tools}
             }
-        } catch(e) {}
+        } catch (e) {}
 
         const apply = () => {
-            const navBtn = nav?.querySelector('.menu-button');
-            const navContent = nav?.querySelector('.plc-navigation-container');
-            
+            const navBtn = nav?.querySelector('.menu-button')
+            const navContent = nav?.querySelector('.plc-navigation-container')
+
             if (state.nav.minimized) {
-                nav.classList.add('minimized');
-                nav.style.flex = '0 0 auto';
-                nav.style.width = '30px'; 
-                nav.style.overflow = 'hidden';
-                if (navContent) navContent.style.display = 'none';
-                if (navBtn) navBtn.innerText = '+';
-                if (navBar) navBar.style.width = '100%';
+                nav.classList.add('minimized')
+                nav.style.flex = '0 0 auto'
+                nav.style.width = '30px'
+                nav.style.overflow = 'hidden'
+                if (navContent) navContent.style.display = 'none'
+                if (navBtn) navBtn.innerText = '+'
+                if (navBar) navBar.style.width = '100%'
             } else {
-                nav.classList.remove('minimized');
-                nav.style.flex = `0 0 ${state.nav.width}px`;
-                nav.style.width = `${state.nav.width}px`;
-                if (navContent) navContent.style.display = '';
-                if (navBtn) navBtn.innerText = '-';
-                if (navBar) navBar.style.width = '';
+                nav.classList.remove('minimized')
+                nav.style.flex = `0 0 ${state.nav.width}px`
+                nav.style.width = `${state.nav.width}px`
+                if (navContent) navContent.style.display = ''
+                if (navBtn) navBtn.innerText = '-'
+                if (navBar) navBar.style.width = ''
             }
 
-            const toolsBtn = tools?.querySelector('.menu-button');
-            const toolsContent = tools?.querySelector('.plc-tools-container');
+            const toolsBtn = tools?.querySelector('.menu-button')
+            const toolsContent = tools?.querySelector('.plc-tools-container')
 
             if (state.tools.minimized) {
-                tools.classList.add('minimized');
-                tools.style.flex = '0 0 auto';
-                tools.style.width = '30px';
-                tools.style.overflow = 'hidden';
-                if (toolsContent) toolsContent.style.display = 'none';
-                if (toolsBtn) toolsBtn.innerText = '+';
-                if (toolsBar) toolsBar.style.width = '100%';
+                tools.classList.add('minimized')
+                tools.style.flex = '0 0 auto'
+                tools.style.width = '30px'
+                tools.style.overflow = 'hidden'
+                if (toolsContent) toolsContent.style.display = 'none'
+                if (toolsBtn) toolsBtn.innerText = '+'
+                if (toolsBar) toolsBar.style.width = '100%'
             } else {
-                tools.classList.remove('minimized');
-                tools.style.flex = `0 0 ${state.tools.width}px`;
-                tools.style.width = `${state.tools.width}px`;
-                if (toolsContent) toolsContent.style.display = '';
-                if (toolsBtn) toolsBtn.innerText = '-';
-                if (toolsBar) toolsBar.style.width = '';
+                tools.classList.remove('minimized')
+                tools.style.flex = `0 0 ${state.tools.width}px`
+                tools.style.width = `${state.tools.width}px`
+                if (toolsContent) toolsContent.style.display = ''
+                if (toolsBtn) toolsBtn.innerText = '-'
+                if (toolsBar) toolsBar.style.width = ''
             }
 
-            localStorage.setItem('vovk_plc_outer_layout', JSON.stringify(state));
+            localStorage.setItem('vovk_plc_outer_layout', JSON.stringify(state))
         }
 
         this._outerLayoutControl = {
-            setNavMinimized: (minimized) => {
+            setNavMinimized: minimized => {
                 state.nav.minimized = minimized
                 apply()
-            }
+            },
         }
 
         const setupDrag = (bar, side) => {
-            if (!bar) return; 
-            bar.style.touchAction = 'none';
+            if (!bar) return
+            bar.style.touchAction = 'none'
 
-            bar.addEventListener('pointerdown', (e) => {
+            bar.addEventListener('pointerdown', e => {
                 // Ignore clicks on buttons inside the bar if necessary, but we capture everything for drag
-                // If user clicks the button explicitly, it might bubble. 
+                // If user clicks the button explicitly, it might bubble.
                 // e.target check?
                 // The 'menu-button' is inside. If I capture pointer, button click might fail visual feedback?
                 // Actually pointer capture allows events.
-                
+
                 // If it's a right click, ignore
-                if (e.button !== 0) return;
+                if (e.button !== 0) return
 
-                e.preventDefault();
-                bar.setPointerCapture(e.pointerId);
+                e.preventDefault()
+                bar.setPointerCapture(e.pointerId)
 
-                const startX = e.clientX;
-                
+                const startX = e.clientX
+
                 // Use current visual width as start point
-                const panel = side === 'left' ? nav : tools;
-                const rect = panel.getBoundingClientRect();
-                const startWidth = rect.width;
+                const panel = side === 'left' ? nav : tools
+                const rect = panel.getBoundingClientRect()
+                const startWidth = rect.width
 
-                let isDragging = false;
+                let isDragging = false
 
-                const onPointerMove = (evt) => {
-                    const diff = evt.clientX - startX;
+                const onPointerMove = evt => {
+                    const diff = evt.clientX - startX
                     if (!isDragging && Math.abs(diff) > 5) {
-                        isDragging = true;
-                        document.body.style.cursor = 'ew-resize';
-                        bar.style.cursor = 'ew-resize';
+                        isDragging = true
+                        document.body.style.cursor = 'ew-resize'
+                        bar.style.cursor = 'ew-resize'
                     }
 
                     if (isDragging) {
-                        let newWidth = side === 'left' ? startWidth + diff : startWidth - diff;
-                        
-                        const min = 250;
-                        const trigger = min / 2;
+                        let newWidth = side === 'left' ? startWidth + diff : startWidth - diff
+
+                        const min = 250
+                        const trigger = min / 2
 
                         if (newWidth < trigger) {
-                            if (side === 'left') state.nav.minimized = true;
-                            else state.tools.minimized = true;
+                            if (side === 'left') state.nav.minimized = true
+                            else state.tools.minimized = true
                         } else {
-                            if (newWidth < min) newWidth = min;
-                            if (newWidth > 800) newWidth = 800;
+                            if (newWidth < min) newWidth = min
+                            if (newWidth > 800) newWidth = 800
 
                             if (side === 'left') {
-                                state.nav.width = newWidth;
-                                state.nav.minimized = false;
+                                state.nav.width = newWidth
+                                state.nav.minimized = false
                             } else {
-                                state.tools.width = newWidth;
-                                state.tools.minimized = false;
+                                state.tools.width = newWidth
+                                state.tools.minimized = false
                             }
                         }
 
-                        apply();
+                        apply()
                     }
-                };
+                }
 
-                const onPointerUp = (evt) => {
-                    document.body.style.cursor = '';
-                    bar.style.cursor = '';
-                    bar.releasePointerCapture(evt.pointerId);
-                    bar.removeEventListener('pointermove', onPointerMove);
-                    bar.removeEventListener('pointerup', onPointerUp);
-                    
+                const onPointerUp = evt => {
+                    document.body.style.cursor = ''
+                    bar.style.cursor = ''
+                    bar.releasePointerCapture(evt.pointerId)
+                    bar.removeEventListener('pointermove', onPointerMove)
+                    bar.removeEventListener('pointerup', onPointerUp)
+
                     if (!isDragging) {
                         // Treat as click/toggle
-                        if (side === 'left') state.nav.minimized = !state.nav.minimized;
-                        else state.tools.minimized = !state.tools.minimized;
-                        apply();
+                        if (side === 'left') state.nav.minimized = !state.nav.minimized
+                        else state.tools.minimized = !state.tools.minimized
+                        apply()
                     }
-                };
+                }
 
-                bar.addEventListener('pointermove', onPointerMove);
-                bar.addEventListener('pointerup', onPointerUp);
-            });
+                bar.addEventListener('pointermove', onPointerMove)
+                bar.addEventListener('pointerup', onPointerUp)
+            })
         }
 
-        setupDrag(navBar, 'left');
-        setupDrag(toolsBar, 'right');
+        setupDrag(navBar, 'left')
+        setupDrag(toolsBar, 'right')
 
-        apply();
+        apply()
     }
 
     async updateDeviceDropdown() {
@@ -4321,16 +4680,16 @@ export default class WindowManager {
             // console.warn('[WindowManager] updateDeviceDropdown skipped - no deviceDropdown')
             return
         }
-        
+
         // Self-Healing: Ensure serial polling is active if we are in serial mode
         // This handles cases where mode was switched via Project Load or other means without triggering the change event
         if (this.connectionMode === 'serial' && !this.serialDevicePollingTimer && 'serial' in navigator) {
-             // console.log('[WindowManager] Auto-starting serial polling found to be inactive')
-             this._startSerialPolling()
+            // console.log('[WindowManager] Auto-starting serial polling found to be inactive')
+            this._startSerialPolling()
         }
-        
+
         // console.log('[WindowManager] updateDeviceDropdown called. Mode:', this.connectionMode)
-        
+
         const mode = this.connectionMode
         let newOptions = []
         let selectedValueToSet = null
@@ -4343,7 +4702,7 @@ export default class WindowManager {
                 subtitle: null,
                 disabled: false,
                 isConnected: false,
-                isOffline: false
+                isOffline: false,
             })
             selectedValueToSet = '_simulation'
         } else if (mode === 'serial') {
@@ -4353,7 +4712,7 @@ export default class WindowManager {
                     value: '_none',
                     label: 'Serial not supported',
                     subtitle: null,
-                    disabled: true
+                    disabled: true,
                 })
                 selectedValueToSet = '_none'
             } else {
@@ -4369,13 +4728,13 @@ export default class WindowManager {
                     }
                     */
                     const addedKeys = new Set()
-                    
+
                     // Helper to get stored device info safely (handles legacy string format)
-                    const getStoredInfo = (usbKey) => {
+                    const getStoredInfo = usbKey => {
                         const stored = this.#editor.project?.serialDeviceNames?.[usbKey]
                         if (!stored) return null
                         if (typeof stored === 'string') {
-                            return { name: stored, created: 0, lastConnected: 0 }
+                            return {name: stored, created: 0, lastConnected: 0}
                         }
                         return stored
                     }
@@ -4386,9 +4745,8 @@ export default class WindowManager {
                     // 1. Online Ports
                     ports.forEach((port, index) => {
                         const info = port.getInfo()
-                        const isConnected = this.#editor.device_manager?.connected && 
-                                           this.#editor.device_manager?.connection?.serial?.port === port
-                        
+                        const isConnected = this.#editor.device_manager?.connected && this.#editor.device_manager?.connection?.serial?.port === port
+
                         let value = `_port_${index}`
                         let label = `Serial Device ${index + 1}`
                         let subtitle = null
@@ -4400,7 +4758,7 @@ export default class WindowManager {
                             const productId = info.usbProductId.toString(16).padStart(4, '0')
                             usbKey = `${vendorId}:${productId}`
                             value = `_usb_${usbKey}`
-                            
+
                             const stored = getStoredInfo(usbKey)
                             if (stored) {
                                 label = stored.name
@@ -4426,28 +4784,28 @@ export default class WindowManager {
                             isOffline: false,
                             isAvailable: true,
                             lastConnected,
-                            portIndex: index // Helper for connection lookup fallback
+                            portIndex: index, // Helper for connection lookup fallback
                         })
 
                         if (isConnected) selectedValueToSet = value
                         else if (this.selectedDeviceValue === value) selectedValueToSet = value
                         else if (this._savedSerialDevice === value) selectedValueToSet = value // Restore preference
                     })
-                    
+
                     // console.log('[WindowManager] Online ports processing done. selectedValueToSet:', selectedValueToSet)
-                    
+
                     // 2. Offline History
                     const serialDeviceNames = this.#editor.project?.serialDeviceNames
                     if (serialDeviceNames && Object.keys(serialDeviceNames).length > 0) {
                         for (const [usbKey, entry] of Object.entries(serialDeviceNames)) {
                             // Check against already added keys
-                            if (addedKeys.has(usbKey)) continue 
-                            
+                            if (addedKeys.has(usbKey)) continue
+
                             const name = typeof entry === 'string' ? entry : entry.name
-                            const lastConnected = typeof entry === 'string' ? 0 : (entry.lastConnected || 0)
-                            
+                            const lastConnected = typeof entry === 'string' ? 0 : entry.lastConnected || 0
+
                             const value = `_usb_${usbKey}`
-                            
+
                             // Check if reconnecting - disable all options if so
                             const isReconnecting = this.device_online_button && this.device_online_button.title === 'Cancel reconnect'
 
@@ -4460,11 +4818,11 @@ export default class WindowManager {
                                 isConnected: false,
                                 isOffline: true, // Mark as offline visually
                                 isAvailable: false,
-                                lastConnected
+                                lastConnected,
                             })
-                            
+
                             if (this.selectedDeviceValue === value) selectedValueToSet = value
-                            else if (this._savedSerialDevice === value && !selectedValueToSet) selectedValueToSet = value 
+                            else if (this._savedSerialDevice === value && !selectedValueToSet) selectedValueToSet = value
                         }
                     }
 
@@ -4472,7 +4830,7 @@ export default class WindowManager {
 
                     // Sort: (1) Connected first, (2) Available first, (3) Last connected DESC
                     allDevices.sort((a, b) => {
-                        if (a.isConnected !== b.isConnected) return a.isConnected ? -1 : 1 
+                        if (a.isConnected !== b.isConnected) return a.isConnected ? -1 : 1
                         if (a.isAvailable !== b.isAvailable) return a.isAvailable ? -1 : 1
                         return b.lastConnected - a.lastConnected
                     })
@@ -4487,20 +4845,20 @@ export default class WindowManager {
                             value: '_none',
                             label: 'No paired devices',
                             subtitle: null,
-                            disabled: true
+                            disabled: true,
                         })
                         if (!this.selectedDeviceValue || this.selectedDeviceValue.startsWith('_')) {
                             selectedValueToSet = '_none'
                         }
                     } else if (!selectedValueToSet) {
-                         // Default to first available, or first item if none available
-                         const firstAvailable = newOptions.find(o => o.isAvailable)
-                         selectedValueToSet = firstAvailable ? firstAvailable.value : newOptions[0].value
+                        // Default to first available, or first item if none available
+                        const firstAvailable = newOptions.find(o => o.isAvailable)
+                        selectedValueToSet = firstAvailable ? firstAvailable.value : newOptions[0].value
                     }
 
                     // Add "Connect New Device" action
                     const isReconnecting = this.device_online_button && this.device_online_button.title === 'Cancel reconnect'
-                    newOptions.push({ type: 'separator', text: '' })
+                    newOptions.push({type: 'separator', text: ''})
                     newOptions.push({
                         type: 'option',
                         value: '_action_new_device',
@@ -4508,9 +4866,8 @@ export default class WindowManager {
                         subtitle: null,
                         disabled: isReconnecting,
                         isConnected: false,
-                        isOffline: false
+                        isOffline: false,
                     })
-
                 } catch (err) {
                     console.error('Failed to get paired devices:', err)
                     newOptions.push({
@@ -4518,7 +4875,7 @@ export default class WindowManager {
                         value: '_error',
                         label: 'Error loading devices',
                         subtitle: null,
-                        disabled: true
+                        disabled: true,
                     })
                 }
             }
@@ -4528,13 +4885,13 @@ export default class WindowManager {
         const newStateStr = JSON.stringify(newOptions) + mode + selectedValueToSet + (this.device_online_button?.title || '')
         // NON-BLOCKING CACHE CHECK FOR DEBUGGING
         if (this._lastDropdownState === newStateStr) {
-             // console.log('[WindowManager] Cache hit, but forcing update to ensure button state')
+            // console.log('[WindowManager] Cache hit, but forcing update to ensure button state')
         }
         this._lastDropdownState = newStateStr
 
         // Render
         this.deviceDropdown.clear()
-        
+
         newOptions.forEach(opt => {
             if (opt.type === 'separator') {
                 this.deviceDropdown.addSeparator(opt.text)
@@ -4542,19 +4899,19 @@ export default class WindowManager {
                 this.deviceDropdown.addOption(opt.value, opt.label, opt.subtitle, opt.disabled, opt.isConnected, opt.isOffline)
             }
         })
-        
+
         // Ensure we preserve the selection even if device is offline (logic above handles it via selectedValueToSet)
         if (selectedValueToSet) {
             // Note: selectOption logic was updated to NOT trigger onChange callback by default
             // This prevents infinite loops when updateDeviceDropdown is called FROM onChange
             this.deviceDropdown.selectOption(selectedValueToSet)
-            
+
             // Implicitly set valid selection for persistence
-             if (selectedValueToSet !== this.selectedDeviceValue) {
+            if (selectedValueToSet !== this.selectedDeviceValue) {
                 this.selectedDeviceValue = selectedValueToSet
-                 if (this.#editor.project) {
+                if (this.#editor.project) {
                     this.#editor.project.selectedDevice = selectedValueToSet
-                 }
+                }
             }
         }
 
@@ -4563,11 +4920,11 @@ export default class WindowManager {
             const isReconnecting = this.device_online_button.title === 'Cancel reconnect'
             const isBusy = this.device_online_button.innerText === '----------'
             const isConnected = this.#editor.device_manager?.connected
-            
+
             if (!isReconnecting && !isBusy && !isConnected) {
                 const selectedOption = newOptions.find(o => o.value === selectedValueToSet)
                 const isOffline = !selectedOption || selectedOption.isOffline || selectedOption.value === '_none' || selectedOption.value === '_error' || (selectedOption.disabled && selectedOption.value !== '_simulation')
-                
+
                 // console.log(`[WindowManager] Button update check. selectedValue: ${selectedValueToSet}, isOffline: ${isOffline}`)
 
                 if (isOffline) {
@@ -4586,10 +4943,10 @@ export default class WindowManager {
             }
         }
     }
-    
+
     async connectToPairedDevice(portIndex) {
         if (!('serial' in navigator)) return
-        
+
         try {
             const ports = await navigator.serial.getPorts()
             const port = ports[portIndex]
@@ -4597,11 +4954,10 @@ export default class WindowManager {
                 this.logToConsole('Selected device not found', 'error')
                 return
             }
-            
+
             // Check if already connected to this device
-            const alreadyConnected = this.#editor.device_manager?.connected && 
-                                     this.#editor.device_manager?.connection?.serial?.port === port
-            
+            const alreadyConnected = this.#editor.device_manager?.connected && this.#editor.device_manager?.connection?.serial?.port === port
+
             if (alreadyConnected) {
                 // Disconnect
                 await this.#editor.device_manager.disconnect(true)
@@ -4613,26 +4969,26 @@ export default class WindowManager {
                 this.device_info.innerHTML = ''
                 return
             }
-            
+
             // Connect to the selected port
             this.device_online_button.setAttribute('disabled', 'disabled')
             this.device_online_button.innerText = '----------'
-            
+
             const dm = this.#editor.device_manager
             await dm.connect({
                 target: 'serial',
                 baudrate: 115200,
-                port: port
+                port: port,
             })
-            
+
             if (dm.connected) {
                 this.active_mode = 'online'
-                this.active_device = 'serial'  // Set to serial for proper highlight colors
+                this.active_device = 'serial' // Set to serial for proper highlight colors
                 this.device_online_button.innerText = '✕'
                 this.device_online_button.title = 'Disconnect'
                 this.device_online_button.style.background = '#dc3545'
                 this.device_online_button.style.color = '#fff'
-                
+
                 const info = dm.deviceInfo
                 if (info) {
                     this.device_info.innerHTML = `
@@ -4640,7 +4996,7 @@ export default class WindowManager {
                         <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
                     `
                 }
-                
+
                 // Don't call updateDeviceDropdown here - it's already called by the connection status handler
             }
         } catch (err) {

@@ -1,17 +1,21 @@
 
 .plc-popup-window {
-    background: #fff;
-    border: 1px solid #000;
+    background: #1a1a1a;
+    border: 1px solid #555;
     border-radius: 8px;
-    box-shadow: 5px 4px 8px #FFF1;
+    box-shadow: 5px 4px 8px #0008;
     font-family: Arial, sans-serif;
     padding: 4px;
     min-width: 160px;
+    color: #ECECEC;
+}
+.plc-popup-window::backdrop {
+    background: rgba(0, 0, 0, 0.85);
 }
 .plc-popup-header {
     padding: 2px;
     height: 28px;
-    background-color: #f1f1f1;
+    background-color: #252525;
     position: relative;
     display: flex;
     user-select: none;
@@ -30,7 +34,7 @@
 .plc-popup-close {
     cursor: pointer;
     font-size: 24px;
-    color: #333;
+    color: #aaa;
     position: absolute;
     right: 8px;
     align-items: center;
@@ -53,11 +57,12 @@
     /* force text in one line */
     white-space: nowrap;
     overflow: hidden;
+    color: #ECECEC;
 }
 .plc-popup-description {
     margin: 0;
     font-size: 16px;
-    color: #666;
+    color: #888;
 }
 .plc-popup-content {
     margin-top: 4px;
@@ -65,27 +70,30 @@
 .plc-popup-footer button {
     margin-left: 8px;
     padding: 8px 16px;
-    border: 1px solid #0000;
+    border: 1px solid #444;
     border-radius: 4px;
     cursor: pointer;
     user-select: none;
+    background-color: #2a2a2a;
+    color: #ECECEC;
 }
 .plc-popup-footer button:hover {
-    background-color: #ddd;
-    border-color: #ccc;
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+    background-color: #3a3a3a;
+    border-color: #555;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.4);
 }
 .plc-popup-footer button:focus {
     outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    border-color: #4682B4;
+    box-shadow: 0 0 5px rgba(70, 130, 180, 0.5);
 }
 .plc-popup-footer button[disabled] {
-    background-color: #ccc;
+    background-color: #333;
+    color: #666;
     cursor: not-allowed;
 }
 .plc-popup-footer button[disabled]:hover {
-    background-color: #ccc;
+    background-color: #333;
 }
 .plc-popup-footer button[disabled]:focus {
     outline: none;
@@ -125,11 +133,13 @@
 .plc-popup-form input {
     font-size: 14px;
     padding: 4px;
-    border: 1px solid #ccc;
+    border: 1px solid #444;
     border-radius: 4px;
     width: 100%;
     box-sizing: border-box;
     outline: none;
+    background: #2a2a2a;
+    color: #ECECEC;
     /* disable auto-complete */
     -webkit-autocomplete: off;
     -moz-autocomplete: off;
@@ -137,8 +147,8 @@
     -o-autocomplete: off;
 }
 .plc-popup-form input:focus {
-    border-color: #007bff;
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    border-color: #4682B4;
+    box-shadow: 0 0 5px rgba(70, 130, 180, 0.5);
 }
 
 .plc-popup-form input.error {
@@ -150,17 +160,19 @@
     font-size: 14px;
     font-family: Arial, sans-serif;
     padding: 4px;
-    border: 1px solid #ccc;
+    border: 1px solid #444;
     border-radius: 4px;
     width: 100%;
     box-sizing: border-box;
     outline: none;
     resize: vertical;
     min-height: 60px;
+    background: #2a2a2a;
+    color: #ECECEC;
 }
 .plc-popup-form textarea:focus {
-    border-color: #007bff;
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    border-color: #4682B4;
+    box-shadow: 0 0 5px rgba(70, 130, 180, 0.5);
 }
 .plc-popup-form textarea.error {
     border-color: #dc3545;
