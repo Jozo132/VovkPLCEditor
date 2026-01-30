@@ -127,6 +127,11 @@ export default class SimulationConnection extends ConnectionBase {
         // Implement monitoring logic if applicable
     }
 
+    async getSymbolList() {
+        // Simulator doesn't have device symbols - return empty array
+        return []
+    }
+
     async getHealth() {
         if (!this.plc || typeof this.plc.getDeviceHealth !== 'function') {
             throw new Error("Device health not supported")

@@ -269,6 +269,22 @@ export default class SetupUI {
                      const info = await this.master.device_manager.connection.getInfo(true)
                      // If fresh info obtained, update
                      if (info) this.updateProjectConfig(info)
+                     
+                     // Try to load device symbols if the connection supports it
+                     if (typeof this.master.device_manager.connection.getSymbolList === 'function') {
+                         try {
+                             const deviceSymbols = await this.master.device_manager.connection.getSymbolList()
+                             if (deviceSymbols && deviceSymbols.length > 0) {
+                                 this.master.project_manager.setDeviceSymbols(deviceSymbols)
+                                 this.master.window_manager?.logToConsole?.(`Loaded ${deviceSymbols.length} device symbols`, 'success')
+                                 // Refresh symbols UI if open
+                                 this.master.window_manager?.refreshActiveEditor?.()
+                             }
+                         } catch (symErr) {
+                             console.warn('Failed to load device symbols:', symErr)
+                             // Not critical, continue without device symbols
+                         }
+                     }
                 } catch (e) {
                     console.error('Failed to read config', e)
                 }

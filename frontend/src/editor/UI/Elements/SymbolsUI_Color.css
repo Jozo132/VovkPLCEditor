@@ -6,6 +6,61 @@
     border-bottom: 1px solid #37373d;
 }
 
+/* Symbol Section Headers */
+.symbols-table tbody tr.symbol-section-header {
+    background-color: #1e1e1e;
+    border-bottom: 1px solid #333;
+    cursor: pointer;
+    user-select: none;
+}
+
+.symbols-table tbody tr.symbol-section-header:hover {
+    background-color: #252526;
+}
+
+.symbols-table tbody tr.symbol-section-header td {
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.symbols-table tbody tr.symbol-section-header .section-chevron {
+    display: inline-block;
+    width: 14px;
+    margin-right: 6px;
+    font-size: 9px;
+    color: #666;
+    transition: transform 0.15s ease;
+}
+
+.symbols-table tbody tr.symbol-section-header.collapsed .section-chevron {
+    color: #555;
+}
+
+.symbols-table tbody tr.symbol-section-header .section-title {
+    color: #888;
+}
+
+.symbols-table tbody tr.symbol-section-header .section-count {
+    color: #555;
+    font-weight: 400;
+}
+
+.symbols-table tbody tr.symbol-section-header.section-system .section-title { color: #4fc1ff; }
+.symbols-table tbody tr.symbol-section-header.section-device .section-title { color: #89d185; }
+.symbols-table tbody tr.symbol-section-header.section-project .section-title { color: #dcdcaa; }
+
+/* Symbol row styling by type */
+.symbols-table tbody tr.symbol-system {
+    opacity: 0.7;
+}
+
+.symbols-table tbody tr.symbol-device {
+    background-color: rgba(137, 209, 133, 0.05);
+}
+
 /* Base styles for select coloring */
 .symbol-cell-select {
     font-weight: 500;

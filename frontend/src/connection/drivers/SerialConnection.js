@@ -347,6 +347,80 @@ export default class SerialConnection extends ConnectionBase {
         }, { label: 'resetHealth' });
     }
 
+    /**
+     * Get symbol list from device
+     * Request: SL<checksum>
+     * Response: [PS,count,{name,area,address,bit,type,comment},...]
+     * @returns {Promise<Array<{name: string, area: string, address: number, bit: number, type: string, comment: string}>>}
+     */
+    async getSymbolList() {
+        return this._enqueueCommand(async () => {
+            const command = "SL"
+            const cmdHex = this.plc.stringToHex(command)
+            const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
+            await this.serial.write(command + checksum.toUpperCase() + "\n")
+
+            const line = await this._readResponseLine(8000)
+            let raw = line.trim()
+            if (!raw) return []
+            
+            // Response format: [PS,count,{name,area,address,bit,type,comment},...]
+            if (raw.startsWith('[') && raw.endsWith(']')) {
+                const content = raw.substring(1, raw.length - 1)
+                
+                // First, extract header (PS,count) before the first {
+                const firstBrace = content.indexOf('{')
+                if (firstBrace === -1) {
+                    // No symbols, just header
+                    const headerParts = content.split(',')
+                    if (headerParts[0] !== 'PS') {
+                        console.warn('Unexpected symbol list response header:', headerParts[0])
+                        return []
+                    }
+                    return []
+                }
+                
+                const headerPart = content.substring(0, firstBrace)
+                const headerParts = headerPart.split(',').filter(p => p.trim())
+                
+                if (headerParts[0] !== 'PS') {
+                    console.warn('Unexpected symbol list response header:', headerParts[0])
+                    return []
+                }
+                
+                const count = parseInt(headerParts[1], 10)
+                if (count === 0 || isNaN(count)) return []
+                
+                // Extract all {...} groups
+                const symbols = []
+                const symbolRegex = /\{([^}]*)\}/g
+                let match
+                
+                while ((match = symbolRegex.exec(content)) !== null) {
+                    const innerContent = match[1]
+                    // Split only the first 5 fields, the rest is comment (which may contain commas)
+                    const parts = innerContent.split(',')
+                    if (parts.length >= 5) {
+                        // Join remaining parts as comment (in case comment contains commas)
+                        const comment = parts.slice(5).join(',')
+                        symbols.push({
+                            name: parts[0] || '',
+                            area: parts[1] || '',
+                            address: parseInt(parts[2], 10) || 0,
+                            bit: parseInt(parts[3], 10) || 0,
+                            type: parts[4] || 'byte',
+                            comment: comment
+                        })
+                    }
+                }
+                
+                return symbols
+            }
+            
+            return []
+        }, { label: 'getSymbolList', timeoutMs: 8000 });
+    }
+
     async _waitForReply(timeout = 1000) {
         const start = Date.now();
         while (!this.serial.available()) {

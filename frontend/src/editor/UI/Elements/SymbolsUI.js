@@ -29,10 +29,20 @@ export default class SymbolsUI {
         column: null,
         direction: 'asc'
     }
+    
+    // Track collapsed state for each symbol section
+    collapsedSections = {
+        system: true,  // Collapsed by default
+        device: false,
+        project: false
+    }
 
     /** @param { import("../../Editor.js").VovkPLCEditor } master */
     constructor(master) {
         this.master = master
+        
+        // Load collapsed state from localStorage
+        this._loadCollapsedState()
         
         const div = document.createElement('div')
         div.classList.add('plc-editor', 'symbols-editor')
@@ -417,100 +427,171 @@ export default class SymbolsUI {
         this._live_cells = new Map()
         const symbols = this.master.project.symbols || []
         
-        symbols.forEach((symbol, index) => {
-            if (symbol?.location === 'memory') symbol.location = 'marker'
-            const tr = document.createElement('tr')
-            tr.dataset.symbolName = symbol.name || ''
-            tr.dataset.index = index
-            if (this.selectedSymbols.has(symbol)) {
-                tr.classList.add('selected')
-            }
-
-            // Drag Start
-            tr.draggable = true
-            tr.addEventListener('dragstart', (e) => {
-                e.dataTransfer.effectAllowed = 'copy'
-                const payload = JSON.stringify({
-                    name: symbol.name,
-                    type: symbol.type
-                })
-                e.dataTransfer.setData('vovk-app/symbol', payload)
-                e.dataTransfer.setData('text/plain', symbol.name) // Fallback
-            })
-
-            // Icon Column
-            const tdIcon = document.createElement('td')
-            tdIcon.classList.add('symbol-icon-cell')
-            tdIcon.addEventListener('click', (e) => this.toggleSelection(symbol, e, tr))
-            
-            // Context Menu - Handled globally via tbody
-            
-            const icon = document.createElement('div')
-            icon.classList.add('symbol-icon')
-            // icon.textContent = '{}' 
-            icon.style.width = '16px'
-            icon.style.height = '16px'
-            icon.style.backgroundImage = "url('data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><path fill=\"%2344AA77\" d=\"M14 4h-2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2h2v-2h-2V6h2V4zM4 12V4h6v8H4z\"/></svg>')"
-            icon.style.backgroundRepeat = 'no-repeat'
-            icon.style.backgroundPosition = 'center'
-            tdIcon.appendChild(icon)
-            tr.appendChild(tdIcon)
-            
-            const cellLocked = this.locked || symbol.readonly
-            // Name
-            tr.appendChild(this.createCell('input', symbol.name, val => symbol.name = val, [], 'text', cellLocked))
-
-            // Location
-            tr.appendChild(this.createCell('select', symbol.location, val => symbol.location = val, ['control', 'input', 'output', 'system', 'marker'], 'text', cellLocked))
-
-            // Type
-            tr.appendChild(this.createCell('select', symbol.type, val => symbol.type = val, ['bit', 'byte', 'int', 'dint', 'real'], 'text', cellLocked))
-
-            // Address
-            let addressValue = symbol.address
-            if (symbol.type === 'bit') {
-                addressValue = (parseFloat(symbol.address) || 0).toFixed(1)
-            }
-            // Use text input to avoid locale-specific comma formatting
-            tr.appendChild(this.createCell('input', addressValue, (val, inputEl) => {
-                const num = parseFloat(String(val).replace(',', '.')) || 0
-                symbol.address = num
-                // Reformat display immediately
-                if (inputEl) {
-                     if (symbol.type === 'bit') {
-                         inputEl.value = num.toFixed(1)
-                     } else {
-                         inputEl.value = num
-                     }
-                }
-            }, null, 'text', cellLocked))
-
-            // Live Value
-            const liveCell = document.createElement('td')
-            liveCell.classList.add('symbol-live-value')
-            this.applyLiveCellState(liveCell, this.live_values.get(symbol.name))
-            if (symbol.name) this._live_cells.set(symbol.name, liveCell)
-            tr.appendChild(liveCell)
-
-            // Comment
-            tr.appendChild(this.createCell('input', symbol.comment, val => symbol.comment = val, [], 'text', cellLocked))
-
-            // Delete
-            const tdDel = document.createElement('td')
-            if (!cellLocked) {
-                const btnDel = document.createElement('button')
-                btnDel.innerText = 'x'
-                btnDel.classList.add('symbol-delete-btn')
-                btnDel.addEventListener('click', () => {
-                    this.master.project.symbols.splice(index, 1)
-                    this.renderTable()
-                })
-                tdDel.appendChild(btnDel)
-            }
-            tr.appendChild(tdDel)
-
-            this.tbody.appendChild(tr)
+        // Separate symbols into categories
+        const systemSymbols = symbols.filter(s => s.readonly && !s.device)
+        const deviceSymbols = symbols.filter(s => s.device)
+        const projectSymbols = symbols.filter(s => !s.readonly && !s.device)
+        
+        // Render with section headers
+        this._renderSection('System Symbols', systemSymbols, symbols, 'system')
+        this._renderSection('Device Symbols', deviceSymbols, symbols, 'device')
+        this._renderSection('Project Symbols', projectSymbols, symbols, 'project')
+    }
+    
+    _renderSection(title, sectionSymbols, allSymbols, sectionType) {
+        // Only hide system section when empty; always show device and project sections
+        if (sectionSymbols.length === 0 && sectionType === 'system') return
+        
+        const isCollapsed = this.collapsedSections[sectionType] || false
+        const chevron = isCollapsed ? '▶' : '▼'
+        
+        // Section Header Row
+        const headerTr = document.createElement('tr')
+        headerTr.classList.add('symbol-section-header', `section-${sectionType}`)
+        if (isCollapsed) headerTr.classList.add('collapsed')
+        const headerTd = document.createElement('td')
+        headerTd.colSpan = 8
+        headerTd.innerHTML = `<span class="section-chevron">${chevron}</span><span class="section-title">${title}</span> <span class="section-count">(${sectionSymbols.length})</span>`
+        headerTr.appendChild(headerTd)
+        
+        // Click to toggle collapse
+        headerTr.addEventListener('click', () => {
+            this.collapsedSections[sectionType] = !this.collapsedSections[sectionType]
+            this._saveCollapsedState()
+            this.renderTable()
         })
+        
+        this.tbody.appendChild(headerTr)
+        
+        // Only render symbols if not collapsed
+        if (!isCollapsed) {
+            sectionSymbols.forEach((symbol) => {
+                const index = allSymbols.indexOf(symbol)
+                this._renderSymbolRow(symbol, index)
+            })
+        }
+    }
+    
+    _loadCollapsedState() {
+        try {
+            const saved = localStorage.getItem('vovk_plc_symbols_collapsed')
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                if (typeof parsed === 'object') {
+                    this.collapsedSections = { ...this.collapsedSections, ...parsed }
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to load symbols collapsed state', e)
+        }
+    }
+    
+    _saveCollapsedState() {
+        try {
+            localStorage.setItem('vovk_plc_symbols_collapsed', JSON.stringify(this.collapsedSections))
+        } catch (e) {
+            console.warn('Failed to save symbols collapsed state', e)
+        }
+    }
+    
+    _renderSymbolRow(symbol, index) {
+        if (symbol?.location === 'memory') symbol.location = 'marker'
+        const tr = document.createElement('tr')
+        tr.dataset.symbolName = symbol.name || ''
+        tr.dataset.index = index
+        if (this.selectedSymbols.has(symbol)) {
+            tr.classList.add('selected')
+        }
+        
+        // Add class based on symbol type
+        if (symbol.readonly && !symbol.device) tr.classList.add('symbol-system')
+        if (symbol.device) tr.classList.add('symbol-device')
+
+        // Drag Start
+        tr.draggable = true
+        tr.addEventListener('dragstart', (e) => {
+            e.dataTransfer.effectAllowed = 'copy'
+            const payload = JSON.stringify({
+                name: symbol.name,
+                type: symbol.type
+            })
+            e.dataTransfer.setData('vovk-app/symbol', payload)
+            e.dataTransfer.setData('text/plain', symbol.name) // Fallback
+        })
+
+        // Icon Column
+        const tdIcon = document.createElement('td')
+        tdIcon.classList.add('symbol-icon-cell')
+        tdIcon.addEventListener('click', (e) => this.toggleSelection(symbol, e, tr))
+        
+        // Context Menu - Handled globally via tbody
+        
+        const icon = document.createElement('div')
+        icon.classList.add('symbol-icon')
+        // icon.textContent = '{}' 
+        icon.style.width = '16px'
+        icon.style.height = '16px'
+        icon.style.backgroundImage = "url('data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><path fill=\"%2344AA77\" d=\"M14 4h-2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2h2v-2h-2V6h2V4zM4 12V4h6v8H4z\"/></svg>')"
+        icon.style.backgroundRepeat = 'no-repeat'
+        icon.style.backgroundPosition = 'center'
+        tdIcon.appendChild(icon)
+        tr.appendChild(tdIcon)
+        
+        const cellLocked = this.locked || symbol.readonly || symbol.device
+        // Name
+        tr.appendChild(this.createCell('input', symbol.name, val => symbol.name = val, [], 'text', cellLocked))
+
+        // Location
+        tr.appendChild(this.createCell('select', symbol.location, val => symbol.location = val, ['control', 'input', 'output', 'system', 'marker'], 'text', cellLocked))
+
+        // Type - include explicit signed/unsigned types for device symbols
+        const typeOptions = ['bit', 'byte', 'int', 'dint', 'real', 'u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'f32']
+        tr.appendChild(this.createCell('select', symbol.type, val => symbol.type = val, typeOptions, 'text', cellLocked))
+
+        // Address
+        let addressValue = symbol.address
+        if (symbol.type === 'bit') {
+            addressValue = (parseFloat(symbol.address) || 0).toFixed(1)
+        }
+        // Use text input to avoid locale-specific comma formatting
+        tr.appendChild(this.createCell('input', addressValue, (val, inputEl) => {
+            const num = parseFloat(String(val).replace(',', '.')) || 0
+            symbol.address = num
+            // Reformat display immediately
+            if (inputEl) {
+                 if (symbol.type === 'bit') {
+                     inputEl.value = num.toFixed(1)
+                 } else {
+                     inputEl.value = num
+                 }
+            }
+        }, null, 'text', cellLocked))
+
+        // Live Value
+        const liveCell = document.createElement('td')
+        liveCell.classList.add('symbol-live-value')
+        this.applyLiveCellState(liveCell, this.live_values.get(symbol.name))
+        if (symbol.name) this._live_cells.set(symbol.name, liveCell)
+        tr.appendChild(liveCell)
+
+        // Comment
+        tr.appendChild(this.createCell('input', symbol.comment, val => symbol.comment = val, [], 'text', cellLocked))
+
+        // Delete
+        const tdDel = document.createElement('td')
+        if (!cellLocked) {
+            const btnDel = document.createElement('button')
+            btnDel.innerText = 'x'
+            btnDel.classList.add('symbol-delete-btn')
+            btnDel.addEventListener('click', () => {
+                this.master.project.symbols.splice(index, 1)
+                this.renderTable()
+            })
+            tdDel.appendChild(btnDel)
+        }
+        tr.appendChild(tdDel)
+
+        this.tbody.appendChild(tr)
     }
 
     focusSymbol(name) {

@@ -94,14 +94,97 @@ export default class ProjectManager {
 
   ensureSystemSymbols(project) {
     if (!project.symbols) project.symbols = []
+    if (!project.device_symbols) project.device_symbols = []
     
     // Split user symbols from existing system symbols (to re-add them in correct order)
-    const userSymbols = project.symbols.filter(s => !s.readonly)
+    const userSymbols = project.symbols.filter(s => !s.readonly && !s.device)
     // Actually we can just filter out any existing system symbols by name to be safe
     const systemNames = new Set(SYSTEM_SYMBOLS.map(s => s.name))
-    const cleanUserSymbols = userSymbols.filter(s => !systemNames.has(s.name))
+    const deviceNames = new Set(project.device_symbols.map(s => s.name))
+    const cleanUserSymbols = userSymbols.filter(s => !systemNames.has(s.name) && !deviceNames.has(s.name))
     
-    project.symbols = [...SYSTEM_SYMBOLS, ...cleanUserSymbols]
+    project.symbols = [...SYSTEM_SYMBOLS, ...project.device_symbols, ...cleanUserSymbols]
+  }
+
+  /**
+   * Set device symbols from PLC device
+   * @param {Array<{name: string, area: string, address: number, bit: number, type: string, comment: string}>} rawSymbols 
+   */
+  setDeviceSymbols(rawSymbols) {
+    const project = this.#editor.project
+    if (!project) return
+    
+    // Map area names to location types
+    // Supports both IEC notation (I, Q) and traditional PLC notation (X, Y)
+    /** @type {Record<string, import('../utils/types.js').PLC_Symbol_Location>} */
+    const areaToLocation = {
+      'K': 'control',
+      'X': 'input',
+      'I': 'input',    // IEC notation for input
+      'Y': 'output',
+      'Q': 'output',   // IEC notation for output
+      'S': 'system',
+      'M': 'marker',
+      'T': 'timer',
+      'C': 'counter'
+    }
+    
+    // Map type names (including C++ type aliases from runtime)
+    // Preserve unsigned types for correct value display
+    /** @type {Record<string, import('../utils/types.js').PLC_Symbol_Type>} */
+    const typeMap = {
+      'bit': 'bit',
+      'bool': 'bit',
+      'byte': 'byte',
+      'u8': 'u8',
+      'i8': 'i8',
+      'int': 'int',
+      'i16': 'i16',
+      'u16': 'u16',
+      'dint': 'dint',
+      'i32': 'i32',
+      'u32': 'u32',
+      'real': 'real',
+      'f32': 'f32',
+      'float': 'real'
+    }
+    
+    // Convert raw symbols to PLC_Symbol format
+    /** @type {import('../utils/types.js').PLC_Symbol[]} */
+    const deviceSymbols = rawSymbols.map(raw => ({
+      name: raw.name,
+      location: areaToLocation[raw.area] || 'marker',
+      type: typeMap[raw.type] || 'byte',
+      address: raw.bit > 0 ? raw.address + (raw.bit / 10) : raw.address,
+      initial_value: 0,
+      comment: raw.comment || `Device symbol (${raw.area}${raw.address}${raw.bit > 0 ? '.' + raw.bit : ''})`,
+      readonly: true,
+      device: true
+    }))
+    
+    project.device_symbols = deviceSymbols
+    // Rebuild combined symbols list
+    this.ensureSystemSymbols(project)
+  }
+
+  /**
+   * Clear device symbols (when disconnecting)
+   */
+  clearDeviceSymbols() {
+    const project = this.#editor.project
+    if (!project) return
+    project.device_symbols = []
+    this.ensureSystemSymbols(project)
+  }
+
+  /**
+   * Get all symbols for compilation (system + device + project)
+   * @returns {import('../utils/types.js').PLC_Symbol[]}
+   */
+  getAllSymbolsForCompile() {
+    const project = this.#editor.project
+    if (!project) return []
+    return project.symbols || []
   }
 
   checkAndSave() {
@@ -110,10 +193,11 @@ export default class ProjectManager {
     this.collectProjectState()
 
     try {
-      // Filter out system symbols before saving
+      // Filter out system symbols before saving (only save user symbols)
+      // Keep device_symbols so they persist across sessions
       const projectToSave = { ...this.#editor.project }
       if (projectToSave.symbols) {
-          projectToSave.symbols = projectToSave.symbols.filter(s => !s.readonly)
+          projectToSave.symbols = projectToSave.symbols.filter(s => !s.readonly && !s.device)
       }
 
       const current_state = JSON.stringify(projectToSave)
