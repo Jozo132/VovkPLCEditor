@@ -421,6 +421,99 @@ export default class SerialConnection extends ConnectionBase {
         }, { label: 'getSymbolList', timeoutMs: 8000 });
     }
 
+    /**
+     * Get transport/interface info from device
+     * Request: TI<checksum>
+     * Response: [TI,count,{type,name,isNetwork,requiresAuth,isConnected,config...},...]
+     * Config for Serial: baudrate
+     * Config for Network: ip,gateway,subnet,port,mac
+     * @returns {Promise<Array<{type: number, name: string, isNetwork: boolean, requiresAuth: boolean, isConnected: boolean, baudrate?: number, ip?: string, gateway?: string, subnet?: string, port?: number, mac?: string}>>}
+     */
+    async getTransportInfo() {
+        return this._enqueueCommand(async () => {
+            const command = "TI"
+            const cmdHex = this.plc.stringToHex(command)
+            const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
+            await this.serial.write(command + checksum.toUpperCase() + "\n")
+
+            const line = await this._readResponseLine(8000)
+            let raw = line.trim()
+            if (!raw) return []
+            
+            // Response format: [TI,count,{type,name,isNetwork,requiresAuth,isConnected,config...},...]
+            if (raw.startsWith('[') && raw.endsWith(']')) {
+                const content = raw.substring(1, raw.length - 1)
+                
+                // Extract header (TI,count) before the first {
+                const firstBrace = content.indexOf('{')
+                if (firstBrace === -1) {
+                    // No transports, just header
+                    const headerParts = content.split(',')
+                    if (headerParts[0] !== 'TI') {
+                        console.warn('Unexpected transport info response header:', headerParts[0])
+                        return []
+                    }
+                    return []
+                }
+                
+                const headerPart = content.substring(0, firstBrace)
+                const headerParts = headerPart.split(',').filter(p => p.trim())
+                
+                if (headerParts[0] !== 'TI') {
+                    console.warn('Unexpected transport info response header:', headerParts[0])
+                    return []
+                }
+                
+                const count = parseInt(headerParts[1], 10)
+                if (count === 0 || isNaN(count)) return []
+                
+                // Extract all {...} groups
+                const transports = []
+                const transportRegex = /\{([^}]*)\}/g
+                let match
+                
+                while ((match = transportRegex.exec(content)) !== null) {
+                    const innerContent = match[1]
+                    const parts = innerContent.split(',')
+                    if (parts.length >= 5) {
+                        const type = parseInt(parts[0], 10) || 0
+                        const name = parts[1] || ''
+                        const isNetwork = parts[2] === '1'
+                        const requiresAuth = parts[3] === '1'
+                        const isConnected = parts[4] === '1'
+                        
+                        const transport = {
+                            type,
+                            name,
+                            isNetwork,
+                            requiresAuth,
+                            isConnected
+                        }
+                        
+                        // Parse config based on transport type
+                        if (!isNetwork && parts.length >= 6) {
+                            // Serial config: baudrate
+                            transport.baudrate = parseInt(parts[5], 10) || 0
+                        } else if (isNetwork && parts.length >= 10) {
+                            // Network config: ip, gateway, subnet, port, mac
+                            transport.ip = parts[5] || ''
+                            transport.gateway = parts[6] || ''
+                            transport.subnet = parts[7] || ''
+                            transport.port = parseInt(parts[8], 10) || 0
+                            transport.mac = parts[9] || ''
+                        }
+                        
+                        transports.push(transport)
+                    }
+                }
+                
+                return transports
+            }
+            
+            return []
+        }, { label: 'getTransportInfo', timeoutMs: 8000 });
+    }
+
     async _waitForReply(timeout = 1000) {
         const start = Date.now();
         while (!this.serial.available()) {

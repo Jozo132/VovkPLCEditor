@@ -31,6 +31,13 @@ export default class WindowManager {
     _healthResetInFlight = false
     _healthSnapshot = null
 
+    // Loading bar state
+    _loadingBar = null
+    _loadingBarProgress = null
+    _loadingBarText = null
+    _loadingCount = 0
+    _loadingTimeout = null
+
     workspace_body
 
     /** @type { Map<string, WindowType> } */
@@ -1610,7 +1617,38 @@ export default class WindowManager {
                     device_select_element.removeAttribute('disabled')
                 }
                 if (device_info) {
-                    device_info.innerHTML = ''
+                    // Show stored device info if available
+                    const storedDevice = this.#editor.project?.lastPhysicalDevice
+                    if (storedDevice?.deviceInfo) {
+                        const info = storedDevice.deviceInfo
+                        device_info.innerHTML = `
+                            <div style="display: flex; align-items: flex-start; gap: 8px;">
+                                <div style="flex: 1; min-width: 0;">
+                                    <div class="device-name" style="color: #888;">${info.device || 'Unknown Device'} <span style="font-size: 9px; color: #666;">(stored)</span></div>
+                                    <div class="device-meta" style="color: #666;">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
+                                </div>
+                                <button class="plc-device-details-btn" title="View stored device details" style="background: #2a2a2a; border: 1px solid #444; color: #888; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                            </div>
+                        `
+                        const detailsBtn = device_info.querySelector('.plc-device-details-btn')
+                        if (detailsBtn) {
+                            detailsBtn.addEventListener('click', () => this._showDeviceDetails())
+                        }
+                    } else {
+                        device_info.innerHTML = `
+                            <div style="display: flex; align-items: flex-start; gap: 8px;">
+                                <div style="flex: 1; min-width: 0;">
+                                    <div class="device-name" style="color: #888;">No device connected</div>
+                                    <div class="device-meta" style="color: #666;">Use the button below to connect</div>
+                                </div>
+                                <button class="plc-device-details-btn" title="Device Details" style="background: #2a2a2a; border: 1px solid #444; color: #666; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                            </div>
+                        `
+                        const detailsBtn = device_info.querySelector('.plc-device-details-btn')
+                        if (detailsBtn) {
+                            detailsBtn.addEventListener('click', () => this._showDeviceDetails())
+                        }
+                    }
                 }
             }
 
@@ -1630,9 +1668,18 @@ export default class WindowManager {
                 if (device_info && this.#editor.device_manager?.deviceInfo) {
                     const info = this.#editor.device_manager.deviceInfo
                     device_info.innerHTML = `
-                        <div class="device-name">${info.device || 'Unknown Device'}</div>
-                        <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
+                        <div style="display: flex; align-items: flex-start; gap: 8px;">
+                            <div style="flex: 1; min-width: 0;">
+                                <div class="device-name">${info.device || 'Unknown Device'}</div>
+                                <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
+                            </div>
+                            <button class="plc-device-details-btn" title="Device Details" style="background: #333; border: 1px solid #444; color: #ccc; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                        </div>
                     `
+                    const detailsBtn = device_info.querySelector('.plc-device-details-btn')
+                    if (detailsBtn) {
+                        detailsBtn.addEventListener('click', () => this._showDeviceDetails())
+                    }
                 }
             }
 
@@ -1960,6 +2007,127 @@ export default class WindowManager {
         }
     }
 
+    // ========== Loading Bar Methods ==========
+    
+    /**
+     * Creates the loading bar overlay if it doesn't exist
+     * @private
+     */
+    _ensureLoadingBar() {
+        if (this._loadingBar) return
+        
+        const overlay = document.createElement('div')
+        overlay.className = 'plc-loading-overlay'
+        overlay.innerHTML = /*HTML*/ `
+            <div class="plc-loading-container">
+                <div class="plc-loading-text">Loading...</div>
+                <div class="plc-loading-bar-container">
+                    <div class="plc-loading-bar-progress"></div>
+                </div>
+            </div>
+        `
+        
+        this._loadingBar = overlay
+        this._loadingBarText = overlay.querySelector('.plc-loading-text')
+        this._loadingBarProgress = overlay.querySelector('.plc-loading-bar-progress')
+        
+        document.body.appendChild(overlay)
+    }
+    
+    /**
+     * Shows the loading bar with a message
+     * @param {string} text - The loading message to display
+     * @param {number} [progress] - Optional progress percentage (0-100). If omitted, shows indeterminate animation.
+     * @param {number} [timeout] - Optional timeout in ms after which loading bar auto-hides (default: 30000)
+     */
+    showLoading(text = 'Loading...', progress = null, timeout = 30000) {
+        this._ensureLoadingBar()
+        this._loadingCount++
+        
+        // Clear any existing timeout
+        if (this._loadingTimeout) {
+            clearTimeout(this._loadingTimeout)
+            this._loadingTimeout = null
+        }
+        
+        if (this._loadingBarText) {
+            this._loadingBarText.textContent = text
+        }
+        
+        if (this._loadingBarProgress) {
+            if (progress !== null && progress >= 0 && progress <= 100) {
+                this._loadingBarProgress.classList.add('determinate')
+                this._loadingBarProgress.style.width = `${progress}%`
+            } else {
+                this._loadingBarProgress.classList.remove('determinate')
+                this._loadingBarProgress.style.width = '30%'
+            }
+        }
+        
+        this._loadingBar.classList.add('visible')
+        
+        // Safety timeout to prevent stuck loading bar
+        if (timeout > 0) {
+            this._loadingTimeout = setTimeout(() => {
+                console.warn('Loading bar auto-hidden after timeout')
+                this.forceHideLoading()
+            }, timeout)
+        }
+    }
+    
+    /**
+     * Updates the loading bar text and/or progress
+     * @param {string} [text] - New text to display
+     * @param {number} [progress] - New progress percentage (0-100)
+     */
+    updateLoading(text = null, progress = null) {
+        if (!this._loadingBar) return
+        
+        if (text !== null && this._loadingBarText) {
+            this._loadingBarText.textContent = text
+        }
+        
+        if (progress !== null && this._loadingBarProgress) {
+            if (progress >= 0 && progress <= 100) {
+                this._loadingBarProgress.classList.add('determinate')
+                this._loadingBarProgress.style.width = `${progress}%`
+            }
+        }
+    }
+    
+    /**
+     * Hides the loading bar
+     */
+    hideLoading() {
+        this._loadingCount = Math.max(0, this._loadingCount - 1)
+        
+        if (this._loadingCount === 0) {
+            if (this._loadingTimeout) {
+                clearTimeout(this._loadingTimeout)
+                this._loadingTimeout = null
+            }
+            if (this._loadingBar) {
+                this._loadingBar.classList.remove('visible')
+            }
+        }
+    }
+    
+    /**
+     * Force hides the loading bar regardless of count
+     */
+    forceHideLoading() {
+        this._loadingCount = 0
+        if (this._loadingTimeout) {
+            clearTimeout(this._loadingTimeout)
+            this._loadingTimeout = null
+        }
+        if (this._loadingBar) {
+            this._loadingBar.classList.remove('visible')
+        }
+    }
+
+    // ========== End Loading Bar Methods ==========
+
     _formatHealthNumber(value) {
         if (!Number.isFinite(value)) return null
         return String(Math.trunc(Number(value)))
@@ -2231,6 +2399,7 @@ export default class WindowManager {
         const silent = !!options.silent
         const silentOnSuccess = !!options.silentOnSuccess
         const suppressInfo = silent || silentOnSuccess
+        const showLoadingBar = !silent && !options.noLoadingBar
 
         if (!this.#editor.runtime_ready) {
             if (!silent) {
@@ -2240,6 +2409,8 @@ export default class WindowManager {
             }
             return false
         }
+
+        if (showLoadingBar) this.showLoading('Compiling project...')
 
         try {
             if (!suppressInfo) {
@@ -2254,6 +2425,7 @@ export default class WindowManager {
 
             // Check for compilation errors
             if (result.problem) {
+                if (showLoadingBar) this.hideLoading()
                 if (!silent) {
                     if (silentOnSuccess && typeof this.setConsoleTab === 'function') this.setConsoleTab('output')
                     const p = result.problem
@@ -2345,8 +2517,10 @@ export default class WindowManager {
                 }
             }
 
+            if (showLoadingBar) this.hideLoading()
             return true
         } catch (e) {
+            if (showLoadingBar) this.hideLoading()
             if (!silent) {
                 if (silentOnSuccess && typeof this.setConsoleTab === 'function') this.setConsoleTab('output')
                 this.logToConsole(`Compilation failed: ${e.message}`, 'error')
@@ -2456,9 +2630,11 @@ export default class WindowManager {
         try {
             if (typeof this.setConsoleTab === 'function') this.setConsoleTab('output')
             this.logToConsole(`Uploading ${compiledSize} bytes to device...`, 'info')
+            this.showLoading('Uploading program...')
             const startTime = performance.now()
             await this.#editor.device_manager.connection.downloadProgram(compiledBytecode)
             const endTime = performance.now()
+            this.hideLoading()
             this.logToConsole('Program uploaded successfully.', 'success')
             this.logToConsole(`Upload took ${(endTime - startTime).toFixed(0)}ms`, 'info')
             this.logToConsole('----------------------------------------', 'info')
@@ -2468,6 +2644,7 @@ export default class WindowManager {
                 this.#editor.data_fetcher.reset()
             }
         } catch (e) {
+            this.hideLoading()
             this.logToConsole(`Upload failed: ${e.message}`, 'error')
             this.logToConsole('----------------------------------------', 'info')
         }
@@ -2735,7 +2912,20 @@ export default class WindowManager {
                 device_online_button.title = 'Connect'
                 device_online_button.style.background = '#1fba5f'
                 device_online_button.style.color = '#fff'
-                device_info.innerHTML = editor.device_manager.error || ''
+                const displayErrorMsg = editor.device_manager.error || 'Connection error'
+                device_info.innerHTML = `
+                    <div style="display: flex; align-items: flex-start; gap: 8px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <div class="device-name" style="color: #dc3545;">${displayErrorMsg}</div>
+                            <div class="device-meta" style="color: #666;">Check connection and retry</div>
+                        </div>
+                        <button class="plc-device-details-btn" title="Device Details" style="background: #2a2a2a; border: 1px solid #444; color: #666; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                    </div>
+                `
+                const errorDetailsBtn = device_info.querySelector('.plc-device-details-btn')
+                if (errorDetailsBtn) {
+                    errorDetailsBtn.addEventListener('click', () => this._showDeviceDetails())
+                }
                 this._healthConnectionState = false
                 this._stopHealthPolling()
                 this._setHealthConnected(false)
@@ -2748,9 +2938,18 @@ export default class WindowManager {
             const info = editor.device_manager.deviceInfo
             if (info) {
                 device_info.innerHTML = `
-                    <div class="device-name">${info.device || 'Unknown Device'}</div>
-                    <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
+                    <div style="display: flex; align-items: flex-start; gap: 8px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <div class="device-name">${info.device || 'Unknown Device'}</div>
+                            <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
+                        </div>
+                        <button class="plc-device-details-btn" title="Device Details" style="background: #333; border: 1px solid #444; color: #ccc; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                    </div>
                 `
+                const connectedDetailsBtn = device_info.querySelector('.plc-device-details-btn')
+                if (connectedDetailsBtn) {
+                    connectedDetailsBtn.addEventListener('click', () => this._showDeviceDetails())
+                }
 
                 // Store device name and info in project for future reference
                 if (this.connectionMode === 'serial' && editor.device_manager?.connection?.serial?.port) {
@@ -2790,7 +2989,21 @@ export default class WindowManager {
                         this.updateDeviceDropdown()
                     }
                 }
-            } else device_info.innerHTML = 'Unknown device'
+            } else {
+                device_info.innerHTML = `
+                    <div style="display: flex; align-items: flex-start; gap: 8px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <div class="device-name">Unknown device</div>
+                            <div class="device-meta" style="color: #666;">Device info unavailable</div>
+                        </div>
+                        <button class="plc-device-details-btn" title="Device Details" style="background: #333; border: 1px solid #444; color: #ccc; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                    </div>
+                `
+                const unknownDetailsBtn = device_info.querySelector('.plc-device-details-btn')
+                if (unknownDetailsBtn) {
+                    unknownDetailsBtn.addEventListener('click', () => this._showDeviceDetails())
+                }
+            }
             this._healthConnectionState = true
             this._setHealthConnected(true)
             this._startHealthPolling()
@@ -2830,7 +3043,19 @@ export default class WindowManager {
                 }
             }
         } else {
-            device_info.innerHTML = ''
+            device_info.innerHTML = `
+                <div style="display: flex; align-items: flex-start; gap: 8px;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="device-name" style="color: #888;">Disconnected</div>
+                        <div class="device-meta" style="color: #666;">Click connect to go online</div>
+                    </div>
+                    <button class="plc-device-details-btn" title="Device Details" style="background: #2a2a2a; border: 1px solid #444; color: #666; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                </div>
+            `
+            const disconnectDetailsBtn = device_info.querySelector('.plc-device-details-btn')
+            if (disconnectDetailsBtn) {
+                disconnectDetailsBtn.addEventListener('click', () => this._showDeviceDetails())
+            }
             await editor.device_manager.disconnect(true) // Mark as intentional
             this._healthConnectionState = false
             this._stopHealthPolling()
@@ -3084,6 +3309,289 @@ export default class WindowManager {
         if (!accepted) {
             // Show disclaimer with required acceptance
             this._menuDisclaimer({requireAcceptance: true})
+        }
+    }
+
+    async _showDeviceDetails() {
+        const isConnected = this.#editor.device_manager?.connected
+        const liveDeviceInfo = this.#editor.device_manager?.deviceInfo
+        const storedDevice = this.#editor.project?.lastPhysicalDevice
+        
+        // Use live data if connected, otherwise use stored data
+        const deviceInfo = liveDeviceInfo || storedDevice?.deviceInfo
+        const isStoredData = !liveDeviceInfo && storedDevice?.deviceInfo
+        
+        if (!deviceInfo) {
+            new Popup({
+                title: 'Device Details',
+                description: 'No device connected and no previous device data stored.',
+                buttons: [{text: 'OK', value: 'ok'}]
+            })
+            return
+        }
+
+        // Fetch additional info (transports and symbols)
+        let transports = []
+        let symbols = []
+        let fetchError = null
+        let dataSource = 'live'
+
+        if (isConnected && this.#editor.device_manager?.connection) {
+            // Show loading bar while fetching live data
+            this.showLoading('Fetching device info...')
+            
+            // Fetch live data from connected device
+            try {
+                const dm = this.#editor.device_manager
+                const results = await Promise.allSettled([
+                    dm.getTransportInfo?.() || Promise.resolve([]),
+                    dm.getSymbolList?.() || Promise.resolve([])
+                ])
+                transports = results[0].status === 'fulfilled' ? results[0].value || [] : []
+                symbols = results[1].status === 'fulfilled' ? results[1].value || [] : []
+            } catch (err) {
+                fetchError = err.message || 'Failed to fetch device data'
+            } finally {
+                this.hideLoading()
+            }
+        } else if (storedDevice) {
+            // Use stored data
+            transports = storedDevice.transports || []
+            symbols = storedDevice.symbols || []
+            dataSource = 'stored'
+        }
+
+        // Transport type names
+        const transportTypeNames = {
+            0: 'Unknown',
+            1: 'Serial',
+            2: 'WiFi',
+            3: 'Ethernet',
+            4: 'Bluetooth'
+        }
+
+        // Format device info into sections
+        const formatBytes = (bytes) => {
+            if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+            if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB'
+            return bytes + ' B'
+        }
+
+        // Stored data notice
+        const storedNoticeHtml = isStoredData ? /*HTML*/ `
+            <div style="color: #888; font-size: 11px; padding: 8px; background: #252525; border: 1px solid #444; border-radius: 4px; margin-bottom: 12px;">
+                📁 Showing stored data from last connection${storedDevice.timestamp ? ` (${new Date(storedDevice.timestamp).toLocaleString()})` : ''}
+            </div>
+        ` : ''
+
+        // Build device parameters table
+        const deviceParamsHtml = /*HTML*/ `
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                <tr><td style="padding: 4px 8px; color: #888; width: 120px;">Device</td><td style="padding: 4px 8px; color: #ECECEC;">${deviceInfo.device || 'Unknown'}</td></tr>
+                <tr><td style="padding: 4px 8px; color: #888;">Architecture</td><td style="padding: 4px 8px; color: #ECECEC;">${deviceInfo.arch || 'Unknown'}</td></tr>
+                <tr><td style="padding: 4px 8px; color: #888;">Version</td><td style="padding: 4px 8px; color: #ECECEC;">${deviceInfo.version || '?'}</td></tr>
+                <tr><td style="padding: 4px 8px; color: #888;">Build Date</td><td style="padding: 4px 8px; color: #ECECEC;">${deviceInfo.date || '?'}</td></tr>
+                <tr><td style="padding: 4px 8px; color: #888;">Stack Size</td><td style="padding: 4px 8px; color: #ECECEC;">${formatBytes(deviceInfo.stack || 0)}</td></tr>
+                <tr><td style="padding: 4px 8px; color: #888;">Memory Size</td><td style="padding: 4px 8px; color: #ECECEC;">${formatBytes(deviceInfo.memory || 0)}</td></tr>
+                <tr><td style="padding: 4px 8px; color: #888;">Program Size</td><td style="padding: 4px 8px; color: #ECECEC;">${formatBytes(deviceInfo.program || 0)}</td></tr>
+            </table>
+        `
+
+        // Build memory map table
+        const memoryMapHtml = /*HTML*/ `
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                <tr style="background: #252525;">
+                    <th style="padding: 4px 8px; text-align: left; color: #888; font-weight: normal;">Area</th>
+                    <th style="padding: 4px 8px; text-align: right; color: #888; font-weight: normal;">Offset</th>
+                    <th style="padding: 4px 8px; text-align: right; color: #888; font-weight: normal;">Size/Count</th>
+                </tr>
+                ${deviceInfo.control_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Controls</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.control_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.control_size || '?'}</td></tr>` : ''}
+                ${deviceInfo.input_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Inputs</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.input_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.input_size || '?'}</td></tr>` : ''}
+                ${deviceInfo.output_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Outputs</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.output_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.output_size || '?'}</td></tr>` : ''}
+                ${deviceInfo.system_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">System</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.system_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.system_size || '?'}</td></tr>` : ''}
+                ${deviceInfo.marker_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Markers</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.marker_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.marker_size || '?'}</td></tr>` : ''}
+                ${deviceInfo.timer_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Timers</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.timer_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.timer_count || '?'} × ${deviceInfo.timer_struct_size || '?'}B</td></tr>` : ''}
+                ${deviceInfo.counter_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Counters</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.counter_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.counter_count || '?'} × ${deviceInfo.counter_struct_size || '?'}B</td></tr>` : ''}
+            </table>
+        `
+
+        // Build transports table
+        const transportsHtml = transports.length === 0 ? 
+            `<div style="color: #666; font-size: 11px; padding: 8px; text-align: center;">No interfaces reported</div>` :
+            /*HTML*/ `
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                <tr style="background: #252525;">
+                    <th style="padding: 4px 8px; text-align: left; color: #888; font-weight: normal;">Interface</th>
+                    <th style="padding: 4px 8px; text-align: left; color: #888; font-weight: normal;">Type</th>
+                    <th style="padding: 4px 8px; text-align: center; color: #888; font-weight: normal;">Status</th>
+                    <th style="padding: 4px 8px; text-align: left; color: #888; font-weight: normal;">Configuration</th>
+                </tr>
+                ${transports.map(t => {
+                    const typeName = transportTypeNames[t.type] || `Type ${t.type}`
+                    const statusIcon = t.isConnected ? '🟢' : '⚪'
+                    const authIcon = t.requiresAuth ? '🔒' : ''
+                    let config = ''
+                    if (t.baudrate) {
+                        config = `${t.baudrate} baud`
+                    } else if (t.isNetwork) {
+                        config = `${t.ip || '?'}:${t.port || '?'}`
+                        if (t.mac) config += `<br><span style="color: #666; font-size: 10px;">MAC: ${t.mac}</span>`
+                    }
+                    return `<tr>
+                        <td style="padding: 3px 8px; color: #ECECEC;">${t.name || typeName}</td>
+                        <td style="padding: 3px 8px; color: #aaa;">${typeName} ${authIcon}</td>
+                        <td style="padding: 3px 8px; text-align: center;">${statusIcon}</td>
+                        <td style="padding: 3px 8px; color: #aaa; font-family: monospace; font-size: 10px;">${config || '-'}</td>
+                    </tr>`
+                }).join('')}
+            </table>
+        `
+
+        // Build symbols table
+        const formatSymbolAddress = (s) => {
+            const addr = Number(s.address)
+            const bit = s.bit !== undefined && s.bit !== null ? Number(s.bit) : null
+            if (bit !== null) {
+                return `${addr.toFixed(1).replace('.0', '')}.${bit}`
+            }
+            return addr.toFixed(1).replace('.0', '')
+        }
+        const symbolsHtml = symbols.length === 0 ?
+            `<div style="color: #666; font-size: 11px; padding: 8px; text-align: center;">No device symbols defined</div>` :
+            /*HTML*/ `
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                <tr style="background: #252525; position: sticky; top: 0;">
+                    <th style="padding: 4px 8px; text-align: left; color: #888; font-weight: normal;">Name</th>
+                    <th style="padding: 4px 8px; text-align: left; color: #888; font-weight: normal;">Area</th>
+                    <th style="padding: 4px 8px; text-align: right; color: #888; font-weight: normal;">Address</th>
+                    <th style="padding: 4px 8px; text-align: left; color: #888; font-weight: normal;">Type</th>
+                    <th style="padding: 4px 8px; text-align: left; color: #888; font-weight: normal;">Comment</th>
+                </tr>
+                ${symbols.slice(0, 100).map(s => `<tr>
+                    <td style="padding: 3px 8px; color: #4682B4; font-family: monospace;">${s.name || '?'}</td>
+                    <td style="padding: 3px 8px; color: #aaa;">${s.area || '?'}</td>
+                    <td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${formatSymbolAddress(s)}</td>
+                    <td style="padding: 3px 8px; color: #888;">${s.type || 'byte'}</td>
+                    <td style="padding: 3px 8px; color: #666; font-size: 10px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${(s.comment || '').replace(/"/g, '&quot;')}">${s.comment || ''}</td>
+                </tr>`).join('')}
+                ${symbols.length > 100 ? `<tr><td colspan="5" style="padding: 4px 8px; color: #666; text-align: center; font-style: italic;">... and ${symbols.length - 100} more</td></tr>` : ''}
+            </table>
+        `
+
+        // Error message if any
+        const errorHtml = fetchError ? `<div style="color: #dc3545; font-size: 11px; padding: 8px; background: #2a1a1a; border: 1px solid #5a2a2a; border-radius: 4px; margin-bottom: 12px;">⚠️ ${fetchError}</div>` : ''
+
+        // Tab CSS styles and switching script
+        const tabStyles = /*HTML*/ `
+            <style>
+                .device-details-tabs { display: flex; gap: 2px; margin-bottom: 12px; border-bottom: 1px solid #333; padding-bottom: 0; }
+                .device-details-tab { 
+                    padding: 8px 16px; 
+                    background: transparent; 
+                    border: none; 
+                    color: #888; 
+                    cursor: pointer; 
+                    font-size: 12px; 
+                    border-bottom: 2px solid transparent;
+                    transition: all 0.15s ease;
+                    margin-bottom: -1px;
+                }
+                .device-details-tab:hover { color: #aaa; background: #2a2a2a; }
+                .device-details-tab.active { color: #4682B4; border-bottom-color: #4682B4; background: transparent; }
+                .device-details-panels-container { display: grid; }
+                .device-details-panel { grid-area: 1 / 1; visibility: hidden; opacity: 0; transition: opacity 0.1s ease; }
+                .device-details-panel.active { visibility: visible; opacity: 1; }
+            </style>
+        `
+        
+        // Tab switching function - attached to window temporarily
+        const tabSwitchId = '_deviceDetailsTabSwitch_' + Date.now()
+        window[tabSwitchId] = (tabName, btn) => {
+            const container = btn.closest('.device-details-tabs').parentElement
+            container.querySelectorAll('.device-details-tab').forEach(t => t.classList.remove('active'))
+            container.querySelectorAll('.device-details-panel').forEach(p => p.classList.remove('active'))
+            btn.classList.add('active')
+            const targetPanel = container.querySelector(`.device-details-panel[data-panel="${tabName}"]`)
+            if (targetPanel) targetPanel.classList.add('active')
+        }
+
+        const result = await Popup.promise({
+            title: isStoredData ? 'Device Details (Stored)' : 'Device Details',
+            width: '520px',
+            content: /*HTML*/ `
+                ${tabStyles}
+                <div style="color: #ECECEC; line-height: 1.5;">
+                    ${storedNoticeHtml}
+                    ${errorHtml}
+                    
+                    <!-- Tab Navigation -->
+                    <div class="device-details-tabs">
+                        <button class="device-details-tab active" data-tab="device" onclick="${tabSwitchId}('device', this)">📋 Device</button>
+                        <button class="device-details-tab" data-tab="memory" onclick="${tabSwitchId}('memory', this)">🗺️ Memory</button>
+                        <button class="device-details-tab" data-tab="interfaces" onclick="${tabSwitchId}('interfaces', this)">🔌 Interfaces <span style="color: #666; font-size: 10px;">(${transports.length})</span></button>
+                        <button class="device-details-tab" data-tab="symbols" onclick="${tabSwitchId}('symbols', this)">📌 Symbols <span style="color: #666; font-size: 10px;">(${symbols.length})</span></button>
+                    </div>
+                    
+                    <!-- Tab Panels -->
+                    <div class="device-details-panels-container">
+                        <div class="device-details-panel active" data-panel="device">
+                            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 8px; overflow: hidden;">
+                                ${deviceParamsHtml}
+                            </div>
+                        </div>
+                        
+                        <div class="device-details-panel" data-panel="memory">
+                            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 8px; overflow: hidden;">
+                                ${memoryMapHtml}
+                            </div>
+                        </div>
+                        
+                        <div class="device-details-panel" data-panel="interfaces">
+                            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 8px; overflow: hidden;">
+                                ${transportsHtml}
+                            </div>
+                        </div>
+                        
+                        <div class="device-details-panel" data-panel="symbols">
+                            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 8px; overflow: hidden; max-height: 300px; overflow-y: auto;">
+                                ${symbolsHtml}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            buttons: isStoredData ? [
+                {text: 'Clear Stored Data', value: 'clear', style: 'background: #5a2a2a; color: #dc3545;'},
+                {text: 'Close', value: 'close'}
+            ] : [{text: 'Close', value: 'close'}]
+        })
+        
+        // Clean up tab switch function
+        delete window[tabSwitchId]
+
+        // Handle clear stored data action
+        if (isStoredData && result === 'clear') {
+            // Clear stored device data from project
+            if (this.#editor.project) {
+                delete this.#editor.project.lastPhysicalDevice
+                this.#editor.projectManager?.markDirty?.()
+            }
+            // Update device info panel
+            if (this.device_info) {
+                this.device_info.innerHTML = /*HTML*/ `
+                    <div style="display: flex; align-items: flex-start; gap: 8px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <div class="device-name" style="color: #888;">No device connected</div>
+                            <div class="device-meta" style="color: #666;">Use the button below to connect</div>
+                        </div>
+                        <button class="plc-device-details-btn" title="Device Details" style="background: #2a2a2a; border: 1px solid #444; color: #666; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                    </div>
+                `
+                const clearDetailsBtn = this.device_info.querySelector('.plc-device-details-btn')
+                if (clearDetailsBtn) {
+                    clearDetailsBtn.addEventListener('click', () => this._showDeviceDetails())
+                }
+            }
         }
     }
 
@@ -3772,6 +4280,41 @@ export default class WindowManager {
                 }
             } catch (e) {
                 console.warn('Failed to load watch items', e)
+            }
+        }
+
+        // Show stored device info if available and not connected
+        if (!this.#editor.device_manager?.connected && project.lastPhysicalDevice?.deviceInfo) {
+            const info = project.lastPhysicalDevice.deviceInfo
+            if (this.device_info) {
+                this.device_info.innerHTML = `
+                    <div style="display: flex; align-items: flex-start; gap: 8px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <div class="device-name" style="color: #888;">${info.device || 'Unknown Device'} <span style="font-size: 9px; color: #666;">(stored)</span></div>
+                            <div class="device-meta" style="color: #666;">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
+                        </div>
+                        <button class="plc-device-details-btn" title="View stored device details" style="background: #2a2a2a; border: 1px solid #444; color: #888; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                    </div>
+                `
+                const detailsBtn = this.device_info.querySelector('.plc-device-details-btn')
+                if (detailsBtn) {
+                    detailsBtn.addEventListener('click', () => this._showDeviceDetails())
+                }
+            }
+        } else if (!this.#editor.device_manager?.connected && this.device_info) {
+            // No stored data, not connected - still show Details button
+            this.device_info.innerHTML = `
+                <div style="display: flex; align-items: flex-start; gap: 8px;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="device-name" style="color: #888;">No device connected</div>
+                        <div class="device-meta" style="color: #666;">Use the button below to connect</div>
+                    </div>
+                    <button class="plc-device-details-btn" title="Device Details" style="background: #2a2a2a; border: 1px solid #444; color: #666; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                </div>
+            `
+            const noStoredDetailsBtn = this.device_info.querySelector('.plc-device-details-btn')
+            if (noStoredDetailsBtn) {
+                noStoredDetailsBtn.addEventListener('click', () => this._showDeviceDetails())
             }
         }
 
@@ -4966,13 +5509,26 @@ export default class WindowManager {
                 this.device_online_button.title = 'Connect'
                 this.device_online_button.style.background = '#1fba5f'
                 this.device_online_button.style.color = '#fff'
-                this.device_info.innerHTML = ''
+                this.device_info.innerHTML = `
+                    <div style="display: flex; align-items: flex-start; gap: 8px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <div class="device-name" style="color: #888;">Disconnected</div>
+                            <div class="device-meta" style="color: #666;">Click connect to go online</div>
+                        </div>
+                        <button class="plc-device-details-btn" title="Device Details" style="background: #2a2a2a; border: 1px solid #444; color: #666; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                    </div>
+                `
+                const pairedDisconnectBtn = this.device_info.querySelector('.plc-device-details-btn')
+                if (pairedDisconnectBtn) {
+                    pairedDisconnectBtn.addEventListener('click', () => this._showDeviceDetails())
+                }
                 return
             }
 
             // Connect to the selected port
             this.device_online_button.setAttribute('disabled', 'disabled')
             this.device_online_button.innerText = '----------'
+            this.showLoading('Connecting to device...')
 
             const dm = this.#editor.device_manager
             await dm.connect({
@@ -4992,17 +5548,28 @@ export default class WindowManager {
                 const info = dm.deviceInfo
                 if (info) {
                     this.device_info.innerHTML = `
-                        <div class="device-name">${info.device || 'Unknown Device'}</div>
-                        <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
+                        <div style="display: flex; align-items: flex-start; gap: 8px;">
+                            <div style="flex: 1; min-width: 0;">
+                                <div class="device-name">${info.device || 'Unknown Device'}</div>
+                                <div class="device-meta">${info.arch} ${info.version ? 'v' + info.version : ''}</div>
+                            </div>
+                            <button class="plc-device-details-btn" title="Device Details" style="background: #2a2a2a; border: 1px solid #444; color: #888; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                        </div>
                     `
+                    const connectedDetailsBtn = this.device_info.querySelector('.plc-device-details-btn')
+                    if (connectedDetailsBtn) {
+                        connectedDetailsBtn.addEventListener('click', () => this._showDeviceDetails())
+                    }
                 }
 
                 // Don't call updateDeviceDropdown here - it's already called by the connection status handler
             }
         } catch (err) {
+            this.forceHideLoading()
             console.error('Failed to connect to paired device:', err)
             this.logToConsole(`Failed to connect: ${err.message || err}`, 'error')
         } finally {
+            this.forceHideLoading() // Ensure loading bar is always hidden
             this.device_online_button.removeAttribute('disabled')
             if (this.device_online_button.innerText === '----------') {
                 this.device_online_button.innerText = '○'

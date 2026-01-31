@@ -132,6 +132,11 @@ export default class SimulationConnection extends ConnectionBase {
         return []
     }
 
+    async getTransportInfo() {
+        // Simulator doesn't have physical transports - return empty array
+        return []
+    }
+
     async getHealth() {
         if (!this.plc || typeof this.plc.getDeviceHealth !== 'function') {
             throw new Error("Device health not supported")

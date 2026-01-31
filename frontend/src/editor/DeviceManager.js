@@ -147,6 +147,11 @@ export default class DeviceManager {
           this.#editor.window_manager.logToConsole(`Connected to ${targetName} successfully.`, 'success')
         }
         this.error = ''
+        
+        // For physical devices, fetch and store transport info and symbols after valid PI response
+        if (this.options.target === 'serial' && this.#editor.project) {
+          await this.#fetchAndStoreDeviceDetails()
+        }
       } catch (err) {
         this.connected = false
         const msg = `Failed to get device info: ${err?.message || err}`
@@ -171,6 +176,62 @@ export default class DeviceManager {
       this.#emitUpdate()
     }
     return this.connection
+  }
+
+  /**
+   * Fetch transport info and symbols from device and store in project
+   * This runs after successful connection to a physical device (after valid PI response)
+   */
+  async #fetchAndStoreDeviceDetails() {
+    try {
+      const project = this.#editor.project
+      if (!project || !this.connection) return
+
+      // Store device info
+      project.lastPhysicalDevice = {
+        deviceInfo: this.deviceInfo ? { ...this.deviceInfo } : null,
+        transports: [],
+        symbols: [],
+        timestamp: new Date().toISOString()
+      }
+
+      // Fetch transport info (TI command)
+      if (typeof this.connection.getTransportInfo === 'function') {
+        try {
+          console.log('[DeviceManager] Fetching transport info (TI)...')
+          const transports = await this.connection.getTransportInfo()
+          project.lastPhysicalDevice.transports = transports || []
+          console.log('[DeviceManager] Transport info:', transports)
+          if (this.#editor.window_manager?.logToConsole && transports?.length > 0) {
+            this.#editor.window_manager.logToConsole(`Device has ${transports.length} interface(s): ${transports.map(t => t.name || `Type ${t.type}`).join(', ')}`, 'info')
+          }
+        } catch (e) {
+          console.warn('[DeviceManager] Could not fetch transport info:', e)
+        }
+      }
+
+      // Fetch symbols (SL command)
+      if (typeof this.connection.getSymbolList === 'function') {
+        try {
+          console.log('[DeviceManager] Fetching symbol list (SL)...')
+          const symbols = await this.connection.getSymbolList()
+          project.lastPhysicalDevice.symbols = symbols || []
+          console.log('[DeviceManager] Symbol list:', symbols)
+          if (this.#editor.window_manager?.logToConsole && symbols?.length > 0) {
+            this.#editor.window_manager.logToConsole(`Device has ${symbols.length} registered symbol(s)`, 'info')
+          }
+        } catch (e) {
+          console.warn('[DeviceManager] Could not fetch device symbols:', e)
+        }
+      }
+
+      // Trigger project save
+      if (this.#editor.project_manager?.forceSave) {
+        this.#editor.project_manager.forceSave()
+      }
+    } catch (e) {
+      console.warn('[DeviceManager] Could not store device details:', e)
+    }
   }
 
   /**
@@ -264,6 +325,18 @@ export default class DeviceManager {
     if (!this.connection) throw new Error("Device not connected")
     if (typeof this.connection.resetHealth !== 'function') throw new Error("Device health not supported")
     return this.connection.resetHealth()
+  }
+
+  async getSymbolList() {
+    if (!this.connection) throw new Error("Device not connected")
+    if (typeof this.connection.getSymbolList !== 'function') throw new Error("Device symbol list not supported")
+    return this.connection.getSymbolList()
+  }
+
+  async getTransportInfo() {
+    if (!this.connection) throw new Error("Device not connected")
+    if (typeof this.connection.getTransportInfo !== 'function') throw new Error("Device transport info not supported")
+    return this.connection.getTransportInfo()
   }
 
   async downloadProgram(bytecode) {
