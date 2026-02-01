@@ -479,6 +479,9 @@ const smartStringify = (obj, indent = 0) => {
     return String(obj)
 }
 
+// Export smartStringify for use in project export
+export { smartStringify }
+
 /** @type { LanguageModule } */
 export const ladderLanguage = {
     id: 'ladder',

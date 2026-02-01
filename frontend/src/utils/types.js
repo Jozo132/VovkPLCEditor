@@ -46,7 +46,7 @@ export let PLC_ProjectItem
 
 /**
  * @typedef {{ 
-*     info?: { name?: string, version?: string, type?: string, arch?: string, capacity?: number }
+*     info?: { name?: string, version?: string, type?: string, arch?: string, capacity?: number, author?: string, description?: string }
 *     _ui_state?: any
 *     offsets: {
 *         control: { offset: number, size: number }
@@ -61,6 +61,8 @@ export let PLC_ProjectItem
 *     device_symbols?: PLC_Symbol[]
 *     folders: string[]
 *     files: PLC_ProjectItem[]
+*     watch?: { name: string, format?: string }[]
+*     lastPhysicalDevice?: { deviceInfo?: any, transports?: any[], symbols?: any[], timestamp?: string }
 * }} PLC_Project * @type { PLC_Project }
 **/
 export let PLC_Project

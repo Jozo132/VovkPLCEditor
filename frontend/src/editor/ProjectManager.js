@@ -1,6 +1,6 @@
 import { ensureOffsets } from '../utils/offsets.js'
 import { PLC_Program, PLC_Project, PLC_Symbol, PLCEditor } from '../utils/types.js'
-import { PLC_Ladder, toGraph as ladderToGraph } from '../languages/ladder/language.js'
+import { PLC_Ladder, toGraph as ladderToGraph, smartStringify } from '../languages/ladder/language.js'
 import { PLC_STL } from '../languages/stl/language.js'
 import { PLC_Assembly } from '../languages/asm/language.js'
 
@@ -407,13 +407,567 @@ export default class ProjectManager {
             execution: result.output?.execution
         }
     } catch (e) {
-        cleanup()
+        await runtime.setSilent(false)
         throw e
     }
   }
 
   /**
-   * Builds a VOVKPLCPROJECT format string from the current project
+   * Builds a portable VOVKPLCPROJECT format string for export
+   * This includes all metadata needed to fully reconstruct the project
+   * @returns {string}
+   */
+  buildExportText() {
+    const project = this.#editor.project
+    if (!project) throw new Error('No project loaded')
+
+    const lines = []
+    
+    // Project header with metadata
+    const projectName = project.info?.name || 'PLCProject'
+    const projectVersion = project.info?.version || '1.0.0'
+    const projectAuthor = project.info?.author || ''
+    const projectDescription = project.info?.description || ''
+    const exportDate = new Date().toISOString()
+    
+    lines.push(`VOVKPLCPROJECT ${projectName}`)
+    lines.push(`VERSION ${projectVersion}`)
+    lines.push(`EXPORT_DATE ${exportDate}`)
+    lines.push(`FORMAT_VERSION 1.0`)
+    if (projectAuthor) lines.push(`AUTHOR ${projectAuthor}`)
+    if (projectDescription) lines.push(`DESCRIPTION ${projectDescription}`)
+    lines.push('')
+
+    // Device info and interfaces (before MEMORY for better readability)
+    const deviceInfo = this.#editor.device_manager?.deviceInfo || project.lastPhysicalDevice?.deviceInfo
+    const transports = project.lastPhysicalDevice?.transports || []
+    if (deviceInfo || transports.length > 0) {
+        lines.push('DEVICE')
+        if (deviceInfo) {
+            if (deviceInfo.device) lines.push(`    NAME ${deviceInfo.device}`)
+            if (deviceInfo.type) lines.push(`    TYPE ${deviceInfo.type}`)
+            if (deviceInfo.arch) lines.push(`    ARCH ${deviceInfo.arch}`)
+            if (deviceInfo.version) lines.push(`    VERSION ${deviceInfo.version}`)
+            if (deviceInfo.build) lines.push(`    BUILD ${deviceInfo.build}`)
+            if (deviceInfo.memory) lines.push(`    MEMORY ${deviceInfo.memory}`)
+            if (deviceInfo.program) lines.push(`    PROGRAM ${deviceInfo.program}`)
+        }
+        if (transports.length > 0) {
+            lines.push('    INTERFACES')
+            for (const t of transports) {
+                const name = t.name || `Interface_${t.type}`
+                const typeStr = t.type !== undefined ? ` : TYPE=${t.type}` : ''
+                const enabledStr = t.enabled !== undefined ? ` : ENABLED=${t.enabled}` : ''
+                lines.push(`        ${name}${typeStr}${enabledStr}`)
+            }
+            lines.push('    END_INTERFACES')
+        }
+        lines.push('END_DEVICE')
+        lines.push('')
+    }
+
+    // Open tabs - convert IDs to full_path for portability
+    const tabManager = this.#editor.window_manager?.tab_manager
+    const specialWindows = ['symbols', 'setup', 'memory']
+    if (tabManager && tabManager.tabs && tabManager.tabs.size > 0) {
+        const openTabIds = Array.from(tabManager.tabs.keys())
+        if (openTabIds.length > 0) {
+            lines.push('TABS')
+            for (const tabId of openTabIds) {
+                // Special windows keep their name, program tabs use full_path
+                if (specialWindows.includes(tabId)) {
+                    lines.push(`    ${tabId}`)
+                } else {
+                    const program = this.#editor.findProgram(tabId)
+                    if (program?.full_path) {
+                        let path = program.full_path
+                        if (path.startsWith('/')) path = path.substring(1)
+                        lines.push(`    ${path}`)
+                    }
+                }
+            }
+            lines.push('END_TABS')
+            lines.push('')
+        }
+    }
+
+    // Active tab - convert ID to full_path for portability
+    const activeTab = tabManager?.active
+    if (activeTab) {
+        if (specialWindows.includes(activeTab)) {
+            lines.push(`ACTIVE_TAB ${activeTab}`)
+        } else {
+            const program = this.#editor.findProgram(activeTab)
+            if (program?.full_path) {
+                let path = program.full_path
+                if (path.startsWith('/')) path = path.substring(1)
+                lines.push(`ACTIVE_TAB ${path}`)
+            }
+        }
+        lines.push('')
+    }
+
+    // Memory configuration
+    const offsets = ensureOffsets(project.offsets)
+    
+    const kSize = offsets.control?.size || 64
+    const xSize = offsets.input?.size || 64
+    const ySize = offsets.output?.size || 64
+    const sSize = offsets.system?.size || 256
+    const mSize = offsets.marker?.size || 256
+    const tSize = offsets.timer?.size || 16
+    const cSize = offsets.counter?.size || 16
+    
+    const totalMemory = kSize + xSize + ySize + sSize + mSize + tSize + cSize
+    
+    lines.push('MEMORY')
+    lines.push(`    OFFSET 0`)
+    lines.push(`    AVAILABLE ${totalMemory}`)
+    lines.push(`    K ${kSize}`)
+    lines.push(`    X ${xSize}`)
+    lines.push(`    Y ${ySize}`)
+    lines.push(`    S ${sSize}`)
+    lines.push(`    M ${mSize}`)
+    lines.push(`    T ${tSize}`)
+    lines.push(`    C ${cSize}`)
+    lines.push('END_MEMORY')
+    lines.push('')
+
+    // Symbols section - user symbols only
+    const symbols = project.symbols || []
+    const userSymbols = symbols.filter(s => !s.readonly && !s.device)
+    if (userSymbols.length > 0) {
+        lines.push('SYMBOLS')
+        
+        const typeMap = {
+            'bit': 'BOOL',
+            'bool': 'BOOL',
+            'byte': 'BYTE',
+            'int': 'INT',
+            'dint': 'DINT',
+            'real': 'REAL',
+            'word': 'WORD',
+            'dword': 'DWORD',
+            'u8': 'U8',
+            'i8': 'I8',
+            'u16': 'U16',
+            'i16': 'I16',
+            'u32': 'U32',
+            'i32': 'I32',
+            'f32': 'F32',
+        }
+        
+        const locationPrefix = {
+            'control': 'K',
+            'input': 'X',
+            'output': 'Y',
+            'system': 'S',
+            'marker': 'M',
+            'timer': 'T',
+            'counter': 'C'
+        }
+        
+        for (const sym of userSymbols) {
+            if (sym.name && sym.type && sym.address !== undefined) {
+                const prefix = locationPrefix[sym.location] || 'M'
+                const mappedType = typeMap[sym.type] || sym.type.toUpperCase()
+                let addrStr = String(sym.address)
+                if ((mappedType === 'BOOL' || sym.type === 'bit') && !addrStr.includes('.')) {
+                    addrStr += '.0'
+                }
+                const fullAddress = `${prefix}${addrStr}`
+                const comment = sym.comment ? ` : ${sym.comment}` : ''
+                lines.push(`    ${sym.name} : ${mappedType} : ${fullAddress}${comment}`)
+            }
+        }
+        lines.push('END_SYMBOLS')
+        lines.push('')
+    }
+
+    // Program files
+    const treeRoot = this.#editor.window_manager?.tree_manager?.root
+    let files = []
+    if (Array.isArray(treeRoot) && treeRoot.length) {
+        files = treeRoot.filter(node => node.type === 'file' && node.item?.item?.type === 'program').map(node => node.item.item)
+    }
+    if (!files.length) {
+        files = (project.files || []).filter(file => file.type === 'program')
+    }
+    
+    for (const file of files) {
+        let filePath = file.full_path || file.path || file.name || 'main'
+        if (filePath.startsWith('/')) filePath = filePath.substring(1)
+        
+        const fileComment = file.comment ? ` : ${file.comment}` : ''
+        lines.push(`FILE ${filePath}${fileComment}`)
+        
+        const blocks = file.blocks || []
+        for (const block of blocks) {
+            const blockName = block.name || 'Code'
+            const blockType = block.type || 'asm'
+            
+            const langMap = {
+                'asm': 'PLCASM',
+                'plcasm': 'PLCASM',
+                'stl': 'STL',
+                'ladder': 'LADDER'
+            }
+            const lang = langMap[blockType.toLowerCase()] || 'PLCASM'
+            
+            lines.push(`    BLOCK LANG=${lang} ${blockName}`)
+            
+            let content = ''
+            if (blockType === 'ladder') {
+                /** @type {PLC_Ladder} */
+                const ladderBlock = /** @type {any} */ (block)
+                try {
+                    const graph = ladderToGraph(ladderBlock)
+                    content = smartStringify(graph)
+                } catch (e) {
+                    if (ladderBlock.nodes || ladderBlock.blocks) {
+                        const graph = {
+                            comment: ladderBlock.comment || ladderBlock.name || '',
+                            nodes: ladderBlock.nodes || ladderBlock.blocks || [],
+                            connections: ladderBlock.connections || []
+                        }
+                        content = smartStringify(graph)
+                    } else {
+                        console.warn('[ProjectManager] Could not serialize ladder block:', e)
+                    }
+                }
+            } else {
+                /** @type {PLC_STL | PLC_Assembly} */
+                const codeBlock = /** @type {any} */ (block)
+                content = codeBlock.code || ''
+            }
+            
+            const contentLines = content.split('\n')
+            for (const line of contentLines) {
+                lines.push(line)
+            }
+            
+            lines.push(`    END_BLOCK`)
+        }
+        
+        lines.push(`END_FILE`)
+        lines.push('')
+    }
+
+    // Watch items
+    const watchItems = project.watch || []
+    if (watchItems.length > 0) {
+        lines.push('WATCH')
+        for (const item of watchItems) {
+            if (item.name) {
+                const format = item.format ? ` : ${item.format}` : ''
+                lines.push(`    ${item.name}${format}`)
+            }
+        }
+        lines.push('END_WATCH')
+        lines.push('')
+    }
+
+    lines.push('END_PROJECT')
+    return lines.join('\n')
+  }
+
+  /**
+   * Parses a VOVKPLCPROJECT format string into a project object
+   * @param {string} text
+   * @returns {PLC_Project}
+   */
+  parseProjectText(text) {
+    const lines = text.split('\n')
+    let lineIndex = 0
+    
+    const project = this.createEmptyProject()
+    project.symbols = []
+    project.files = []
+    project.folders = []
+    project.watch = []
+    
+    // Type mappings (reverse of export)
+    const typeMap = {
+        'BOOL': 'bit',
+        'BYTE': 'byte',
+        'INT': 'int',
+        'DINT': 'dint',
+        'REAL': 'real',
+        'WORD': 'int',
+        'DWORD': 'dint',
+        'U8': 'byte',
+        'I8': 'byte',
+        'U16': 'int',
+        'I16': 'int',
+        'U32': 'dint',
+        'I32': 'dint',
+        'F32': 'real',
+    }
+    
+    const locationMap = {
+        'K': 'control',
+        'X': 'input',
+        'Y': 'output',
+        'S': 'system',
+        'M': 'marker',
+        'T': 'timer',
+        'C': 'counter'
+    }
+
+    const readLine = () => {
+        if (lineIndex >= lines.length) return null
+        return lines[lineIndex++]
+    }
+    
+    const peekLine = () => {
+        if (lineIndex >= lines.length) return null
+        return lines[lineIndex]
+    }
+
+    // Parse header
+    let line = readLine()
+    if (!line || !line.startsWith('VOVKPLCPROJECT')) {
+        throw new Error('Invalid project file: missing VOVKPLCPROJECT header')
+    }
+    project.info = project.info || {}
+    project.info.name = line.substring('VOVKPLCPROJECT'.length).trim()
+    
+    // Parse sections
+    while ((line = readLine()) !== null) {
+        const trimmed = line.trim()
+        
+        if (trimmed.startsWith('VERSION ')) {
+            project.info.version = trimmed.substring('VERSION '.length).trim()
+        } else if (trimmed.startsWith('AUTHOR ')) {
+            project.info.author = trimmed.substring('AUTHOR '.length).trim()
+        } else if (trimmed.startsWith('DESCRIPTION ')) {
+            project.info.description = trimmed.substring('DESCRIPTION '.length).trim()
+        } else if (trimmed === 'MEMORY') {
+            // Parse memory section
+            while ((line = readLine()) !== null) {
+                const memLine = line.trim()
+                if (memLine === 'END_MEMORY') break
+                
+                const parts = memLine.split(/\s+/)
+                if (parts.length >= 2) {
+                    const key = parts[0]
+                    const value = parseInt(parts[1], 10)
+                    if (!isNaN(value)) {
+                        switch (key) {
+                            case 'K': project.offsets.control.size = value; break
+                            case 'X': project.offsets.input.size = value; break
+                            case 'Y': project.offsets.output.size = value; break
+                            case 'S': project.offsets.system.size = value; break
+                            case 'M': project.offsets.marker.size = value; break
+                            case 'T': project.offsets.timer.size = value; break
+                            case 'C': project.offsets.counter.size = value; break
+                        }
+                    }
+                }
+            }
+            // Recalculate offsets based on sizes
+            project.offsets = ensureOffsets(project.offsets)
+        } else if (trimmed === 'SYMBOLS') {
+            // Parse symbols section
+            while ((line = readLine()) !== null) {
+                const symLine = line.trim()
+                if (symLine === 'END_SYMBOLS') break
+                if (!symLine) continue
+                
+                // Format: name : TYPE : ADDRESS : comment
+                const parts = symLine.split(':').map(p => p.trim())
+                if (parts.length >= 3) {
+                    const name = parts[0]
+                    const type = typeMap[parts[1].toUpperCase()] || parts[1].toLowerCase()
+                    const addrPart = parts[2]
+                    const comment = parts.length > 3 ? parts.slice(3).join(':').trim() : ''
+                    
+                    // Parse address like "M0.1" or "X10"
+                    const prefix = addrPart.charAt(0).toUpperCase()
+                    const location = locationMap[prefix] || 'marker'
+                    const addrStr = addrPart.substring(1)
+                    const address = parseFloat(addrStr) || 0
+                    
+                    project.symbols.push({
+                        name,
+                        type,
+                        location,
+                        address,
+                        initial_value: 0,
+                        comment
+                    })
+                }
+            }
+        } else if (trimmed.startsWith('FILE ') || trimmed.startsWith('PROGRAM ')) {
+            // Parse file/program section
+            const isProgram = trimmed.startsWith('PROGRAM ')
+            const headerParts = trimmed.substring(isProgram ? 'PROGRAM '.length : 'FILE '.length).split(':').map(p => p.trim())
+            const filePath = headerParts[0]
+            const fileComment = headerParts.length > 1 ? headerParts.slice(1).join(':').trim() : ''
+            
+            /** @type {PLC_Program} */
+            const file = {
+                id: null,
+                type: /** @type {'program'} */ ('program'),
+                name: filePath.split('/').pop() || filePath,
+                path: '/' + filePath.split('/').slice(0, -1).join('/'),
+                full_path: '/' + filePath,
+                comment: fileComment,
+                blocks: []
+            }
+            
+            const endMarker = isProgram ? 'END_PROGRAM' : 'END_FILE'
+            
+            while ((line = readLine()) !== null) {
+                const fileLine = line.trim()
+                if (fileLine === endMarker) break
+                
+                if (fileLine.startsWith('BLOCK ')) {
+                    // Parse block header: BLOCK LANG=XXX BlockName
+                    const blockHeader = fileLine.substring('BLOCK '.length)
+                    let lang = 'PLCASM'
+                    let blockName = 'Code'
+                    
+                    const langMatch = blockHeader.match(/LANG=(\w+)\s*/)
+                    if (langMatch) {
+                        lang = langMatch[1].toUpperCase()
+                        blockName = blockHeader.substring(langMatch[0].length).trim() || 'Code'
+                    } else {
+                        blockName = blockHeader.trim() || 'Code'
+                    }
+                    
+                    // Collect block content until END_BLOCK
+                    const contentLines = []
+                    while ((line = peekLine()) !== null) {
+                        const contentLine = line.trim()
+                        if (contentLine === 'END_BLOCK') {
+                            readLine() // consume END_BLOCK
+                            break
+                        }
+                        contentLines.push(lines[lineIndex])
+                        lineIndex++
+                    }
+                    const content = contentLines.join('\n').trim()
+                    
+                    // Create block based on language
+                    if (lang === 'LADDER') {
+                        try {
+                            const graph = JSON.parse(content)
+                            file.blocks.push({
+                                id: null,
+                                type: 'ladder',
+                                name: blockName,
+                                comment: graph.comment || '',
+                                nodes: graph.nodes || [],
+                                connections: graph.connections || [],
+                                blocks: graph.nodes || []
+                            })
+                        } catch (e) {
+                            console.warn('Failed to parse ladder block:', e)
+                        }
+                    } else if (lang === 'STL') {
+                        file.blocks.push({
+                            id: null,
+                            type: 'stl',
+                            name: blockName,
+                            comment: '',
+                            code: content
+                        })
+                    } else {
+                        // PLCASM or unknown
+                        file.blocks.push({
+                            id: null,
+                            type: 'asm',
+                            name: blockName,
+                            comment: '',
+                            code: content
+                        })
+                    }
+                }
+            }
+            
+            project.files.push(file)
+        } else if (trimmed === 'WATCH') {
+            // Parse watch section
+            while ((line = readLine()) !== null) {
+                const watchLine = line.trim()
+                if (watchLine === 'END_WATCH') break
+                if (!watchLine) continue
+                
+                const parts = watchLine.split(':').map(p => p.trim())
+                const watchItem = { name: parts[0] }
+                if (parts.length > 1) watchItem.format = parts[1]
+                project.watch.push(watchItem)
+            }
+        } else if (trimmed === 'DEVICE') {
+            // Parse device section
+            project.lastPhysicalDevice = project.lastPhysicalDevice || { deviceInfo: {}, transports: [], symbols: [], timestamp: '' }
+            project.lastPhysicalDevice.deviceInfo = project.lastPhysicalDevice.deviceInfo || {}
+            while ((line = readLine()) !== null) {
+                const deviceLine = line.trim()
+                if (deviceLine === 'END_DEVICE') break
+                if (!deviceLine) continue
+                
+                if (deviceLine.startsWith('NAME ')) {
+                    project.lastPhysicalDevice.deviceInfo.device = deviceLine.substring('NAME '.length).trim()
+                } else if (deviceLine.startsWith('TYPE ')) {
+                    project.lastPhysicalDevice.deviceInfo.type = deviceLine.substring('TYPE '.length).trim()
+                } else if (deviceLine.startsWith('ARCH ')) {
+                    project.lastPhysicalDevice.deviceInfo.arch = deviceLine.substring('ARCH '.length).trim()
+                } else if (deviceLine.startsWith('VERSION ')) {
+                    project.lastPhysicalDevice.deviceInfo.version = deviceLine.substring('VERSION '.length).trim()
+                } else if (deviceLine.startsWith('BUILD ')) {
+                    project.lastPhysicalDevice.deviceInfo.build = deviceLine.substring('BUILD '.length).trim()
+                } else if (deviceLine.startsWith('MEMORY ')) {
+                    project.lastPhysicalDevice.deviceInfo.memory = deviceLine.substring('MEMORY '.length).trim()
+                } else if (deviceLine.startsWith('PROGRAM ')) {
+                    project.lastPhysicalDevice.deviceInfo.program = deviceLine.substring('PROGRAM '.length).trim()
+                } else if (deviceLine === 'INTERFACES') {
+                    project.lastPhysicalDevice.transports = []
+                    while ((line = readLine()) !== null) {
+                        const ifaceLine = line.trim()
+                        if (ifaceLine === 'END_INTERFACES') break
+                        if (!ifaceLine) continue
+                        
+                        const parts = ifaceLine.split(':').map(p => p.trim())
+                        const iface = { name: parts[0] }
+                        for (let i = 1; i < parts.length; i++) {
+                            const kv = parts[i].split('=')
+                            if (kv.length === 2) {
+                                const key = kv[0].trim().toLowerCase()
+                                const val = kv[1].trim()
+                                if (key === 'type') iface.type = parseInt(val, 10) || val
+                                else if (key === 'enabled') iface.enabled = val === 'true' || val === '1'
+                            }
+                        }
+                        project.lastPhysicalDevice.transports.push(iface)
+                    }
+                }
+            }
+        } else if (trimmed === 'TABS') {
+            // Parse tabs section - store for later restoration
+            project._ui_state = project._ui_state || {}
+            project._ui_state.openTabs = []
+            while ((line = readLine()) !== null) {
+                const tabLine = line.trim()
+                if (tabLine === 'END_TABS') break
+                if (!tabLine) continue
+                project._ui_state.openTabs.push(tabLine)
+            }
+        } else if (trimmed.startsWith('ACTIVE_TAB ')) {
+            // Parse active tab
+            project._ui_state = project._ui_state || {}
+            project._ui_state.activeTab = trimmed.substring('ACTIVE_TAB '.length).trim()
+        } else if (trimmed === 'END_PROJECT') {
+            break
+        }
+    }
+    
+    return project
+  }
+
+  /**
+   * Builds a VOVKPLCPROJECT format string from the current project (for compilation)
    * @returns {string}
    */
   buildProjectText() {

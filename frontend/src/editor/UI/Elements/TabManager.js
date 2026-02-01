@@ -153,6 +153,15 @@ export default class TabManager {
         return this.active;
     }
 
+    /** Close all open tabs */
+    closeAllTabs() {
+        const tabIds = Array.from(this.tabs.keys())
+        for (const id of tabIds) {
+            this.closeTab(id)
+        }
+        this.active = null
+    }
+
 
     /** @type { (id: string, name: string, comment?: string) => void } */
     updateTab(id, name, comment) {

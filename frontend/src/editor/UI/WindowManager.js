@@ -4101,10 +4101,10 @@ export default class WindowManager {
     }
 
     _menuOpenProject() {
-        // Create file input to select JSON file
+        // Create file input to select project file
         const input = document.createElement('input')
         input.type = 'file'
-        input.accept = '.json,.vovkplc'
+        input.accept = '.json,.vovkplc,.project'
         input.style.display = 'none'
 
         input.addEventListener('change', async e => {
@@ -4113,20 +4113,71 @@ export default class WindowManager {
 
             try {
                 const text = await file.text()
-                const project = JSON.parse(text)
-
-                // Validate basic structure
-                if (!project || typeof project !== 'object') {
-                    throw new Error('Invalid project file format')
+                
+                // Close all existing tabs and windows before loading new project
+                this.tab_manager?.closeAllTabs()
+                
+                // Detect format based on content
+                const trimmed = text.trim()
+                
+                if (trimmed.startsWith('VOVKPLCPROJECT')) {
+                    // New portable text format
+                    const project = this.#editor.project_manager.parseProjectText(text)
+                    this.#editor.project_manager.ensureSystemSymbols(project)
+                    this.#editor.project_manager.load(project)
+                    this.#editor.project_manager.last_saved_state = ''
+                    this.#editor.project_manager.checkAndSave()
+                    
+                    // Restore open tabs and active tab
+                    // Tabs are stored as full_path (e.g. "main") or special window names (e.g. "symbols")
+                    const specialWindows = ['symbols', 'setup', 'memory']
+                    const resolveTabId = (tabPath) => {
+                        if (specialWindows.includes(tabPath)) return tabPath
+                        // Find program by full_path
+                        const fullPath = tabPath.startsWith('/') ? tabPath : '/' + tabPath
+                        const program = project.files?.find(f => f.full_path === fullPath)
+                        return program?.id || null
+                    }
+                    
+                    if (project._ui_state?.openTabs?.length > 0) {
+                        for (const tabPath of project._ui_state.openTabs) {
+                            try {
+                                const tabId = resolveTabId(tabPath)
+                                if (tabId) {
+                                    this.tab_manager?.addLazyTab(tabId)
+                                }
+                            } catch (e) {
+                                console.warn('Could not restore tab:', tabPath, e)
+                            }
+                        }
+                        // Switch to active tab if specified
+                        if (project._ui_state.activeTab) {
+                            try {
+                                const activeId = resolveTabId(project._ui_state.activeTab)
+                                if (activeId) {
+                                    this.tab_manager?.switchTo(activeId)
+                                }
+                            } catch (e) {
+                                console.warn('Could not switch to active tab:', project._ui_state.activeTab, e)
+                            }
+                        }
+                    }
+                    
+                    this.logToConsole?.(`Imported project "${project.info?.name || 'Untitled'}" from ${file.name}`, 'success')
+                } else if (trimmed.startsWith('{')) {
+                    // Legacy JSON format
+                    const project = JSON.parse(text)
+                    if (!project || typeof project !== 'object') {
+                        throw new Error('Invalid project file format')
+                    }
+                    this.#editor.project_manager.ensureSystemSymbols(project)
+                    this.#editor.project_manager.load(project)
+                    this.#editor.project_manager.last_saved_state = ''
+                    this.#editor.project_manager.checkAndSave()
+                    this.logToConsole?.(`Opened project from ${file.name}`, 'success')
+                } else {
+                    throw new Error('Unknown project file format')
                 }
-
-                // Load the project
-                this.#editor.project_manager.ensureSystemSymbols(project)
-                this.#editor.project_manager.load(project)
-                this.#editor.project_manager.last_saved_state = ''
-                this.#editor.project_manager.checkAndSave()
-
-                this.logToConsole?.(`Opened project from ${file.name}`, 'success')
             } catch (err) {
                 console.error('Failed to open project:', err)
                 this.logToConsole?.(`Failed to open project: ${err.message}`, 'error')
@@ -4145,31 +4196,20 @@ export default class WindowManager {
             // Force save current state
             this.#editor.project_manager.collectProjectState()
 
-            // Get the project data (same as saved to localStorage)
-            const projectToExport = {...this.#editor.project}
-
-            // Filter out system symbols but keep user symbols
-            if (projectToExport.symbols) {
-                projectToExport.symbols = projectToExport.symbols.filter(s => !s.readonly && !s.device)
-            }
-
-            // Keep device_symbols in export so they can be restored
-            // (they will be merged/updated when connecting to device)
-
-            // Keep connectionMode and selectedDevice for device configuration
-            // These are already in projectToExport
-
-            // Create filename from project info or use default
-            const projectName = projectToExport.info?.name || 'project'
-            const projectVersion = projectToExport.info?.version || ''
+            // Build the portable VOVKPLCPROJECT format
+            const projectText = this.#editor.project_manager.buildExportText()
+            
+            // Create filename from project info
+            const project = this.#editor.project
+            const projectName = (project.info?.name || 'project').replace(/[<>:"/\\|?*\s]+/g, '_')
+            const projectVersion = (project.info?.version || '').replace(/[<>:"/\\|?*\s]+/g, '_')
             const timestamp = new Date().toISOString().slice(0, 10)
-            // Escape version for valid filename (replace invalid chars with underscore)
-            const safeVersion = projectVersion.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_')
-            const filename = safeVersion ? `${projectName}_v${safeVersion}_${timestamp}.vovkplc` : `${projectName}_${timestamp}.vovkplc`
+            const filename = projectVersion 
+                ? `${projectName}_v${projectVersion}_${timestamp}.vovkplc`
+                : `${projectName}_${timestamp}.vovkplc`
 
             // Create and download file
-            const json = JSON.stringify(projectToExport, null, 2)
-            const blob = new Blob([json], {type: 'application/json'})
+            const blob = new Blob([projectText], {type: 'text/plain'})
             const url = URL.createObjectURL(blob)
 
             const a = document.createElement('a')
