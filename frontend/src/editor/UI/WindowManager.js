@@ -3865,18 +3865,236 @@ export default class WindowManager {
     }
 
     _menuNewProject() {
-        // Confirm if there's existing work
-        const hasContent = this.#editor.project?.files?.length > 0
-        if (hasContent) {
-            if (!confirm('Create a new project? Any unsaved changes will be lost.')) {
-                return
+        const hasContent = this.#editor.project?.files?.some(f => f.type === 'program' && f.blocks?.length > 0)
+        
+        // Step 1: Ask to save current project if there's content
+        const askToSave = () => {
+            return new Promise(resolve => {
+                if (!hasContent) {
+                    resolve('dont_save')
+                    return
+                }
+                
+                new Popup({
+                    title: 'Save Current Project?',
+                    description: 'Do you want to save the current project before creating a new one?',
+                    width: '400px',
+                    buttons: [
+                        { text: 'Save', value: 'save', background: '#1fba5f' },
+                        { text: "Don't Save", value: 'dont_save', background: '#666' },
+                        { text: 'Cancel', value: 'cancel', background: '#444' }
+                    ],
+                    onClose: value => resolve(value || 'cancel')
+                })
+            })
+        }
+        
+        // Step 2: Ask for new project name
+        const askProjectName = () => {
+            return new Promise(resolve => {
+                let projectName = 'New Project'
+                let inputEl = null
+                
+                const content = document.createElement('div')
+                content.innerHTML = `
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; color: #aaa; font-size: 11px; margin-bottom: 4px;">Project Name</label>
+                        <input type="text" value="New Project" style="
+                            width: 100%;
+                            padding: 8px 10px;
+                            background: #2a2a2a;
+                            border: 1px solid #444;
+                            border-radius: 4px;
+                            color: #fff;
+                            font-size: 13px;
+                            outline: none;
+                            box-sizing: border-box;
+                        " />
+                    </div>
+                `
+                inputEl = content.querySelector('input')
+                inputEl.addEventListener('input', e => {
+                    projectName = e.target.value.trim() || 'New Project'
+                })
+                
+                new Popup({
+                    title: 'New Project',
+                    width: '350px',
+                    content: content,
+                    buttons: [
+                        { text: 'Create', value: 'create', background: '#1fba5f' },
+                        { text: 'Cancel', value: 'cancel', background: '#444' }
+                    ],
+                    onOpen: () => {
+                        setTimeout(() => {
+                            inputEl?.focus()
+                            inputEl?.select()
+                        }, 50)
+                    },
+                    onClose: value => {
+                        if (value === 'create') {
+                            resolve(projectName)
+                        } else {
+                            resolve(null)
+                        }
+                    }
+                })
+            })
+        }
+        
+        // Execute the flow
+        const executeNewProject = async () => {
+            // Step 1: Ask to save
+            const saveChoice = await askToSave()
+            if (saveChoice === 'cancel') return
+            
+            if (saveChoice === 'save') {
+                // Trigger save
+                this._menuSaveProject()
+            }
+            
+            // Step 2: Ask for project name
+            const projectName = await askProjectName()
+            if (!projectName) return  // User cancelled
+            
+            // Step 3: Create the new project
+            this._createFreshProject(projectName)
+        }
+        
+        executeNewProject()
+    }
+    
+    _createFreshProject(projectName = 'New Project') {
+        // Close all open tabs and their editor hosts
+        if (this.tab_manager) {
+            const tabIds = [...this.tab_manager.tabs.keys()]
+            tabIds.forEach(id => {
+                const tab = this.tab_manager.tabs.get(id)
+                if (tab) {
+                    if (tab.host) tab.host.close()
+                    if (tab.tabEl) tab.tabEl.remove()
+                }
+            })
+            this.tab_manager.tabs.clear()
+            this.tab_manager.active = null
+        }
+
+        // Clear windows map (symbols, setup, memory windows)
+        if (this.windows) {
+            this.windows.forEach((win, key) => {
+                if (win && typeof win.close === 'function') win.close()
+            })
+            this.windows.clear()
+        }
+
+        // Reset editor state
+        this.#editor.active_tab = null
+        this.#editor.active_program = null
+        this.#editor.reserved_ids = []
+
+        // Clear navigation tree
+        if (this.tree_manager) {
+            this.tree_manager.root = []
+            this.tree_manager.minimized_folders = {}
+            this.tree_manager.state.selected = null
+            this.tree_manager.state.focused = null
+        }
+
+        // Create a fresh empty project
+        const freshProject = {
+            info: {
+                name: projectName,
+                version: '1.0.0',
+                author: '',
+                description: ''
+            },
+            offsets: {
+                control: { offset: 0, size: 16 },
+                input: { offset: 16, size: 16 },
+                output: { offset: 32, size: 16 },
+                system: { offset: 48, size: 16 },
+                marker: { offset: 64, size: 16 },
+                timer: { offset: 80, size: 64 },
+                counter: { offset: 144, size: 64 }
+            },
+            symbols: [],           // Will be populated with system symbols by ensureSystemSymbols
+            device_symbols: [],    // Clear device symbols
+            folders: [],
+            files: [
+                {
+                    id: null,      // Will be generated
+                    path: '/',
+                    type: 'program',
+                    name: 'main',
+                    full_path: '/main',
+                    comment: 'Main program',
+                    blocks: []
+                }
+            ],
+            watch: [],
+            lastPhysicalDevice: null,  // Clear stored device info
+            _ui_state: null            // Clear UI state
+        }
+
+        // Clear project-specific localStorage items (but NOT paired devices)
+        localStorage.removeItem('vovk_plc_project_autosave')
+        localStorage.removeItem('vovk_plc_symbols_collapsed')
+        localStorage.removeItem('vovk_plc_watch_values')
+        // Keep these as they are user preferences, not project-specific:
+        // - vovk_plc_layout
+        // - vovk_plc_outer_layout
+        // - vovk_plc_memory_display_mode
+        // - vovk_plc_monitoring_active
+
+        // Load the fresh project
+        this.#editor.openProject(freshProject)
+
+        // Reset project manager state
+        if (this.#editor.project_manager) {
+            this.#editor.project_manager.last_saved_state = ''
+        }
+
+        // Open the main program
+        const mainFile = this.#editor.project?.files?.find(f => f.name === 'main')
+        if (mainFile && mainFile.id) {
+            this.openProgram(mainFile.id)
+        }
+
+        // Reset device info display (but keep paired devices)
+        if (this.device_info) {
+            this.device_info.innerHTML = `
+                <div style="display: flex; align-items: flex-start; gap: 8px;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="device-name" style="color: #888;">No device</div>
+                        <div class="device-meta" style="color: #666;">Connect to a device to go online</div>
+                    </div>
+                    <button class="plc-device-details-btn" title="Device Details" style="background: #2a2a2a; border: 1px solid #444; color: #666; padding: 4px 8px; font-size: 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">Details</button>
+                </div>
+            `
+            const detailsBtn = this.device_info.querySelector('.plc-device-details-btn')
+            if (detailsBtn) {
+                detailsBtn.addEventListener('click', () => this._showDeviceDetails())
             }
         }
 
-        // Clear localStorage and reload
-        localStorage.removeItem('vovk_plc_project')
-        localStorage.removeItem('vovk_plc_symbols_collapsed')
-        window.location.reload()
+        // Clear console
+        if (this.console) {
+            this.console.innerHTML = ''
+        }
+
+        // Refresh the watch panel with empty entries
+        if (this.watch_panel && typeof this.watch_panel.setEntries === 'function') {
+            this.watch_panel.setEntries([])
+        }
+
+        // Clear problems panel
+        if (this._problemsContent) {
+            this._problemsContent.innerHTML = ''
+        }
+        this._problemsFlat = []
+        this._problemsByHoverKey = new Map()
+
+        this.logToConsole?.(`Created new project: ${projectName}`, 'success')
     }
 
     _menuOpenProject() {
