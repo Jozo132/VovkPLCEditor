@@ -46,6 +46,7 @@ export class CustomDropdown {
             min-height: 30px;
             box-sizing: border-box;
             font-size: 11px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: #3c3c3c;
             border: 1px solid #3c3c3c;
             color: #f0f0f0;
@@ -85,26 +86,25 @@ export class CustomDropdown {
         this.displayElement.appendChild(this.textContainer)
         this.displayElement.appendChild(this.arrowElement)
         
-        // Dropdown container (shown when open)
+        // Dropdown container (appended to body to avoid overflow:hidden issues)
         this.dropdownElement = document.createElement('div')
         this.dropdownElement.className = 'custom-dropdown-list'
         this.dropdownElement.style.cssText = `
             display: none;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
+            position: fixed;
             background: #3c3c3c;
             border: 1px solid #454545;
             max-height: 300px;
             overflow-y: auto;
-            z-index: 1000;
+            z-index: 100000;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             ${this._styleToString(this.customStyle.dropdown || {})}
         `
         
         this.container.appendChild(this.displayElement)
-        this.container.appendChild(this.dropdownElement)
+        // Append dropdown to body instead of container to escape overflow:hidden
+        document.body.appendChild(this.dropdownElement)
     }
     
     _styleToString(styleObj) {
@@ -292,6 +292,13 @@ export class CustomDropdown {
      */
     open() {
         this.isOpen = true
+        
+        // Position the dropdown based on the display element's position
+        const rect = this.displayElement.getBoundingClientRect()
+        this.dropdownElement.style.top = `${rect.bottom}px`
+        this.dropdownElement.style.left = `${rect.left}px`
+        this.dropdownElement.style.width = `${rect.width}px`
+        
         this.dropdownElement.style.display = 'block'
         this.arrowElement.textContent = '▲'
     }
@@ -341,5 +348,9 @@ export class CustomDropdown {
     destroy() {
         document.removeEventListener('click', this._documentClickHandler)
         this.container.innerHTML = ''
+        // Remove dropdown from body
+        if (this.dropdownElement && this.dropdownElement.parentNode) {
+            this.dropdownElement.parentNode.removeChild(this.dropdownElement)
+        }
     }
 }

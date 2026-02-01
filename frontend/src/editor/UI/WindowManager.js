@@ -157,7 +157,7 @@ export default class WindowManager {
                         
                         <div class="plc-sidebar-panels" style="display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;">
                              
-                             <div class="plc-sidebar-panel-wrapper" id="wrapper-connection" style="display: flex; flex-direction: column; flex: 0 0 auto; min-height: 22px;">
+                             <div class="plc-sidebar-panel-wrapper" id="wrapper-connection" style="display: flex; flex-direction: column; flex: 0 0 auto;">
                                 <div class="plc-connection-header" title="Click to toggle collapse">
                                     <span class="codicon codicon-chevron-down plc-connection-chevron" style="margin-right: 6px;"></span>
                                     <span class="plc-connection-title" style="font-weight: bold; color: #bbb;">CONNECTION</span>
@@ -1850,10 +1850,12 @@ export default class WindowManager {
                 const header = w.el.querySelector('.plc-connection-header, .plc-navigation-panel-header, .plc-device-health-header, .plc-device-watch-header')
                 const chevron = header ? header.querySelector('.codicon') : null
                 const content = w.el.querySelector('.plc-connection-body, .plc-navigation-panel-content, .plc-device-health-body, .plc-device-watch-content')
+                const isConnectionPanel = w.el.id === 'wrapper-connection'
 
                 if (s.minimized) {
                     // Minimized: fixed height
                     w.el.style.flex = '0 0 22px'
+                    w.el.style.minHeight = '22px'
                     w.el.style.overflow = 'hidden'
                     w.el.classList.add('minimized')
 
@@ -1863,6 +1865,7 @@ export default class WindowManager {
                     // Expanded: flex grow proportional to last size
                     const flexVal = Math.max(s.flex, 50) // Ensure at least some weight
                     w.el.style.flex = `${flexVal} 1 0px`
+                    w.el.style.minHeight = isConnectionPanel ? '150px' : '22px'
                     w.el.style.overflow = 'hidden' // Keep content contained
                     w.el.classList.remove('minimized')
 
