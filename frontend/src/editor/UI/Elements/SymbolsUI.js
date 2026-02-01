@@ -519,9 +519,15 @@ export default class SymbolsUI {
         if (symbol.readonly && !symbol.device) tr.classList.add('symbol-system')
         if (symbol.device) tr.classList.add('symbol-device')
 
-        // Drag Start
-        tr.draggable = true
-        tr.addEventListener('dragstart', (e) => {
+        // Icon Column
+        const tdIcon = document.createElement('td')
+        tdIcon.classList.add('symbol-icon-cell')
+        tdIcon.addEventListener('click', (e) => this.toggleSelection(symbol, e, tr))
+        
+        // Drag functionality - only on icon
+        tdIcon.draggable = true
+        tdIcon.style.cursor = 'grab'
+        tdIcon.addEventListener('dragstart', (e) => {
             e.dataTransfer.effectAllowed = 'copy'
             const payload = JSON.stringify({
                 name: symbol.name,
@@ -529,12 +535,31 @@ export default class SymbolsUI {
             })
             e.dataTransfer.setData('vovk-app/symbol', payload)
             e.dataTransfer.setData('text/plain', symbol.name) // Fallback
+            
+            // Create custom drag image showing symbol name and type
+            const dragGhost = document.createElement('div')
+            dragGhost.style.cssText = `
+                position: absolute;
+                top: -1000px;
+                left: -1000px;
+                padding: 4px 8px;
+                background: #2d2d2d;
+                border: 1px solid #4a9;
+                border-radius: 4px;
+                color: #fff;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                font-size: 11px;
+                white-space: nowrap;
+                pointer-events: none;
+                z-index: 100000;
+            `
+            dragGhost.innerHTML = `<span style="color: #4a9;">${symbol.name}</span> <span style="color: #888;">(${symbol.type})</span>`
+            document.body.appendChild(dragGhost)
+            e.dataTransfer.setDragImage(dragGhost, 0, 0)
+            
+            // Clean up ghost element after drag starts
+            setTimeout(() => dragGhost.remove(), 0)
         })
-
-        // Icon Column
-        const tdIcon = document.createElement('td')
-        tdIcon.classList.add('symbol-icon-cell')
-        tdIcon.addEventListener('click', (e) => this.toggleSelection(symbol, e, tr))
         
         // Context Menu - Handled globally via tbody
         
