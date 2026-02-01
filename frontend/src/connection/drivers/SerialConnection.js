@@ -176,6 +176,9 @@ export default class SerialConnection extends ConnectionBase {
             const maxWaitTime = 8000 // Maximum time to wait for complete response
             
             while (Date.now() - startTime < maxWaitTime) {
+                // Check if connection was closed
+                if (!this.serial.isOpen) throw new Error('Connection closed');
+                
                 // Use longer timeout for ESP32-C6 compatibility (USB-CDC has variable latency)
                 const hasData = await this._waitForReply(300);
                 if (hasData) {
@@ -517,6 +520,7 @@ export default class SerialConnection extends ConnectionBase {
     async _waitForReply(timeout = 1000) {
         const start = Date.now();
         while (!this.serial.available()) {
+            if (!this.serial.isOpen) return false; // Connection closed
             if (Date.now() - start > timeout) return false
             await new Promise(r => setTimeout(r, 10));
         }
@@ -526,6 +530,7 @@ export default class SerialConnection extends ConnectionBase {
     async _waitForCharacter(char, timeout = 5000) { // Without consuming the serial buffer
         const start = Date.now();
         while (true) {
+            if (!this.serial.isOpen) throw new Error('Connection closed'); // Connection closed
             const available = this.serial.available();
             if (available) {
                 const peeked = this.serial.peek(available); // number
@@ -540,6 +545,7 @@ export default class SerialConnection extends ConnectionBase {
     async _readResponseLine(timeout = 5000) {
         const start = Date.now();
         while (true) {
+            if (!this.serial.isOpen) throw new Error('Connection closed'); // Connection closed
             const line = this.serial.readLine();
             if (line !== null) return line;
             if (Date.now() - start > timeout) throw new Error("Timeout waiting for response line");

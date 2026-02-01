@@ -17,6 +17,7 @@ export default class SerialCLASS {
         this._writeMutex = Promise.resolve();
         this.onDisconnect = null;
         this._fatalErrorHandled = false;    // Track if disconnect was already handled
+        this._abortController = null;       // For aborting read operations
     }
 
     _handleFatalError(error) {
@@ -66,8 +67,12 @@ export default class SerialCLASS {
             // Open the port with given options (baudRate is required)
             if (!this.port.connected || !this.port.readable || !this.port.writable) {
                 if (this.debug) console.log(`Requesting serial port with options:`, openOptions);
-                await this.port.open(openOptions);
-                // await this.port.setSignals({ dataTerminalReady: false, requestToSend: false }); // Doesn't help
+                // Add timeout for port.open() - some devices can hang here
+                const openPromise = this.port.open(openOptions);
+                const openTimeout = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Port open timeout - device may be unresponsive')), 10000);
+                });
+                await Promise.race([openPromise, openTimeout]);
             }
             this.isOpen = true;
             this._fatalErrorHandled = false; // Reset for new connection
@@ -97,10 +102,17 @@ export default class SerialCLASS {
         this._readingLoopPromise = (async () => {
             try {
                 // Loop until the stream is closed or an error occurs
-                while (true) {
-                    const { value, done } = await reader.read();  // Read from serial
+                while (!this._closing) {
+                    // Simply await the read - we rely on reader.cancel() in end() to break out
+                    // Note: reader.read() is NOT abortable, only cancelable via reader.cancel()
+                    const { value, done } = await reader.read();
+                    
                     if (done) {
                         // Stream is closed (port disconnected or reader cancelled)
+                        break;
+                    }
+                    if (this._closing) {
+                        // Check again after read completes
                         break;
                     }
                     if (value) {
@@ -118,14 +130,14 @@ export default class SerialCLASS {
                 // Reading error (possible causes: non-fatal read error or manual cancellation)
                 if (this._closing) {
                     // If we are in the process of closing, ignore errors from cancellation
-                    // (They are expected when cancelling the reader)&#8203;:contentReference[oaicite:12]{index=12}
+                    // (They are expected when cancelling the reader)
                 } else {
                     console.error('Serial read error:', error);
                     this._handleFatalError(error);
                 }
             } finally {
                 // Release the reader lock so that the port can be closed
-                reader.releaseLock();
+                try { reader.releaseLock(); } catch (e) { /* ignore */ }
             }
         })();
     }
@@ -139,6 +151,34 @@ export default class SerialCLASS {
             return;  // Not open, nothing to do
         }
         this._closing = true;
+        
+        // Set a maximum timeout for the entire close operation
+        const closeTimeout = 3000; // 3 seconds max
+        const closePromise = this._performClose();
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Close timeout')), closeTimeout);
+        });
+        
+        try {
+            await Promise.race([closePromise, timeoutPromise]);
+        } catch (e) {
+            if (this.debug) console.warn('Serial close error/timeout:', e.message);
+        } finally {
+            // Force reset state regardless of what happened
+            this.isOpen = false;
+            this.port = null;
+            this.reader = null;
+            this._readingLoopPromise = null;
+            this._closing = false;
+            this._readBuffer = [];
+        }
+    }
+    
+    /**
+     * Internal method that performs the actual close operations
+     * @private
+     */
+    async _performClose() {
         try {
             if (this.debug) console.log('Closing serial port...');
             // Cancel the reader to break out of any pending read operation
@@ -146,20 +186,19 @@ export default class SerialCLASS {
                 try { await this.reader.cancel(); } catch (e) { /* ignore cancel errors */ }
                 // Note: reader.releaseLock() is called in the read loop's finally block.
             }
-            // Wait for the read loop to finish up if it's still running
+            // Wait for the read loop to finish up if it's still running (with timeout)
             if (this._readingLoopPromise) {
-                try { await this._readingLoopPromise; } catch (e) { /* ignore errors from loop */ }
+                const loopTimeout = new Promise(resolve => setTimeout(resolve, 1000));
+                try { 
+                    await Promise.race([this._readingLoopPromise, loopTimeout]); 
+                } catch (e) { /* ignore errors from loop */ }
             }
             // Close the serial port
-            try { await this.port.close(); } catch (e) { /* ignore close errors */ }
+            if (this.port) {
+                try { await this.port.close(); } catch (e) { /* ignore close errors */ }
+            }
         } finally {
-            // Reset state
-            this.isOpen = false;
-            this.port = null;
-            this.reader = null;
-            this._readingLoopPromise = null;
-            this._closing = false;
-            this._readBuffer = [];  // (Optional) clear buffer on close for fresh state
+            // State reset is handled by the calling method
         }
     }
 
