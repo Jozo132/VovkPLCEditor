@@ -456,9 +456,24 @@ export default class ProjectManager {
             lines.push('    INTERFACES')
             for (const t of transports) {
                 const name = t.name || `Interface_${t.type}`
-                const typeStr = t.type !== undefined ? ` : TYPE=${t.type}` : ''
-                const enabledStr = t.enabled !== undefined ? ` : ENABLED=${t.enabled}` : ''
-                lines.push(`        ${name}${typeStr}${enabledStr}`)
+                const props = []
+                if (t.type !== undefined) props.push(`TYPE=${t.type}`)
+                if (t.isNetwork !== undefined) props.push(`NETWORK=${t.isNetwork}`)
+                if (t.isConnected !== undefined) props.push(`CONNECTED=${t.isConnected}`)
+                if (t.requiresAuth !== undefined) props.push(`AUTH=${t.requiresAuth}`)
+                // Serial-specific
+                if (t.baudrate) props.push(`BAUDRATE=${t.baudrate}`)
+                // Network-specific
+                if (t.ip) props.push(`IP=${t.ip}`)
+                if (t.port) props.push(`PORT=${t.port}`)
+                if (t.gateway) props.push(`GATEWAY=${t.gateway}`)
+                if (t.subnet) props.push(`SUBNET=${t.subnet}`)
+                if (t.mac) props.push(`MAC=${t.mac}`)
+                // Legacy enabled field
+                if (t.enabled !== undefined) props.push(`ENABLED=${t.enabled}`)
+                
+                const propsStr = props.length > 0 ? ' : ' + props.join(' : ') : ''
+                lines.push(`        ${name}${propsStr}`)
             }
             lines.push('    END_INTERFACES')
         }
@@ -938,6 +953,15 @@ export default class ProjectManager {
                                 const val = kv[1].trim()
                                 if (key === 'type') iface.type = parseInt(val, 10) || val
                                 else if (key === 'enabled') iface.enabled = val === 'true' || val === '1'
+                                else if (key === 'network') iface.isNetwork = val === 'true' || val === '1'
+                                else if (key === 'connected') iface.isConnected = val === 'true' || val === '1'
+                                else if (key === 'auth') iface.requiresAuth = val === 'true' || val === '1'
+                                else if (key === 'baudrate') iface.baudrate = parseInt(val, 10) || 0
+                                else if (key === 'ip') iface.ip = val
+                                else if (key === 'port') iface.port = parseInt(val, 10) || 0
+                                else if (key === 'gateway') iface.gateway = val
+                                else if (key === 'subnet') iface.subnet = val
+                                else if (key === 'mac') iface.mac = val
                             }
                         }
                         project.lastPhysicalDevice.transports.push(iface)
