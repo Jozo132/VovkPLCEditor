@@ -1163,8 +1163,8 @@ export class VovkPLCEditor {
             blocks.forEach(block => {
                 if (!block) return
 
-                // Handle ASM/STL blocks
-                if (block.type === 'asm' || block.type === 'stl') {
+                // Handle ASM/STL/PLCScript/ST blocks
+                if (block.type === 'asm' || block.type === 'stl' || block.type === 'plcscript' || block.type === 'st') {
                     this._ensureBlockAddressRefs(block, normalizedOffsets, symbolDetails)
                     const blockRefs = [...(block.cached_address_refs || []), ...(block.cached_timer_refs || [])]
                     blockRefs.forEach(ref => {
@@ -1413,8 +1413,8 @@ export class VovkPLCEditor {
         programs.forEach(file => {
             if (!file.blocks) return
             file.blocks.forEach(block => {
-                // Handle ASM, STL, and Ladder block types
-                if (block.type !== 'asm' && block.type !== 'stl' && block.type !== 'ladder') {
+                // Handle ASM, STL, PLCScript, ST, and Ladder block types
+                if (block.type !== 'asm' && block.type !== 'stl' && block.type !== 'plcscript' && block.type !== 'st' && block.type !== 'ladder') {
                     if (onUnsupported) onUnsupported(file, block)
                     return
                 }
@@ -1428,6 +1428,16 @@ export class VovkPLCEditor {
                     // For now, mark it with a special header so the compiler knows to transpile it
                     const stlCode = block.code || ''
                     code = `// stl_block_start\n${stlCode}\n// stl_block_end\n`
+                } else if (block.type === 'plcscript') {
+                    // PLCScript blocks need to be transpiled to PLCASM
+                    // Mark with special header for transpilation
+                    const plcscriptCode = block.code || ''
+                    code = `// plcscript_block_start\n${plcscriptCode}\n// plcscript_block_end\n`
+                } else if (block.type === 'st') {
+                    // Structured Text (IEC 61131-3) blocks need to be transpiled to PLCScript then to PLCASM
+                    // Mark with special header for transpilation
+                    const stCode = block.code || ''
+                    code = `// st_block_start\n${stCode}\n// st_block_end\n`
                 } else if (block.type === 'ladder') {
                     // Ladder blocks need to be compiled to JSON, then transpiled
                     // The transpilation chain: LADDER JSON -> STL -> PLCASM
@@ -1464,19 +1474,31 @@ export class VovkPLCEditor {
         // Transpile Ladder blocks to PLCASM before STL
         let result = await this._transpileLadderForLinting(assembly)
 
+        // Transpile ST (Structured Text) blocks to PLCScript then to PLCASM
+        result = await this._transpileBlocksForLinting(result, 'st', /\/\/ st_block_start\n([\s\S]*?)\/\/ st_block_end\n/g)
+        
+        // Transpile PLCScript blocks to PLCASM
+        result = await this._transpileBlocksForLinting(result, 'plcscript', /\/\/ plcscript_block_start\n([\s\S]*?)\/\/ plcscript_block_end\n/g)
+
         // Then transpile STL blocks to PLCASM
-        const stlBlockRegex = /\/\/ stl_block_start\n([\s\S]*?)\/\/ stl_block_end\n/g
+        result = await this._transpileBlocksForLinting(result, 'stl', /\/\/ stl_block_start\n([\s\S]*?)\/\/ stl_block_end\n/g)
+
+        return result
+    }
+
+    async _transpileBlocksForLinting(assembly, language, regex) {
+        let result = assembly
         let match
         const replacements = []
 
-        while ((match = stlBlockRegex.exec(result)) !== null) {
-            const stlCode = match[1]
+        while ((match = regex.exec(result)) !== null) {
+            const code = match[1]
             const fullMatch = match[0]
             const startIndex = match.index
 
             try {
-                // Use runtime.compile with language: 'stl' to transpile STL to PLCASM
-                const compileResult = await this.runtime.compile(stlCode, {language: 'stl'})
+                // Use runtime.compile with appropriate language to transpile to PLCASM
+                const compileResult = await this.runtime.compile(code, {language})
                 if (compileResult && compileResult.output) {
                     replacements.push({
                         start: startIndex,
@@ -1486,11 +1508,11 @@ export class VovkPLCEditor {
                 }
             } catch (e) {
                 // If transpilation fails, replace with empty comment
-                // STL errors are already caught by lintSTL, no need to log
+                // Errors are already caught by the respective linters
                 replacements.push({
                     start: startIndex,
                     end: startIndex + fullMatch.length,
-                    replacement: '// STL block with errors\n',
+                    replacement: `// ${language.toUpperCase()} block with errors\n`,
                 })
             }
         }
@@ -1708,7 +1730,7 @@ export class VovkPLCEditor {
                         let localStart = 0
                         let localEnd = 1
 
-                        if (target && (target.block.type === 'stl' || target.block.type === 'asm')) {
+                        if (target && (target.block.type === 'stl' || target.block.type === 'asm' || target.block.type === 'plcscript' || target.block.type === 'st')) {
                             const code = target.block.code || ''
                             const lines = code.split('\n')
                             const lineStarts = [0]

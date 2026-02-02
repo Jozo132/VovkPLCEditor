@@ -557,13 +557,17 @@ export default class EditorUI {
             const btnLadder = createTypeBtn('ladder', 'Ladder Diagram (LAD)')
             const btnStl = createTypeBtn('stl', 'Siemens STL')
             const btnAsm = createTypeBtn('asm', 'Assembly (ASM)')
+            const btnPlcscript = createTypeBtn('plcscript', 'PLCScript')
+            const btnSt = createTypeBtn('st', 'Structured Text (ST)')
             
-            typeButtons.push(btnLadder, btnStl, btnAsm)
+            typeButtons.push(btnLadder, btnStl, btnAsm, btnPlcscript, btnSt)
             updateButtonVisuals() // Initial state
             
             buttonGroup.appendChild(btnLadder)
             buttonGroup.appendChild(btnStl)
             buttonGroup.appendChild(btnAsm)
+            buttonGroup.appendChild(btnPlcscript)
+            buttonGroup.appendChild(btnSt)
             typeContainer.appendChild(buttonGroup)
 
             /*
@@ -650,6 +654,11 @@ export default class EditorUI {
             type: result.type, 
             name: result.name || ('Network ' + (this.program.blocks.length + 1)),
             comment: result.comment || '',
+        }
+        
+        // Initialize code property for text-based languages
+        if (['asm', 'stl', 'plcscript', 'st'].includes(result.type)) {
+            newBlock.code = ''
         }
         
         if (typeof index === 'undefined') {

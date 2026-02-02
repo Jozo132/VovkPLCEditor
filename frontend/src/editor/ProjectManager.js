@@ -625,7 +625,9 @@ export default class ProjectManager {
                 'asm': 'PLCASM',
                 'plcasm': 'PLCASM',
                 'stl': 'STL',
-                'ladder': 'LADDER'
+                'ladder': 'LADDER',
+                'plcscript': 'PLCSCRIPT',
+                'st': 'ST'
             }
             const lang = langMap[blockType.toLowerCase()] || 'PLCASM'
             
@@ -1106,7 +1108,9 @@ export default class ProjectManager {
                 'asm': 'PLCASM',
                 'plcasm': 'PLCASM',
                 'stl': 'STL',
-                'ladder': 'LADDER'
+                'ladder': 'LADDER',
+                'plcscript': 'PLCSCRIPT',
+                'st': 'ST'
             }
             const lang = langMap[blockType.toLowerCase()] || 'PLCASM'
             

@@ -18,6 +18,7 @@ export class MiniCodeEditor {
      *          onLintHover?:(payload:{state:'enter'|'leave',diagnostic:any,blockId?:string})=>void,
      *          onGoToDefinition?:(payload:{type:'symbol',name:string,blockId?:string})=>void,
      *          onPreviewClick?:(entry:any, event:MouseEvent)=>void,
+     *          onPreviewContextMenu?:(entry:any, event:MouseEvent)=>void,
      *          onPreviewAction?:(entry:any, action:'set'|'reset'|'toggle'|'edit')=>void,
      *          onScroll?:(pos:{top:number,left:number})=>void,
      *          onChange?:(value:string)=>void,
@@ -2025,16 +2026,107 @@ export class MiniCodeEditor {
 }
 MiniCodeEditor.languages = {}
 
-/* Structured Text */
+/* IEC 61131-3 Structured Text (ST) */
 MiniCodeEditor.registerLanguage('st', {
     rules: [
+        // Comments
         {regex: /\(\*[\s\S]*?\*\)/g, className: 'cmt'},
         {regex: /\/\/.*$/gm, className: 'cmt'},
-        {regex: /"(?:\\.|[^"])*"/g, className: 'str'},
-        {regex: /\b(END_IF|IF|THEN|ELSE|VAR|BOOL|INT|REAL)\b/g, className: 'kw'},
-        {regex: /\b\d+(?:\.\d+)?\b/g, className: 'num'},
+        // Strings
+        {regex: /'(?:[^'\\]|\\.)*'/g, className: 'str'},
+        {regex: /"(?:[^"\\]|\\.)*"/g, className: 'str'},
+        // Time literals T#... TIME#...
+        {regex: /\b(?:T|TIME)#[\w\d_]+/gi, className: 'num'},
+        // Date/Time literals
+        {regex: /\b(?:DATE|TOD|DT|D)#[\w\d_\-:\.]+/gi, className: 'num'},
+        // IEC Addresses %IX0.0, %QW10, etc.
+        {regex: /%[IQMKCT][XBWD]?\d+(?:\.\d+)?/gi, className: 'addr'},
+        // Control flow keywords
+        {regex: /\b(IF|THEN|ELSE|ELSIF|END_IF|CASE|OF|END_CASE)\b/gi, className: 'kw'},
+        // Loop keywords
+        {regex: /\b(FOR|TO|BY|DO|END_FOR|WHILE|END_WHILE|REPEAT|UNTIL|END_REPEAT|EXIT|RETURN)\b/gi, className: 'kw'},
+        // Variable declaration keywords
+        {regex: /\b(VAR|VAR_INPUT|VAR_OUTPUT|VAR_IN_OUT|VAR_TEMP|VAR_GLOBAL|END_VAR|AT|CONSTANT|RETAIN)\b/gi, className: 'kw'},
+        // Function/Program blocks
+        {regex: /\b(FUNCTION|END_FUNCTION|FUNCTION_BLOCK|END_FUNCTION_BLOCK|PROGRAM|END_PROGRAM)\b/gi, className: 'kw'},
+        // Type keywords
+        {regex: /\b(BOOL|BYTE|WORD|DWORD|LWORD|SINT|INT|DINT|LINT|USINT|UINT|UDINT|ULINT|REAL|LREAL|TIME|DATE|TOD|DT|STRING|WSTRING|ARRAY|STRUCT|END_STRUCT)\b/gi, className: 'dt'},
+        // Boolean and logical
+        {regex: /\b(TRUE|FALSE|AND|OR|XOR|NOT|MOD)\b/gi, className: 'kw'},
+        // Timer/Counter function blocks
+        {regex: /\b(TON|TOF|TP|CTU|CTD|CTUD|R_TRIG|F_TRIG)\b/gi, className: 'type-keyword'},
+        // Assignment operator
+        {regex: /:=/g, className: 'kw'},
+        // Numbers
+        {regex: /\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g, className: 'num'},
+        {regex: /\b16#[\da-fA-F_]+\b/g, className: 'num'},
+        {regex: /\b2#[01_]+\b/g, className: 'num'},
+        {regex: /\b8#[0-7_]+\b/g, className: 'num'},
+        // Identifiers (fallback)
+        {regex: /[A-Za-z_]\w*/g, className: 'variable'},
     ],
-    words: ['IF', 'THEN', 'ELSE', 'END_IF', 'BOOL', 'INT', 'REAL'],
+    words: [
+        'IF', 'THEN', 'ELSE', 'ELSIF', 'END_IF', 'CASE', 'OF', 'END_CASE',
+        'FOR', 'TO', 'BY', 'DO', 'END_FOR', 'WHILE', 'END_WHILE', 'REPEAT', 'UNTIL', 'END_REPEAT', 'EXIT', 'RETURN',
+        'VAR', 'VAR_INPUT', 'VAR_OUTPUT', 'VAR_IN_OUT', 'VAR_TEMP', 'VAR_GLOBAL', 'END_VAR', 'AT', 'CONSTANT', 'RETAIN',
+        'FUNCTION', 'END_FUNCTION', 'FUNCTION_BLOCK', 'END_FUNCTION_BLOCK', 'PROGRAM', 'END_PROGRAM',
+        'BOOL', 'BYTE', 'WORD', 'DWORD', 'LWORD', 'SINT', 'INT', 'DINT', 'LINT', 'USINT', 'UINT', 'UDINT', 'ULINT', 'REAL', 'LREAL',
+        'TIME', 'DATE', 'TOD', 'DT', 'STRING', 'WSTRING', 'ARRAY', 'STRUCT', 'END_STRUCT',
+        'TRUE', 'FALSE', 'AND', 'OR', 'XOR', 'NOT', 'MOD',
+        'TON', 'TOF', 'TP', 'CTU', 'CTD', 'CTUD', 'R_TRIG', 'F_TRIG',
+    ],
+})
+
+/* PLCScript (TypeScript/ES7 subset with PLC extensions) */
+MiniCodeEditor.registerLanguage('plcscript', {
+    rules: [
+        // Comments
+        {regex: /\/\*[\s\S]*?\*\//g, className: 'cmt'},
+        {regex: /\/\/.*$/gm, className: 'cmt'},
+        // Strings
+        {regex: /'(?:[^'\\]|\\.)*'/g, className: 'str'},
+        {regex: /"(?:[^"\\]|\\.)*"/g, className: 'str'},
+        {regex: /`(?:[^`\\]|\\.)*`/g, className: 'str'},
+        // Memory addresses (PLCASM style)
+        {regex: /\b[CXYMS]\d+(?:\.\d+)?\b/gi, className: 'addr'},
+        {regex: /\bM[WD]?\d+\b/gi, className: 'addr'},
+        // Keywords
+        {regex: /\b(let|const|function|if|else|while|for|return|break|continue)\b/g, className: 'kw'},
+        // Type annotations
+        {regex: /\b(u8|i8|u16|i16|u32|i32|u64|i64|f32|f64|bool|void)\b/g, className: 'dt'},
+        // Auto keyword for automatic address allocation
+        {regex: /\b(auto)\b/g, className: 'type-keyword'},
+        // Address operator @
+        {regex: /@/g, className: 'kw'},
+        // Boolean literals
+        {regex: /\b(true|false)\b/g, className: 'num'},
+        // Numbers (hex, binary, decimal, float)
+        {regex: /\b0x[\da-fA-F]+\b/g, className: 'num'},
+        {regex: /\b0b[01]+\b/g, className: 'num'},
+        {regex: /\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g, className: 'num'},
+        // Operators
+        {regex: /[+\-*\/%&|^~<>=!]+/g, className: 'dot'},
+        // Parentheses and braces
+        {regex: /[(){}\[\];,]/g, className: 'dot'},
+        // Function names (identifier followed by parenthesis)
+        {
+            regex: /\b([A-Za-z_]\w*)(\s*\()/g,
+            replace: (match, name, paren) => {
+                const keywords = ['if', 'else', 'while', 'for', 'return', 'function', 'let', 'const']
+                if (keywords.includes(name)) {
+                    return `<span class="kw">${name}</span>${paren}`
+                }
+                return `<span class="function">${name}</span>${paren}`
+            }
+        },
+        // Identifiers (fallback)
+        {regex: /[A-Za-z_]\w*/g, className: 'variable'},
+    ],
+    words: [
+        'let', 'const', 'function', 'if', 'else', 'while', 'for', 'return', 'break', 'continue',
+        'u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'u64', 'i64', 'f32', 'f64', 'bool', 'void',
+        'auto', 'true', 'false',
+    ],
 })
 
 /* JavaScript */
