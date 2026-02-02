@@ -3285,11 +3285,22 @@ export default class WindowManager {
                         </p>
                     </div>
                     
-                    <div style="background: #1e1e2e; border: 1px solid #555; border-radius: 4px; padding: 12px;">
+                    <div style="background: #1e1e2e; border: 1px solid #555; border-radius: 4px; padding: 12px; margin-bottom: 16px;">
                         <div style="color: #dcdcaa; font-weight: bold; margin-bottom: 8px;">📜 License</div>
                         <p style="margin: 0; color: #ddd; font-size: 13px;">
                             This software is licensed under the <strong>GPL-3.0</strong> license. 
                             See the LICENSE file for full details.
+                        </p>
+                    </div>
+                    
+                    <div style="background: #1e2e1e; border: 1px solid #555; border-radius: 4px; padding: 12px;">
+                        <div style="color: #9cdcfe; font-weight: bold; margin-bottom: 8px;">™ Trademarks & Affiliations</div>
+                        <p style="margin: 0; color: #ddd; font-size: 13px;">
+                            Product names and trademarks referenced in this project are the property of their respective owners. 
+                            This project is an independent open-source work and is not affiliated with, endorsed by, sponsored by, 
+                            or approved by any manufacturer or vendor. All implementations, designs, and source code are original 
+                            and developed independently. Any similarities or references in comments are provided solely for familiarity 
+                            and interoperability and are based on publicly known concepts and the IEC 61131-3 industrial controls standard.
                         </p>
                     </div>
                 </div>
