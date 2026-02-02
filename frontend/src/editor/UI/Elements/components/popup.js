@@ -328,7 +328,8 @@ export class Popup {
     }
 
     /**
-     * @typedef {{ name: string, label?: string, readonly?: boolean, margin?: string, onChange?: (data: any) => void }} InputCommon
+     * @typedef {{ value: string, label?: string }} AutocompleteItem
+     * @typedef {{ name: string, label?: string, readonly?: boolean, margin?: string, onChange?: (data: any) => void, autocomplete?: () => AutocompleteItem[] }} InputCommon
      * @typedef {InputCommon & { type: 'text', value?: string, placeholder?: string }} TextInput
      * @typedef {InputCommon & { type: 'textarea', value?: string, placeholder?: string, rows?: number }} TextareaInput
      * @typedef {InputCommon & { type: 'number', value?: number }} NumberInput
@@ -348,6 +349,9 @@ export class Popup {
 
         const form = document.createElement('form') // Will be passed to the popup as content
         form.classList.add('plc-popup-form')
+        
+        // Track autocomplete dropdowns for cleanup
+        const autocompleteDropdowns = []
         options.content = form
 
         form.addEventListener('submit', e => {
@@ -385,6 +389,136 @@ export class Popup {
                 input_element = ElementSynthesis(/*HTML*/ `<div class="readonly" id="${name}" name="${name}" readonly style="background: none;" tabindex="-1" disabled></div>`)
             } else {
                 input_element = ElementSynthesis(/*HTML*/ `<input type="${typeName}" id="${name}" name="${name}" value="${value || ''}" placeholder="${placeholder}" autocomplete="off">`)
+            }
+            
+            // Autocomplete support for text inputs
+            const autocompleteProvider = input.autocomplete
+            let autocompleteWrapper = null
+            let autocompleteDropdown = null
+            let autocompleteItems = []
+            let autocompleteIndex = -1
+            
+            if (autocompleteProvider && type === 'text' && !readonly) {
+                // Create wrapper to contain input
+                autocompleteWrapper = ElementSynthesis(/*HTML*/ `<div class="plc-popup-autocomplete-wrapper"></div>`)
+                autocompleteWrapper.appendChild(input_element)
+                
+                // Create autocomplete dropdown (will be appended to dialog for proper layering)
+                autocompleteDropdown = ElementSynthesis(/*HTML*/ `<div class="plc-popup-autocomplete"></div>`)
+                autocompleteDropdown.style.display = 'none'
+                
+                const updateAutocomplete = () => {
+                    const query = input_element.value.toLowerCase().trim()
+                    const items = autocompleteProvider() || []
+                    
+                    // If no query, show all items (limited)
+                    if (!query) {
+                        autocompleteItems = items.slice(0, 15)
+                    } else {
+                        // Filter and sort items
+                        const starts = []
+                        const contains = []
+                        
+                        items.forEach(item => {
+                            const val = item.value.toLowerCase()
+                            if (val === query) return // Exact match, skip
+                            if (val.startsWith(query)) {
+                                starts.push(item)
+                            } else if (val.includes(query)) {
+                                contains.push(item)
+                            }
+                        })
+                        
+                        autocompleteItems = [...starts, ...contains].slice(0, 15)
+                    }
+                    
+                    autocompleteIndex = -1
+                    
+                    if (autocompleteItems.length === 0) {
+                        autocompleteDropdown.style.display = 'none'
+                        return
+                    }
+                    
+                    autocompleteDropdown.innerHTML = autocompleteItems.map((item, idx) => 
+                        `<div class="plc-popup-autocomplete-item" data-idx="${idx}">
+                            <span>${item.value}</span>
+                            ${item.label ? `<span class="plc-popup-autocomplete-detail">${item.label}</span>` : ''}
+                        </div>`
+                    ).join('')
+                    
+                    // Position dropdown below input using fixed positioning
+                    const rect = input_element.getBoundingClientRect()
+                    autocompleteDropdown.style.top = (rect.bottom + 2) + 'px'
+                    autocompleteDropdown.style.left = rect.left + 'px'
+                    autocompleteDropdown.style.width = rect.width + 'px'
+                    autocompleteDropdown.style.display = 'block'
+                    
+                    // Click handlers
+                    autocompleteDropdown.querySelectorAll('.plc-popup-autocomplete-item').forEach((el, idx) => {
+                        el.addEventListener('mousedown', e => {
+                            e.preventDefault()
+                            input_element.value = autocompleteItems[idx].value
+                            states[name].value_in = autocompleteItems[idx].value
+                            autocompleteDropdown.style.display = 'none'
+                            if (onChange) onChange(states)
+                        })
+                        el.addEventListener('mouseenter', () => {
+                            autocompleteIndex = idx
+                            updateAutocompleteHighlight()
+                        })
+                    })
+                }
+                
+                const updateAutocompleteHighlight = () => {
+                    autocompleteDropdown.querySelectorAll('.plc-popup-autocomplete-item').forEach((el, idx) => {
+                        el.classList.toggle('active', idx === autocompleteIndex)
+                    })
+                }
+                
+                const closeAutocomplete = () => {
+                    autocompleteDropdown.style.display = 'none'
+                    autocompleteItems = []
+                    autocompleteIndex = -1
+                }
+                
+                input_element.addEventListener('input', updateAutocomplete)
+                input_element.addEventListener('focus', updateAutocomplete)
+                input_element.addEventListener('blur', () => setTimeout(closeAutocomplete, 150))
+                
+                input_element.addEventListener('keydown', e => {
+                    if (autocompleteDropdown.style.display === 'none') return
+                    
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        autocompleteIndex = Math.min(autocompleteIndex + 1, autocompleteItems.length - 1)
+                        updateAutocompleteHighlight()
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        autocompleteIndex = Math.max(autocompleteIndex - 1, 0)
+                        updateAutocompleteHighlight()
+                    } else if (e.key === 'Enter' && autocompleteIndex >= 0) {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        input_element.value = autocompleteItems[autocompleteIndex].value
+                        states[name].value_in = autocompleteItems[autocompleteIndex].value
+                        closeAutocomplete()
+                        if (onChange) onChange(states)
+                    } else if (e.key === 'Escape') {
+                        closeAutocomplete()
+                    }
+                })
+                
+                // Append dropdown to the form's parent dialog for proper z-index layering
+                // We'll do this after the form is added to the popup
+                setTimeout(() => {
+                    const dialog = form.closest('dialog')
+                    if (dialog) {
+                        dialog.appendChild(autocompleteDropdown)
+                    } else {
+                        document.body.appendChild(autocompleteDropdown)
+                    }
+                    autocompleteDropdowns.push(autocompleteDropdown)
+                }, 0)
             }
             if (typeof margin !== 'undefined') {
                 // @ts-ignore
@@ -448,10 +582,15 @@ export class Popup {
                 })
             }
             if (label_element) form.appendChild(label_element)
-            form.appendChild(input_element)
+            // Append wrapper if autocomplete is enabled, otherwise just the input
+            form.appendChild(autocompleteWrapper || input_element)
         })
 
         const selected = await Popup.promise(options)
+        
+        // Clean up autocomplete dropdowns
+        autocompleteDropdowns.forEach(dropdown => dropdown.remove())
+        
         if (selected === 'closed') return null
         if (selected === 'destroyed') return null
         if (selected === 'cancel') return null

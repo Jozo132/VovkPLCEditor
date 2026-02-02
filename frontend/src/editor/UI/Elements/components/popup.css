@@ -113,7 +113,7 @@
     margin: 0;
     padding: 0;
 }
-.plc-popup-form * {
+.plc-popup-form > *:not(.plc-popup-autocomplete-wrapper) {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -126,6 +126,15 @@
     align-self: center;
     justify-self: stretch;
     min-width: 0;
+}
+.plc-popup-form > .plc-popup-autocomplete-wrapper {
+    margin-top: 4px;
+    margin-bottom: 4px;
+    align-self: center;
+    justify-self: stretch;
+}
+.plc-popup-form > .plc-popup-autocomplete-wrapper > input {
+    width: 100%;
 }
 .plc-popup-form label {
     margin-right: 8px;
@@ -177,4 +186,37 @@
 .plc-popup-form textarea.error {
     border-color: #dc3545;
     box-shadow: 0 0 5px rgba(220, 53, 69, 0.5);
+}
+
+/* Autocomplete wrapper and dropdown */
+.plc-popup-autocomplete-wrapper {
+    position: relative;
+    width: 100%;
+}
+.plc-popup-autocomplete {
+    position: fixed;
+    background: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 4px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+    z-index: 10000;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.plc-popup-autocomplete-item {
+    padding: 6px 10px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #ECECEC;
+}
+.plc-popup-autocomplete-item:hover,
+.plc-popup-autocomplete-item.active {
+    background: #4682B4;
+}
+.plc-popup-autocomplete-detail {
+    opacity: 0.6;
+    font-size: 0.85em;
+    margin-left: 8px;
 }

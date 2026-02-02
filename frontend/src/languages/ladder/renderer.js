@@ -6198,6 +6198,78 @@ function initializeLiveMonitoring(editor, ladder, canvas) {
 
 
 /**
+ * Create an autocomplete provider function for symbols
+ * @param {VovkPLCEditor} editor
+ * @param {string[]} [filterLocations] - Optional filter for symbol locations (e.g. ['input', 'output', 'marker'])
+ * @returns {() => {value: string, label: string}[]}
+ */
+const createSymbolAutocomplete = (editor, filterLocations = null) => {
+  return () => {
+    const symbols = editor.project?.symbols || []
+    const filtered = filterLocations 
+      ? symbols.filter(s => filterLocations.includes(s.location))
+      : symbols
+    return filtered.map(s => ({
+      value: s.name,
+      label: `${s.location} ${s.type}`
+    }))
+  }
+}
+
+/**
+ * Lookup a direct address and return the corresponding symbol name if found
+ * Address formats: X0.0, Y0.0, M10.5, MW14, MD0, etc.
+ * @param {VovkPLCEditor} editor
+ * @param {string} addressOrSymbol - The address string to lookup
+ * @returns {string} - Symbol name if found, otherwise original input
+ */
+const resolveAddressToSymbol = (editor, addressOrSymbol) => {
+  if (!addressOrSymbol || typeof addressOrSymbol !== 'string') return addressOrSymbol
+  
+  const trimmed = addressOrSymbol.trim()
+  const symbols = editor.project?.symbols || []
+  
+  // First check if it's already a symbol name (not a direct address)
+  const existingSymbol = symbols.find(s => s.name === trimmed)
+  if (existingSymbol) return trimmed
+  
+  // Parse as direct address
+  const parsed = parseAddressToSymbol(trimmed)
+  if (!parsed) return trimmed
+  
+  // Map location codes
+  const locationMap = {
+    'K': 'control',
+    'C': 'counter', 
+    'T': 'timer',
+    'X': 'input',
+    'Y': 'output',
+    'S': 'system',
+    'M': 'marker'
+  }
+  
+  // Try to find a matching symbol by location and address
+  const matchingSymbol = symbols.find(s => {
+    if (s.location !== parsed.location) return false
+    
+    // Compare addresses - handle both bit and byte addresses
+    const parsedAddr = parsed.address
+    const symbolAddr = s.address
+    
+    // For bit addresses (e.g. M0.1), the address contains both byte and bit
+    if (parsed.type === 'bit') {
+      // Exact match needed for bit addresses
+      return Math.abs(symbolAddr - parsedAddr) < 0.001
+    }
+    
+    // For typed addresses (MB, MW, MD, MR), match on byte offset
+    return Math.floor(symbolAddr) === Math.floor(parsedAddr)
+  })
+  
+  return matchingSymbol ? matchingSymbol.name : trimmed
+}
+
+/**
  * Prompt user to enter a symbol name for a ladder block
  * @param {VovkPLCEditor} editor
  * @param {PLC_LadderBlock} block
@@ -6221,6 +6293,9 @@ async function promptForSymbol(editor, block, ladder) {
   }
   const blockTypeLabel = blockTypeLabels[block.type] || block.type
   const currentSymbol = block.symbol || ''
+  
+  // All symbols for autocomplete - no filtering to ensure symbols show up
+  const autocomplete = createSymbolAutocomplete(editor, null)
 
   const result = await Popup.form({
     title: `Edit ${blockTypeLabel}`,
@@ -6231,7 +6306,8 @@ async function promptForSymbol(editor, block, ladder) {
         label: 'Symbol / Address',
         type: 'text',
         value: currentSymbol,
-        placeholder: 'e.g. Start_Button or X0.0'
+        placeholder: 'e.g. Start_Button or X0.0',
+        autocomplete
       }
     ],
     buttons: [
@@ -6241,7 +6317,9 @@ async function promptForSymbol(editor, block, ladder) {
   })
 
   if (result && result.symbol !== undefined) {
-    block.symbol = result.symbol.trim()
+    // Auto-resolve hardcoded address to symbol if match found
+    const resolvedSymbol = resolveAddressToSymbol(editor, result.symbol.trim())
+    block.symbol = resolvedSymbol
     // Clear cached state so it gets re-resolved
     block.state = undefined
     // Re-render the ladder
@@ -6385,7 +6463,8 @@ async function promptForTimerParameters(editor, block, ladder) {
         label: 'Timer Symbol',
         type: 'text',
         value: currentSymbol,
-        placeholder: 'e.g. Timer_1 or T0'
+        placeholder: 'e.g. Timer_1 or T0',
+        autocomplete: createSymbolAutocomplete(editor, ['timer'])
       },
       {
         name: 'preset',
@@ -6411,7 +6490,9 @@ async function promptForTimerParameters(editor, block, ladder) {
   })
 
   if (result && result.symbol !== undefined) {
-    block.symbol = result.symbol.trim()
+    // Auto-resolve hardcoded address to symbol if match found
+    const resolvedSymbol = resolveAddressToSymbol(editor, result.symbol.trim())
+    block.symbol = resolvedSymbol
     // Store the T# string directly (ensure it has T# prefix)
     let presetStr = result.preset.trim()
     if (!presetStr.toUpperCase().startsWith('T#')) {
@@ -6453,7 +6534,8 @@ async function promptForCounterParameters(editor, block, ladder) {
         label: 'Counter Symbol',
         type: 'text',
         value: currentSymbol,
-        placeholder: 'e.g. Counter_1 or C0'
+        placeholder: 'e.g. Counter_1 or C0',
+        autocomplete: createSymbolAutocomplete(editor, ['counter'])
       },
       {
         name: 'preset',
@@ -6479,7 +6561,9 @@ async function promptForCounterParameters(editor, block, ladder) {
   })
 
   if (result && result.symbol !== undefined) {
-    block.symbol = result.symbol.trim()
+    // Auto-resolve hardcoded address to symbol if match found
+    const resolvedSymbol = resolveAddressToSymbol(editor, result.symbol.trim())
+    block.symbol = resolvedSymbol
     block.preset = parseInt(result.preset) || 10
 
     // Clear cached state so it gets re-resolved
@@ -6513,6 +6597,9 @@ async function promptForFunctionBlockParameters(editor, block, ladder) {
   const currentIn1 = block.in1 || ''
   const currentIn2 = block.in2 || ''
   const currentOut = block.out || block.symbol || ''
+  
+  // Autocomplete for memory/marker symbols
+  const memoryAutocomplete = createSymbolAutocomplete(editor, ['marker', 'memory'])
 
   // Build inputs based on block type
   const inputs = [
@@ -6541,7 +6628,8 @@ async function promptForFunctionBlockParameters(editor, block, ladder) {
       label: 'Address',
       type: 'text',
       value: block.symbol || '',
-      placeholder: 'e.g. MB0, MW2, MD4, MR8'
+      placeholder: 'e.g. MB0, MW2, MD4, MR8',
+      autocomplete: memoryAutocomplete
     })
   } else {
     inputs.push({
@@ -6549,7 +6637,8 @@ async function promptForFunctionBlockParameters(editor, block, ladder) {
       label: isMove ? 'Source (IN)' : 'Input 1 (IN1)',
       type: 'text',
       value: currentIn1,
-      placeholder: 'e.g. MW0, #100, MD4'
+      placeholder: 'e.g. MW0, #100, MD4',
+      autocomplete: memoryAutocomplete
     })
 
     // Add IN2 for binary operations
@@ -6559,7 +6648,8 @@ async function promptForFunctionBlockParameters(editor, block, ladder) {
         label: 'Input 2 (IN2)',
         type: 'text',
         value: currentIn2,
-        placeholder: 'e.g. MW2, #50'
+        placeholder: 'e.g. MW2, #50',
+        autocomplete: memoryAutocomplete
       })
     }
 
@@ -6570,7 +6660,8 @@ async function promptForFunctionBlockParameters(editor, block, ladder) {
         label: 'Output (OUT)',
         type: 'text',
         value: currentOut,
-        placeholder: 'e.g. MW10, MD8'
+        placeholder: 'e.g. MW10, MD8',
+        autocomplete: memoryAutocomplete
       })
     }
   }
@@ -6632,19 +6723,21 @@ async function promptForFunctionBlockParameters(editor, block, ladder) {
     block.dataType = result.dataType || 'i16'
     
     if (isIncDec) {
-      // INC/DEC uses symbol as the address
-      block.symbol = result.address?.trim() || ''
+      // INC/DEC uses symbol as the address - auto-resolve to symbol if match found
+      block.symbol = resolveAddressToSymbol(editor, result.address?.trim() || '')
       // Clear any legacy in1/out fields
       delete block.in1
       delete block.out
     } else {
-      block.in1 = result.in1?.trim() || ''
+      // Auto-resolve hardcoded addresses to symbols if matches found
+      block.in1 = resolveAddressToSymbol(editor, result.in1?.trim() || '')
       if (!isUnary && !isMove) {
-        block.in2 = result.in2?.trim() || ''
+        block.in2 = resolveAddressToSymbol(editor, result.in2?.trim() || '')
       }
       if (isMath || isMove) {
-        block.out = result.out?.trim() || ''
-        block.symbol = result.out?.trim() || '' // Use output as symbol for display
+        const resolvedOut = resolveAddressToSymbol(editor, result.out?.trim() || '')
+        block.out = resolvedOut
+        block.symbol = resolvedOut // Use output as symbol for display
       }
     }
 
