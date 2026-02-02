@@ -37,7 +37,7 @@ const dlog = createDedupLogger()
 // PLCScript address regex: similar to PLCASM style X0.0, Y0.0, M0, etc.
 const ADDRESS_REGEX = /^(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i
 const ADDRESS_LOCATION_MAP = {
-    K: 'control',
+    K: 'system',  // K now maps to system (formerly control)
     C: 'counter',
     T: 'timer',
     X: 'input',
@@ -50,10 +50,9 @@ const LOCATION_COLORS = {
     output: '#d68d5e',
     marker: '#c586c0',
     memory: '#c586c0',
-    control: '#4fc1ff',
     counter: '#dcdcaa',
     timer: '#ce9178',
-    system: '#a0a0a0',
+    system: '#4fc1ff',
 }
 const TYPE_COLORS = {
     bit: '#569cd6',
@@ -181,7 +180,7 @@ export const plcscriptRenderer = {
                         fullType = symbol.type
                         const addr = symbol.address
                         const loc = symbol.location || 'marker'
-                        const prefixMap = {input: 'X', output: 'Y', marker: 'M', system: 'S', control: 'K', counter: 'C', timer: 'T'}
+                        const prefixMap = {input: 'X', output: 'Y', marker: 'M', system: 'S', counter: 'C', timer: 'T'}
                         const prefix = prefixMap[loc] || 'M'
                         if (fullType === 'bit') {
                             const byte = Math.floor(addr)
@@ -233,7 +232,7 @@ export const plcscriptRenderer = {
                 const bitIndex = bitStr ? Number.parseInt(bitStr, 10) : null
                 const byteOffset = Number.parseInt(byteStr, 10)
                 
-                const prefixLocationMap = {K: 'control', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}
+                const prefixLocationMap = {K: 'system', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}
                 const location = prefixLocationMap[prefix] || 'marker'
                 
                 const offsets = editor.project.offsets || {}

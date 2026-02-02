@@ -41,10 +41,9 @@ const LOCATION_COLORS = {
     output: '#d68d5e',
     marker: '#c586c0',
     memory: '#c586c0',
-    control: '#4fc1ff',
     counter: '#dcdcaa',
     timer: '#ce9178',
-    system: '#a0a0a0',
+    system: '#4fc1ff',
 }
 const TYPE_COLORS = {
     bit: '#569cd6',
@@ -181,8 +180,8 @@ export const stRenderer = {
                         fullType = symbol.type
                         const addr = symbol.address
                         const loc = symbol.location || 'marker'
-                        // IEC 61131-3 style prefixes
-                        const prefixMap = {input: '%I', output: '%Q', marker: '%M', system: '%S', control: '%K', counter: '%C', timer: '%T'}
+                        // IEC 61131-3 style prefixes (K now maps to S/system)
+                        const prefixMap = {input: '%I', output: '%Q', marker: '%M', system: '%S', counter: '%C', timer: '%T'}
                         const prefix = prefixMap[loc] || '%M'
                         if (fullType === 'bit' || fullType === 'BOOL') {
                             const byte = Math.floor(addr)
@@ -235,7 +234,7 @@ export const stRenderer = {
                     const symbol = editor.project.symbols.find(s => s.name === entry.name)
                     if (symbol) {
                         const loc = symbol.location || 'marker'
-                        const prefixMap = {input: 'I', output: 'Q', marker: 'M', system: 'S', control: 'K', counter: 'C', timer: 'T'}
+                        const prefixMap = {input: 'I', output: 'Q', marker: 'M', system: 'S', counter: 'C', timer: 'T'}
                         prefix = prefixMap[loc] || 'M'
                         byteOffset = Math.floor(symbol.address)
                         if (symbol.type === 'bit' || symbol.type === 'BOOL') {
@@ -244,7 +243,7 @@ export const stRenderer = {
                     }
                 }
 
-                const prefixLocationMap = {K: 'control', C: 'counter', T: 'timer', I: 'input', Q: 'output', M: 'marker', S: 'system'}
+                const prefixLocationMap = {K: 'system', C: 'counter', T: 'timer', I: 'input', Q: 'output', M: 'marker', S: 'system'}
                 const location = prefixLocationMap[prefix] || 'marker'
                 
                 const offsets = editor.project.offsets || {}
@@ -392,7 +391,7 @@ export const stRenderer = {
                                 const sizeQual = (iecMatch[2] || '').toUpperCase()
                                 const bitIndex = iecMatch[4] ? parseInt(iecMatch[4], 10) : null
                                 
-                                const prefixLocationMap = {I: 'input', Q: 'output', M: 'marker', K: 'control', C: 'counter', T: 'timer'}
+                                const prefixLocationMap = {I: 'input', Q: 'output', M: 'marker', K: 'system', S: 'system', C: 'counter', T: 'timer'}
                                 const location = prefixLocationMap[prefix] || 'marker'
                                 
                                 let inferredType = 'byte'

@@ -368,11 +368,10 @@ export class VovkPLCEditor {
     constructor({workspace, debug_css, debug_context, debug_hover, initial_program}) {
         this.initial_program = initial_program || {
             offsets: {
-                control: {offset: 0, size: 16},
-                input: {offset: 16, size: 16},
-                output: {offset: 32, size: 16},
-                system: {offset: 48, size: 16},
-                marker: {offset: 64, size: 16},
+                system: {offset: 0, size: 64},
+                input: {offset: 64, size: 64},
+                output: {offset: 128, size: 64},
+                marker: {offset: 192, size: 256},
             },
             symbols: [],
             // folders: ['/programs/test/b', '/programs/test/a', '/programs/test/c'],
@@ -650,10 +649,9 @@ export class VovkPLCEditor {
         const offsets = (this.project.offsets = ensureOffsets(this.project.offsets || {}))
 
         const map = {
-            control: ['control_offset', 'control_size'],
+            system: ['system_offset', 'system_size'],
             input: ['input_offset', 'input_size'],
             output: ['output_offset', 'output_size'],
-            system: ['system_offset', 'system_size'],
             marker: ['marker_offset', 'marker_size'],
         }
 
@@ -873,7 +871,7 @@ export class VovkPLCEditor {
         }
 
         const locationMap = {
-            K: 'control',
+            K: 'system',  // K now maps to system (formerly control)
             C: 'counter',
             T: 'timer',
             X: 'input',
@@ -1011,7 +1009,7 @@ export class VovkPLCEditor {
             if (addrMatch) {
                 let prefix = addrMatch[1] ? addrMatch[1].toUpperCase() : ''
                 let byte = parseInt(addrMatch[2] || addrMatch[4], 10)
-                let loc = prefix ? {K: 'control', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}[prefix] || 'marker' : 'memory'
+                let loc = prefix ? {K: 'system', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}[prefix] || 'marker' : 'memory'
                 let base = loc === 'memory' ? 0 : normalizedOffsets[loc]?.offset || 0
                 // Timer (T) uses 9 bytes per unit, Counter (C) uses 5 bytes per unit
                 let structSize = prefix === 'T' ? 9 : prefix === 'C' ? 5 : 1
@@ -1061,7 +1059,7 @@ export class VovkPLCEditor {
                 if (pAddrMatch) {
                     let prefix = pAddrMatch[1] ? pAddrMatch[1].toUpperCase() : ''
                     let byte = parseInt(pAddrMatch[2] || pAddrMatch[4], 10)
-                    let loc = prefix ? {K: 'control', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}[prefix] || 'marker' : 'memory'
+                    let loc = prefix ? {K: 'system', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}[prefix] || 'marker' : 'memory'
                     let base = loc === 'memory' ? 0 : normalizedOffsets[loc]?.offset || 0
                     // Timer (T) uses 9 bytes per unit, Counter (C) uses 5 bytes per unit
                     let structSize = prefix === 'T' ? 9 : prefix === 'C' ? 5 : 1
@@ -1861,21 +1859,20 @@ export class VovkPLCEditor {
                 const offsets = this.project?.offsets
                 if (offsets && typeof this.runtime.setRuntimeOffsets === 'function') {
                     /*
-                        // Updated Layout based on new default sizes in plcasm-compiler.h
-                        // C: 0 (Size 64)
-                        // X: 64 (Size 64)
-                        // Y: 128 (Size 64)
-                        // S: 192 (Size 256)
-                        // M: 448 (Size 256)
-                        await runtime.callExport('setRuntimeOffsets', 0, 64, 128, 192, 448)
+                        // Updated Layout after K→S refactor
+                        // S: 0 (Size 64) - System (formerly K/Control)
+                        // X: 64 (Size 64) - Input
+                        // Y: 128 (Size 64) - Output
+                        // M: 192 (Size 256) - Marker
+                        // T and C are compiler-defined based on usage
+                        await runtime.callExport('setRuntimeOffsets', 0, 64, 128, 192)
                     */
                     const normalized = ensureOffsets(offsets)
-                    const C = normalized?.control?.offset || 0
+                    const S = normalized?.system?.offset || 0
                     const X = normalized?.input?.offset || 0
                     const Y = normalized?.output?.offset || 0
-                    const S = normalized?.system?.offset || 0
                     const M = normalized?.marker?.offset || 0
-                    await this.runtime.setRuntimeOffsets(C, X, Y, S, M)
+                    await this.runtime.setRuntimeOffsets(S, X, Y, M)
                 }
 
                 // First, lint STL blocks separately using lintSTL

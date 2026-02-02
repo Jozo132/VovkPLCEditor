@@ -24,10 +24,9 @@ export default class SimulationConnection extends ConnectionBase {
         if (offsets && typeof this.plc.setRuntimeOffsets === 'function') {
             const normalized = ensureOffsets(offsets)
             await this.plc.setRuntimeOffsets(
-                normalized.control.offset,
+                normalized.system.offset,
                 normalized.input.offset,
                 normalized.output.offset,
-                normalized.system.offset,
                 normalized.marker.offset
             )
         }
@@ -62,21 +61,19 @@ export default class SimulationConnection extends ConnectionBase {
             stack: 1024,
             memory: this.plc.memory_size || 32768,
             program: this.plc.program_size || 32768,
-            control_offset: normalized?.control?.offset ?? 0,
-            control_size: normalized?.control?.size ?? 64,
+            system_offset: normalized?.system?.offset ?? 0,
+            system_size: normalized?.system?.size ?? 64,
             input_offset: normalized?.input?.offset ?? 64,
             input_size: normalized?.input?.size ?? 64,
             output_offset: normalized?.output?.offset ?? 128,
             output_size: normalized?.output?.size ?? 64,
-            system_offset: normalized?.system?.offset ?? 192,
-            system_size: normalized?.system?.size ?? 256,
-            marker_offset: normalized?.marker?.offset ?? 448,
+            marker_offset: normalized?.marker?.offset ?? 192,
             marker_size: normalized?.marker?.size ?? 256,
-            timer_offset: normalized?.timer?.offset ?? 704,
-            timer_count: 16,
+            timer_offset: normalized?.timer?.offset ?? 0,
+            timer_count: 0,
             timer_struct_size: 9,
-            counter_offset: normalized?.counter?.offset ?? 848,
-            counter_count: 16,
+            counter_offset: normalized?.counter?.offset ?? 0,
+            counter_count: 0,
             counter_struct_size: 5,
         }
     }

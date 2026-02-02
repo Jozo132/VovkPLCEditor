@@ -3,11 +3,12 @@ import { PLC_Project } from "../utils/types.js"
 /** @type { PLC_Project } */
 export const plc_project = {
     offsets: {
-        control: { offset: 0, size: 16 },
-        input: { offset: 16, size: 16 },
-        output: { offset: 32, size: 16 },
-        system: { offset: 48, size: 16 },
-        marker: { offset: 64, size: 16 },
+        system: { offset: 0, size: 64 },
+        input: { offset: 64, size: 64 },
+        output: { offset: 128, size: 64 },
+        marker: { offset: 192, size: 256 },
+        timer: { offset: 0, size: 0 },
+        counter: { offset: 0, size: 0 },
     },
     symbols: [
         { name: 'button1', location: 'input', type: 'bit', address: 0.0, initial_value: 0, comment: 'Test input' },

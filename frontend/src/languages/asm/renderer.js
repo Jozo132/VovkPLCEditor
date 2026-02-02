@@ -38,7 +38,7 @@ const dlog = createDedupLogger()
 
 const ADDRESS_REGEX = /^(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i
 const ADDRESS_LOCATION_MAP = {
-    K: 'control',
+    K: 'system',  // K now maps to system (formerly control)
     C: 'counter',
     T: 'timer',
     X: 'input',
@@ -51,10 +51,9 @@ const LOCATION_COLORS = {
     output: '#d68d5e',
     marker: '#c586c0',
     memory: '#c586c0',
-    control: '#4fc1ff',
     counter: '#dcdcaa',
     timer: '#ce9178',
-    system: '#a0a0a0',
+    system: '#4fc1ff',
 }
 const TYPE_COLORS = {
     bit: '#569cd6',
@@ -339,7 +338,7 @@ export const ladderRenderer = {
                     bitStr = addrMatch[5] || null
                 }
 
-                const prefixLocationMap = {K: 'control', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}
+                const prefixLocationMap = {K: 'system', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}
                 const location = prefixLocationMap[prefix] || 'marker'
                 const byteOffset = Number.parseInt(byteStr, 10)
                 const bitIndex = bitStr ? Number.parseInt(bitStr, 10) : null

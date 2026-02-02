@@ -3028,7 +3028,7 @@ export default class WindowManager {
 
                     if (this.#editor.device_manager?.connection && typeof this.#editor.device_manager.connection.plc?.setRuntimeOffsets === 'function') {
                         const normalized = ensureOffsets(this.#editor.project.offsets || {})
-                        await this.#editor.device_manager.connection.plc.setRuntimeOffsets(normalized.control.offset, normalized.input.offset, normalized.output.offset, normalized.system.offset, normalized.marker.offset)
+                        await this.#editor.device_manager.connection.plc.setRuntimeOffsets(normalized.system.offset, normalized.input.offset, normalized.output.offset, normalized.marker.offset)
                     }
 
                     // Delay 2: After Offsets, Before Download
@@ -3419,10 +3419,9 @@ export default class WindowManager {
                     <th style="padding: 4px 8px; text-align: right; color: #888; font-weight: normal;">Offset</th>
                     <th style="padding: 4px 8px; text-align: right; color: #888; font-weight: normal;">Size/Count</th>
                 </tr>
-                ${deviceInfo.control_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Controls</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.control_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.control_size || '?'}</td></tr>` : ''}
+                ${deviceInfo.system_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">System</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.system_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.system_size || '?'}</td></tr>` : ''}
                 ${deviceInfo.input_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Inputs</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.input_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.input_size || '?'}</td></tr>` : ''}
                 ${deviceInfo.output_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Outputs</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.output_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.output_size || '?'}</td></tr>` : ''}
-                ${deviceInfo.system_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">System</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.system_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.system_size || '?'}</td></tr>` : ''}
                 ${deviceInfo.marker_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Markers</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.marker_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.marker_size || '?'}</td></tr>` : ''}
                 ${deviceInfo.timer_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Timers</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.timer_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.timer_count || '?'} × ${deviceInfo.timer_struct_size || '?'}B</td></tr>` : ''}
                 ${deviceInfo.counter_offset !== undefined ? `<tr><td style="padding: 3px 8px; color: #ECECEC;">Counters</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.counter_offset}</td><td style="padding: 3px 8px; text-align: right; color: #aaa; font-family: monospace;">${deviceInfo.counter_count || '?'} × ${deviceInfo.counter_struct_size || '?'}B</td></tr>` : ''}
@@ -4023,13 +4022,12 @@ export default class WindowManager {
                 description: ''
             },
             offsets: {
-                control: { offset: 0, size: 16 },
-                input: { offset: 16, size: 16 },
-                output: { offset: 32, size: 16 },
-                system: { offset: 48, size: 16 },
-                marker: { offset: 64, size: 16 },
-                timer: { offset: 80, size: 64 },
-                counter: { offset: 144, size: 64 }
+                system: { offset: 0, size: 64 },
+                input: { offset: 64, size: 64 },
+                output: { offset: 128, size: 64 },
+                marker: { offset: 192, size: 256 },
+                timer: { offset: 448, size: 0 },
+                counter: { offset: 448, size: 0 }
             },
             symbols: [],           // Will be populated with system symbols by ensureSystemSymbols
             device_symbols: [],    // Clear device symbols

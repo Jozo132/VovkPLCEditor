@@ -6,53 +6,53 @@ import { PLC_Assembly } from '../languages/asm/language.js'
 
 /** @type {PLC_Symbol[]} */
 const SYSTEM_SYMBOLS = /** @type {PLC_Symbol[]} */ ([
-    { name: 'P_100ms', location: 'control', type: 'bit', address: 2.0, initial_value: 0, comment: '100ms pulse' },
-    { name: 'P_200ms', location: 'control', type: 'bit', address: 2.1, initial_value: 0, comment: '200ms pulse' },
-    { name: 'P_300ms', location: 'control', type: 'bit', address: 2.2, initial_value: 0, comment: '300ms pulse' },
-    { name: 'P_500ms', location: 'control', type: 'bit', address: 2.3, initial_value: 0, comment: '500ms pulse' },
-    { name: 'P_1s', location: 'control', type: 'bit', address: 2.4, initial_value: 0, comment: '1 second pulse' },
-    { name: 'P_2s', location: 'control', type: 'bit', address: 2.5, initial_value: 0, comment: '2 second pulse' },
-    { name: 'P_5s', location: 'control', type: 'bit', address: 2.6, initial_value: 0, comment: '5 second pulse' },
-    { name: 'P_10s', location: 'control', type: 'bit', address: 2.7, initial_value: 0, comment: '10 second pulse' },
-    { name: 'P_30s', location: 'control', type: 'bit', address: 3.0, initial_value: 0, comment: '30 second pulse' },
-    { name: 'P_1min', location: 'control', type: 'bit', address: 3.1, initial_value: 0, comment: '1 minute pulse' },
-    { name: 'P_2min', location: 'control', type: 'bit', address: 3.2, initial_value: 0, comment: '2 minute pulse' },
-    { name: 'P_5min', location: 'control', type: 'bit', address: 3.3, initial_value: 0, comment: '5 minute pulse' },
-    { name: 'P_10min', location: 'control', type: 'bit', address: 3.4, initial_value: 0, comment: '10 minute pulse' },
-    { name: 'P_15min', location: 'control', type: 'bit', address: 3.5, initial_value: 0, comment: '15 minute pulse' },
-    { name: 'P_30min', location: 'control', type: 'bit', address: 3.6, initial_value: 0, comment: '30 minute pulse' },
-    { name: 'P_1hr', location: 'control', type: 'bit', address: 3.7, initial_value: 0, comment: '1 hour pulse' },
-    { name: 'P_2hr', location: 'control', type: 'bit', address: 4.0, initial_value: 0, comment: '2 hour pulse' },
-    { name: 'P_3hr', location: 'control', type: 'bit', address: 4.1, initial_value: 0, comment: '3 hour pulse' },
-    { name: 'P_4hr', location: 'control', type: 'bit', address: 4.2, initial_value: 0, comment: '4 hour pulse' },
-    { name: 'P_5hr', location: 'control', type: 'bit', address: 4.3, initial_value: 0, comment: '5 hour pulse' },
-    { name: 'P_6hr', location: 'control', type: 'bit', address: 4.4, initial_value: 0, comment: '6 hour pulse' },
-    { name: 'P_12hr', location: 'control', type: 'bit', address: 4.5, initial_value: 0, comment: '12 hour pulse' },
-    { name: 'P_1day', location: 'control', type: 'bit', address: 4.6, initial_value: 0, comment: '1 day pulse' },
+    { name: 'P_100ms', location: 'system', type: 'bit', address: 2.0, initial_value: 0, comment: '100ms pulse' },
+    { name: 'P_200ms', location: 'system', type: 'bit', address: 2.1, initial_value: 0, comment: '200ms pulse' },
+    { name: 'P_300ms', location: 'system', type: 'bit', address: 2.2, initial_value: 0, comment: '300ms pulse' },
+    { name: 'P_500ms', location: 'system', type: 'bit', address: 2.3, initial_value: 0, comment: '500ms pulse' },
+    { name: 'P_1s', location: 'system', type: 'bit', address: 2.4, initial_value: 0, comment: '1 second pulse' },
+    { name: 'P_2s', location: 'system', type: 'bit', address: 2.5, initial_value: 0, comment: '2 second pulse' },
+    { name: 'P_5s', location: 'system', type: 'bit', address: 2.6, initial_value: 0, comment: '5 second pulse' },
+    { name: 'P_10s', location: 'system', type: 'bit', address: 2.7, initial_value: 0, comment: '10 second pulse' },
+    { name: 'P_30s', location: 'system', type: 'bit', address: 3.0, initial_value: 0, comment: '30 second pulse' },
+    { name: 'P_1min', location: 'system', type: 'bit', address: 3.1, initial_value: 0, comment: '1 minute pulse' },
+    { name: 'P_2min', location: 'system', type: 'bit', address: 3.2, initial_value: 0, comment: '2 minute pulse' },
+    { name: 'P_5min', location: 'system', type: 'bit', address: 3.3, initial_value: 0, comment: '5 minute pulse' },
+    { name: 'P_10min', location: 'system', type: 'bit', address: 3.4, initial_value: 0, comment: '10 minute pulse' },
+    { name: 'P_15min', location: 'system', type: 'bit', address: 3.5, initial_value: 0, comment: '15 minute pulse' },
+    { name: 'P_30min', location: 'system', type: 'bit', address: 3.6, initial_value: 0, comment: '30 minute pulse' },
+    { name: 'P_1hr', location: 'system', type: 'bit', address: 3.7, initial_value: 0, comment: '1 hour pulse' },
+    { name: 'P_2hr', location: 'system', type: 'bit', address: 4.0, initial_value: 0, comment: '2 hour pulse' },
+    { name: 'P_3hr', location: 'system', type: 'bit', address: 4.1, initial_value: 0, comment: '3 hour pulse' },
+    { name: 'P_4hr', location: 'system', type: 'bit', address: 4.2, initial_value: 0, comment: '4 hour pulse' },
+    { name: 'P_5hr', location: 'system', type: 'bit', address: 4.3, initial_value: 0, comment: '5 hour pulse' },
+    { name: 'P_6hr', location: 'system', type: 'bit', address: 4.4, initial_value: 0, comment: '6 hour pulse' },
+    { name: 'P_12hr', location: 'system', type: 'bit', address: 4.5, initial_value: 0, comment: '12 hour pulse' },
+    { name: 'P_1day', location: 'system', type: 'bit', address: 4.6, initial_value: 0, comment: '1 day pulse' },
 
-    { name: 'S_100ms', location: 'control', type: 'bit', address: 5.0, initial_value: 0, comment: '100ms square wave' },
-    { name: 'S_200ms', location: 'control', type: 'bit', address: 5.1, initial_value: 0, comment: '200ms square wave' },
-    { name: 'S_300ms', location: 'control', type: 'bit', address: 5.2, initial_value: 0, comment: '300ms square wave' },
-    { name: 'S_500ms', location: 'control', type: 'bit', address: 5.3, initial_value: 0, comment: '500ms square wave' },
-    { name: 'S_1s', location: 'control', type: 'bit', address: 5.4, initial_value: 0, comment: '1 second square wave' },
-    { name: 'S_2s', location: 'control', type: 'bit', address: 5.5, initial_value: 0, comment: '2 second square wave' },
-    { name: 'S_5s', location: 'control', type: 'bit', address: 5.6, initial_value: 0, comment: '5 second square wave' },
-    { name: 'S_10s', location: 'control', type: 'bit', address: 5.7, initial_value: 0, comment: '10 second square wave' },
-    { name: 'S_30s', location: 'control', type: 'bit', address: 6.0, initial_value: 0, comment: '30 second square wave' },
-    { name: 'S_1min', location: 'control', type: 'bit', address: 6.1, initial_value: 0, comment: '1 minute square wave' },
-    { name: 'S_2min', location: 'control', type: 'bit', address: 6.2, initial_value: 0, comment: '2 minute square wave' },
-    { name: 'S_5min', location: 'control', type: 'bit', address: 6.3, initial_value: 0, comment: '5 minute square wave' },
-    { name: 'S_10min', location: 'control', type: 'bit', address: 6.4, initial_value: 0, comment: '10 minute square wave' },
-    { name: 'S_15min', location: 'control', type: 'bit', address: 6.5, initial_value: 0, comment: '15 minute square wave' },
-    { name: 'S_30min', location: 'control', type: 'bit', address: 6.6, initial_value: 0, comment: '30 minute square wave' },
-    { name: 'S_1hr', location: 'control', type: 'bit', address: 6.7, initial_value: 0, comment: '1 hour square wave' },
+    { name: 'S_100ms', location: 'system', type: 'bit', address: 5.0, initial_value: 0, comment: '100ms square wave' },
+    { name: 'S_200ms', location: 'system', type: 'bit', address: 5.1, initial_value: 0, comment: '200ms square wave' },
+    { name: 'S_300ms', location: 'system', type: 'bit', address: 5.2, initial_value: 0, comment: '300ms square wave' },
+    { name: 'S_500ms', location: 'system', type: 'bit', address: 5.3, initial_value: 0, comment: '500ms square wave' },
+    { name: 'S_1s', location: 'system', type: 'bit', address: 5.4, initial_value: 0, comment: '1 second square wave' },
+    { name: 'S_2s', location: 'system', type: 'bit', address: 5.5, initial_value: 0, comment: '2 second square wave' },
+    { name: 'S_5s', location: 'system', type: 'bit', address: 5.6, initial_value: 0, comment: '5 second square wave' },
+    { name: 'S_10s', location: 'system', type: 'bit', address: 5.7, initial_value: 0, comment: '10 second square wave' },
+    { name: 'S_30s', location: 'system', type: 'bit', address: 6.0, initial_value: 0, comment: '30 second square wave' },
+    { name: 'S_1min', location: 'system', type: 'bit', address: 6.1, initial_value: 0, comment: '1 minute square wave' },
+    { name: 'S_2min', location: 'system', type: 'bit', address: 6.2, initial_value: 0, comment: '2 minute square wave' },
+    { name: 'S_5min', location: 'system', type: 'bit', address: 6.3, initial_value: 0, comment: '5 minute square wave' },
+    { name: 'S_10min', location: 'system', type: 'bit', address: 6.4, initial_value: 0, comment: '10 minute square wave' },
+    { name: 'S_15min', location: 'system', type: 'bit', address: 6.5, initial_value: 0, comment: '15 minute square wave' },
+    { name: 'S_30min', location: 'system', type: 'bit', address: 6.6, initial_value: 0, comment: '30 minute square wave' },
+    { name: 'S_1hr', location: 'system', type: 'bit', address: 6.7, initial_value: 0, comment: '1 hour square wave' },
 
-    { name: 'elapsed_seconds', location: 'control', type: 'byte', address: 8.0, initial_value: 0, comment: 'Elapsed seconds' },
-    { name: 'elapsed_minutes', location: 'control', type: 'byte', address: 9.0, initial_value: 0, comment: 'Elapsed minutes' },
-    { name: 'elapsed_hours', location: 'control', type: 'byte', address: 10.0, initial_value: 0, comment: 'Elapsed hours' },
-    { name: 'elapsed_days', location: 'control', type: 'byte', address: 11.0, initial_value: 0, comment: 'Elapsed days' },
+    { name: 'elapsed_seconds', location: 'system', type: 'byte', address: 8.0, initial_value: 0, comment: 'Elapsed seconds' },
+    { name: 'elapsed_minutes', location: 'system', type: 'byte', address: 9.0, initial_value: 0, comment: 'Elapsed minutes' },
+    { name: 'elapsed_hours', location: 'system', type: 'byte', address: 10.0, initial_value: 0, comment: 'Elapsed hours' },
+    { name: 'elapsed_days', location: 'system', type: 'byte', address: 11.0, initial_value: 0, comment: 'Elapsed days' },
 
-    { name: 'system_uptime', location: 'control', type: 'dint', address: 12.0, initial_value: 0, comment: 'System uptime in seconds' },
+    { name: 'system_uptime', location: 'system', type: 'dint', address: 12.0, initial_value: 0, comment: 'System uptime in seconds' },
 ].map(s => ({ ...s, readonly: true })))
 
 const LOCAL_STORAGE_KEY = 'vovk_plc_project_autosave'
@@ -118,7 +118,7 @@ export default class ProjectManager {
     // Supports both IEC notation (I, Q) and traditional PLC notation (X, Y)
     /** @type {Record<string, import('../utils/types.js').PLC_Symbol_Location>} */
     const areaToLocation = {
-      'K': 'control',
+      'K': 'system',
       'X': 'input',
       'I': 'input',    // IEC notation for input
       'Y': 'output',
@@ -525,23 +525,21 @@ export default class ProjectManager {
     // Memory configuration
     const offsets = ensureOffsets(project.offsets)
     
-    const kSize = offsets.control?.size || 64
+    const sSize = offsets.system?.size || 64
     const xSize = offsets.input?.size || 64
     const ySize = offsets.output?.size || 64
-    const sSize = offsets.system?.size || 256
     const mSize = offsets.marker?.size || 256
-    const tSize = offsets.timer?.size || 16
-    const cSize = offsets.counter?.size || 16
+    const tSize = offsets.timer?.size || 0
+    const cSize = offsets.counter?.size || 0
     
-    const totalMemory = kSize + xSize + ySize + sSize + mSize + tSize + cSize
+    const totalMemory = sSize + xSize + ySize + mSize + tSize + cSize
     
     lines.push('MEMORY')
     lines.push(`    OFFSET 0`)
     lines.push(`    AVAILABLE ${totalMemory}`)
-    lines.push(`    K ${kSize}`)
+    lines.push(`    S ${sSize}`)
     lines.push(`    X ${xSize}`)
     lines.push(`    Y ${ySize}`)
-    lines.push(`    S ${sSize}`)
     lines.push(`    M ${mSize}`)
     lines.push(`    T ${tSize}`)
     lines.push(`    C ${cSize}`)
@@ -573,10 +571,9 @@ export default class ProjectManager {
         }
         
         const locationPrefix = {
-            'control': 'K',
+            'system': 'S',
             'input': 'X',
             'output': 'Y',
-            'system': 'S',
             'marker': 'M',
             'timer': 'T',
             'counter': 'C'
@@ -722,7 +719,7 @@ export default class ProjectManager {
     }
     
     const locationMap = {
-        'K': 'control',
+        'K': 'system',
         'X': 'input',
         'Y': 'output',
         'S': 'system',
@@ -771,10 +768,10 @@ export default class ProjectManager {
                     const value = parseInt(parts[1], 10)
                     if (!isNaN(value)) {
                         switch (key) {
-                            case 'K': project.offsets.control.size = value; break
+                            case 'S': project.offsets.system.size = value; break
+                            case 'K': project.offsets.system.size = value; break  // Legacy K maps to system
                             case 'X': project.offsets.input.size = value; break
                             case 'Y': project.offsets.output.size = value; break
-                            case 'S': project.offsets.system.size = value; break
                             case 'M': project.offsets.marker.size = value; break
                             case 'T': project.offsets.timer.size = value; break
                             case 'C': project.offsets.counter.size = value; break
@@ -1013,24 +1010,22 @@ export default class ProjectManager {
     const offsets = ensureOffsets(project.offsets)
     
     // Calculate sizes for each area
-    const kSize = offsets.control?.size || 64
+    const sSize = offsets.system?.size || 64
     const xSize = offsets.input?.size || 64
     const ySize = offsets.output?.size || 64
-    const sSize = offsets.system?.size || 256
     const mSize = offsets.marker?.size || 256
-    const tSize = offsets.timer?.size || 16
-    const cSize = offsets.counter?.size || 16
+    const tSize = offsets.timer?.size || 0
+    const cSize = offsets.counter?.size || 0
     
     // Total memory is sum of all areas
-    const totalMemory = kSize + xSize + ySize + sSize + mSize + tSize + cSize
+    const totalMemory = sSize + xSize + ySize + mSize + tSize + cSize
     
     lines.push('MEMORY')
     lines.push(`    OFFSET 0`)
     lines.push(`    AVAILABLE ${totalMemory}`)
-    lines.push(`    K ${kSize}`)
+    lines.push(`    S ${sSize}`)
     lines.push(`    X ${xSize}`)
     lines.push(`    Y ${ySize}`)
-    lines.push(`    S ${sSize}`)
     lines.push(`    M ${mSize}`)
     lines.push(`    T ${tSize}`)
     lines.push(`    C ${cSize}`)
@@ -1057,11 +1052,12 @@ export default class ProjectManager {
         
         // Map location to prefix
         const locationPrefix = {
-            'control': 'K',
+            'system': 'S',
             'input': 'X',
             'output': 'Y',
-            'system': 'S',
-            'marker': 'M'
+            'marker': 'M',
+            'timer': 'T',
+            'counter': 'C'
         }
         
         for (const sym of userSymbols) {
@@ -1166,13 +1162,12 @@ export default class ProjectManager {
   createEmptyProject() {
     return {
       offsets: {
-        control: { offset: 0, size: 16 },
-        counter: { offset: 16, size: 64 },
-        timer: { offset: 80, size: 64 },
-        input: { offset: 144, size: 16 },
-        output: { offset: 160, size: 16 },
-        system: { offset: 176, size: 16 },
-        marker: { offset: 192, size: 64 }
+        system: { offset: 0, size: 64 },
+        input: { offset: 64, size: 64 },
+        output: { offset: 128, size: 64 },
+        marker: { offset: 192, size: 256 },
+        timer: { offset: 0, size: 0 },
+        counter: { offset: 0, size: 0 }
       },
       symbols: [...SYSTEM_SYMBOLS],
       info: {

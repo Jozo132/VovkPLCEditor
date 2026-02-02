@@ -579,7 +579,7 @@ export default class SymbolsUI {
         tr.appendChild(this.createCell('input', symbol.name, val => symbol.name = val, [], 'text', cellLocked))
 
         // Location
-        tr.appendChild(this.createCell('select', symbol.location, val => symbol.location = val, ['control', 'input', 'output', 'system', 'marker'], 'text', cellLocked))
+        tr.appendChild(this.createCell('select', symbol.location, val => symbol.location = val, ['system', 'input', 'output', 'marker', 'timer', 'counter'], 'text', cellLocked))
 
         // Type - include explicit signed/unsigned types for device symbols
         const typeOptions = ['bit', 'byte', 'int', 'dint', 'real', 'u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'f32']
