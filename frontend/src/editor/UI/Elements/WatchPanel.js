@@ -1,4 +1,4 @@
-import { ElementSynthesis, CSSimporter } from "../../../utils/tools.js"
+import { ElementSynthesis, CSSimporter, readTypedValue } from "../../../utils/tools.js"
 import { Popup } from "./components/popup.js"
 
 const importCSS = CSSimporter(import.meta.url)
@@ -771,6 +771,9 @@ export default class WatchPanel {
             let val = '-'
             const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
             
+            // Get device endianness (default to little-endian if unknown)
+            const isLittleEndian = this.editor.device_manager?.deviceInfo?.isLittleEndian ?? true
+            
             // Basic formatting based on type
             const LIVE_COLOR_ON = '#1fba5f'
             const LIVE_COLOR_OFF = 'rgba(200, 200, 200, 0.5)'
@@ -795,17 +798,17 @@ export default class WatchPanel {
             } else if (type === 'i8') {
                  val = view.getInt8(0)
             } else if (type === 'int' || type === 'i16') {
-                 if (data.length >= 2) val = view.getInt16(0, true)
+                 if (data.length >= 2) val = view.getInt16(0, isLittleEndian)
             } else if (type === 'u16') {
-                 if (data.length >= 2) val = view.getUint16(0, true)
+                 if (data.length >= 2) val = view.getUint16(0, isLittleEndian)
             } else if (type === 'dint' || type === 'i32') {
-                 if (data.length >= 4) val = view.getInt32(0, true)
+                 if (data.length >= 4) val = view.getInt32(0, isLittleEndian)
             } else if (type === 'u32') {
-                 if (data.length >= 4) val = view.getUint32(0, true)
+                 if (data.length >= 4) val = view.getUint32(0, isLittleEndian)
             } else if (type === 'real') {
-                 if (data.length >= 4) val = view.getFloat32(0, true).toFixed(3)
+                 if (data.length >= 4) val = view.getFloat32(0, isLittleEndian).toFixed(3)
             } else if (type === 'f64') {
-                 if (data.length >= 8) val = view.getFloat64(0, true).toFixed(3)
+                 if (data.length >= 8) val = view.getFloat64(0, isLittleEndian).toFixed(3)
             } else {
                  // Hex fallback or similar?
                  val = Array.from(data).map(b => b.toString(16).padStart(2,'0')).join(' ')

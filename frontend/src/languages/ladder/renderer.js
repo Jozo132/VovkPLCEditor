@@ -5,6 +5,7 @@ import { resolveBlockState } from "./evaluator.js"
 import { PLC_Ladder, PLC_LadderBlock, PLC_LadderNode, PLC_LadderConnection, toGraph, isFunctionBlock, isMathBlock, isCompareBlock, isMoveBlock, isUnaryMathBlock, isIncDecBlock, getFunctionBlockLabel, migrateLadderBlock } from "./language.js"
 import { getSymbolValue, setSymbolBit } from "../BlockLogic.js"
 import { ensureOffsets } from "../../utils/offsets.js"
+import { readTypedValue } from "../../utils/tools.js"
 import { Popup } from "../../editor/UI/Elements/components/popup.js"
 import { MiniCodeEditor } from "../MiniCodeEditor.js"
 import { getIconType } from "../../editor/UI/Elements/components/icons.js"
@@ -2112,48 +2113,12 @@ const draw_function_block = (editor, like, ctx, block) => {
           // Determine actual type from block's dataType
           const effectiveType = dataType || parsedSymbol.type || 'i16'
           
+          // Get device endianness (default to little-endian if unknown)
+          const isLittleEndian = editor.device_manager?.deviceInfo?.isLittleEndian ?? true
+          
           if (absoluteAddr >= 0 && absoluteAddr < editor.memory.length) {
             const view = new DataView(editor.memory.buffer, editor.memory.byteOffset, editor.memory.byteLength)
-            try {
-              switch (effectiveType) {
-                case 'i8':
-                  liveValue = view.getInt8(absoluteAddr)
-                  break
-                case 'u8':
-                  liveValue = view.getUint8(absoluteAddr)
-                  break
-                case 'i16':
-                  if (absoluteAddr + 2 <= editor.memory.length)
-                    liveValue = view.getInt16(absoluteAddr, true)
-                  break
-                case 'u16':
-                  if (absoluteAddr + 2 <= editor.memory.length)
-                    liveValue = view.getUint16(absoluteAddr, true)
-                  break
-                case 'i32':
-                  if (absoluteAddr + 4 <= editor.memory.length)
-                    liveValue = view.getInt32(absoluteAddr, true)
-                  break
-                case 'u32':
-                  if (absoluteAddr + 4 <= editor.memory.length)
-                    liveValue = view.getUint32(absoluteAddr, true)
-                  break
-                case 'f32':
-                  if (absoluteAddr + 4 <= editor.memory.length)
-                    liveValue = view.getFloat32(absoluteAddr, true)
-                  break
-                case 'f64':
-                  if (absoluteAddr + 8 <= editor.memory.length)
-                    liveValue = view.getFloat64(absoluteAddr, true)
-                  break
-                default:
-                  // Default to i16 for word operations
-                  if (absoluteAddr + 2 <= editor.memory.length)
-                    liveValue = view.getInt16(absoluteAddr, true)
-              }
-            } catch (e) {
-              // Ignore read errors
-            }
+            liveValue = readTypedValue(view, absoluteAddr, effectiveType, isLittleEndian)
           }
         }
       }

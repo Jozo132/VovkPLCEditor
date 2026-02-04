@@ -140,6 +140,128 @@ export const isVisible = (elem) => {
     return true
 }
 
+/**
+ * Read a typed value from a DataView with endianness support
+ * @param {DataView} view - The DataView to read from
+ * @param {number} offset - Byte offset within the view
+ * @param {string} type - Value type: 'i8', 'u8', 'i16', 'u16', 'i32', 'u32', 'f32', 'f64', 'i64', 'u64'
+ * @param {boolean} [littleEndian=true] - Endianness (true for little-endian, false for big-endian)
+ * @returns {number|bigint|null} The value read, or null if out of bounds
+ */
+export const readTypedValue = (view, offset, type, littleEndian = true) => {
+    try {
+        switch (type) {
+            case 'i8':
+                return view.getInt8(offset)
+            case 'u8':
+            case 'byte':
+                return view.getUint8(offset)
+            case 'i16':
+            case 'int':
+                if (offset + 2 > view.byteLength) return null
+                return view.getInt16(offset, littleEndian)
+            case 'u16':
+            case 'word':
+                if (offset + 2 > view.byteLength) return null
+                return view.getUint16(offset, littleEndian)
+            case 'i32':
+            case 'dint':
+                if (offset + 4 > view.byteLength) return null
+                return view.getInt32(offset, littleEndian)
+            case 'u32':
+            case 'dword':
+                if (offset + 4 > view.byteLength) return null
+                return view.getUint32(offset, littleEndian)
+            case 'f32':
+            case 'real':
+            case 'float':
+                if (offset + 4 > view.byteLength) return null
+                return view.getFloat32(offset, littleEndian)
+            case 'f64':
+                if (offset + 8 > view.byteLength) return null
+                return view.getFloat64(offset, littleEndian)
+            case 'i64':
+                if (offset + 8 > view.byteLength) return null
+                return view.getBigInt64(offset, littleEndian)
+            case 'u64':
+            case 'lword':
+                if (offset + 8 > view.byteLength) return null
+                return view.getBigUint64(offset, littleEndian)
+            default:
+                return view.getUint8(offset)
+        }
+    } catch (e) {
+        return null
+    }
+}
+
+/**
+ * Write a typed value to a DataView with endianness support
+ * @param {DataView} view - The DataView to write to
+ * @param {number} offset - Byte offset within the view
+ * @param {string} type - Value type: 'i8', 'u8', 'i16', 'u16', 'i32', 'u32', 'f32', 'f64', 'i64', 'u64'
+ * @param {number|bigint} value - The value to write
+ * @param {boolean} [littleEndian=true] - Endianness (true for little-endian, false for big-endian)
+ * @returns {boolean} True if successful, false if out of bounds
+ */
+export const writeTypedValue = (view, offset, type, value, littleEndian = true) => {
+    try {
+        switch (type) {
+            case 'i8':
+                view.setInt8(offset, Number(value))
+                return true
+            case 'u8':
+            case 'byte':
+                view.setUint8(offset, Number(value))
+                return true
+            case 'i16':
+            case 'int':
+                if (offset + 2 > view.byteLength) return false
+                view.setInt16(offset, Number(value), littleEndian)
+                return true
+            case 'u16':
+            case 'word':
+                if (offset + 2 > view.byteLength) return false
+                view.setUint16(offset, Number(value), littleEndian)
+                return true
+            case 'i32':
+            case 'dint':
+                if (offset + 4 > view.byteLength) return false
+                view.setInt32(offset, Number(value), littleEndian)
+                return true
+            case 'u32':
+            case 'dword':
+                if (offset + 4 > view.byteLength) return false
+                view.setUint32(offset, Number(value), littleEndian)
+                return true
+            case 'f32':
+            case 'real':
+            case 'float':
+                if (offset + 4 > view.byteLength) return false
+                view.setFloat32(offset, Number(value), littleEndian)
+                return true
+            case 'f64':
+                if (offset + 8 > view.byteLength) return false
+                view.setFloat64(offset, Number(value), littleEndian)
+                return true
+            case 'i64':
+                if (offset + 8 > view.byteLength) return false
+                view.setBigInt64(offset, BigInt(value), littleEndian)
+                return true
+            case 'u64':
+            case 'lword':
+                if (offset + 8 > view.byteLength) return false
+                view.setBigUint64(offset, BigInt(value), littleEndian)
+                return true
+            default:
+                view.setUint8(offset, Number(value))
+                return true
+        }
+    } catch (e) {
+        return false
+    }
+}
+
 if (debug_components) {
     Object.assign(window, {
         generateID,
@@ -152,6 +274,8 @@ if (debug_components) {
         ImageRenderer,
         CSSimporter,
         isVisible,
+        readTypedValue,
+        writeTypedValue,
         debug_components,
     })
 }

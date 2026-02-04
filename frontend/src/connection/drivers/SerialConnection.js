@@ -147,6 +147,19 @@ export default class SerialConnection extends ConnectionBase {
         }, { label: 'writeMemoryAreaMasked' });
     }
 
+    /**
+     * Configure Timer/Counter offsets on the device
+     * @param {number} timerOffset - Timer memory area offset
+     * @param {number} counterOffset - Counter memory area offset
+     */
+    async configureTCOffsets(timerOffset, counterOffset) {
+        return this._enqueueCommand(async () => {
+            const command = this.plc.buildCommand.tcConfig(timerOffset, counterOffset);
+            await this.serial.write(command + "\n");
+            await this._readResponseLine(); // Wait for OK
+        }, { label: 'configureTCOffsets' });
+    }
+
     async getInfo(initial = false) {
         return this._enqueueCommand(async () => {
             if (initial) {
@@ -246,8 +259,39 @@ export default class SerialConnection extends ConnectionBase {
                         memory: +parts[8],
                         program: +parts[9],
                     }
+                    if (parts.length >= 26) {
+                        // New format with FLAGS: system, input, output, marker, timer, counter, flags, device
+                        // Format: [header,arch,ver_maj,ver_min,ver_patch,build,date,stack,mem,prog,
+                        //          sys_off,sys_size,in_off,in_size,out_off,out_size,mark_off,mark_size,
+                        //          timer_off,timer_count,timer_struct,counter_off,counter_count,counter_struct,flags,device]
+                        const flags = +parts[24]
+                        const isLittleEndian = (flags & 0x01) === 1
+                        return {
+                            ...base,
+                            system_offset: +parts[10],
+                            system_size: +parts[11],
+                            input_offset: +parts[12],
+                            input_size: +parts[13],
+                            output_offset: +parts[14],
+                            output_size: +parts[15],
+                            marker_offset: +parts[16],
+                            marker_size: +parts[17],
+                            timer_offset: +parts[18],
+                            timer_count: +parts[19],
+                            timer_struct_size: +parts[20],
+                            counter_offset: +parts[21],
+                            counter_count: +parts[22],
+                            counter_struct_size: +parts[23],
+                            flags,
+                            isLittleEndian,
+                            device: parts[25],
+                            // Legacy compatibility aliases
+                            control_offset: +parts[10],
+                            control_size: +parts[11],
+                        }
+                    }
                     if (parts.length >= 25) {
-                        // New format: system, input, output, marker, timer, counter info
+                        // Previous format without FLAGS (backwards compatibility)
                         // Format: [header,arch,ver_maj,ver_min,ver_patch,build,date,stack,mem,prog,
                         //          sys_off,sys_size,in_off,in_size,out_off,out_size,mark_off,mark_size,
                         //          timer_off,timer_count,timer_struct,counter_off,counter_count,counter_struct,device]
@@ -267,6 +311,8 @@ export default class SerialConnection extends ConnectionBase {
                             counter_offset: +parts[21],
                             counter_count: +parts[22],
                             counter_struct_size: +parts[23],
+                            flags: 0,
+                            isLittleEndian: true, // Default to little-endian for legacy devices
                             device: parts[24],
                             // Legacy compatibility aliases
                             control_offset: +parts[10],

@@ -397,18 +397,22 @@ export default class ProjectManager {
             }
         }
 
-        // Extract T/C offsets from compiler-computed memory areas and update project offsets
-        const memoryAreas = result.output?.memoryAreas || []
-        if (memoryAreas.length > 0 && this.#editor.project) {
+        // Extract T/C offsets from compiler-computed memory_map and update project offsets
+        const memoryMap = result.output?.memory_map || {}
+        if (this.#editor.project) {
             const offsets = this.#editor.project.offsets
-            for (const area of memoryAreas) {
-                if (area.name === 'T') {
-                    offsets.timer = { offset: area.start, size: area.size }
-                } else if (area.name === 'C') {
-                    offsets.counter = { offset: area.start, size: area.size }
-                }
+            if (memoryMap['T']) {
+                const [offset, size] = memoryMap['T']
+                offsets.timer = { offset, size }
+            }
+            if (memoryMap['C']) {
+                const [offset, size] = memoryMap['C']
+                offsets.counter = { offset, size }
             }
         }
+
+        // Convert memory_map to memoryAreas array for compatibility
+        const memoryAreas = Object.entries(memoryMap).map(([name, [start, size]]) => ({ name, start, size }))
 
         return {
             size: result.output?.flash?.used || 0,

@@ -1,6 +1,6 @@
 import {PLC_Project, PLCEditor} from '../../utils/types.js'
 import VOVKPLCEDITOR_VERSION_BUILD, {VOVKPLCEDITOR_VERSION} from '../BuildNumber.js'
-import {ElementSynthesisMany, getEventPath, isVisible} from '../../utils/tools.js'
+import {ElementSynthesisMany, getEventPath, isVisible, readTypedValue} from '../../utils/tools.js'
 import {ensureOffsets} from '../../utils/offsets.js'
 import {Popup} from './Elements/components/popup.js'
 import NavigationTreeManager from './Elements/NavigationTreeManager.js'
@@ -2641,25 +2641,27 @@ export default class WindowManager {
             this.logToConsole('Program uploaded successfully.', 'success')
             this.logToConsole(`Upload took ${(endTime - startTime).toFixed(0)}ms`, 'info')
 
-            // Refresh device info after upload to get updated T/C offsets
-            // The CONFIG_TC instruction in the bytecode will execute on first scan,
-            // setting the runtime's timer/counter offsets which are then reflected in getInfo()
+            // Configure T/C offsets on the device using the values from compilation
+            // This ensures the device's timer/counter memory areas match the compiled bytecode
+            const offsets = this.#editor.project?.offsets
+            if (offsets && typeof this.#editor.device_manager.connection.configureTCOffsets === 'function') {
+                const timerOffset = offsets.timer?.offset ?? 0
+                const counterOffset = offsets.counter?.offset ?? 0
+                if (timerOffset > 0 || counterOffset > 0) {
+                    try {
+                        await this.#editor.device_manager.connection.configureTCOffsets(timerOffset, counterOffset)
+                        this.logToConsole(`T/C offsets configured: T=${timerOffset}, C=${counterOffset}`, 'info')
+                    } catch (tcErr) {
+                        console.warn('Failed to configure T/C offsets:', tcErr)
+                    }
+                }
+            }
+
+            // Refresh device info after upload for general status
             try {
                 const newDeviceInfo = await this.#editor.device_manager.connection.getInfo()
                 if (newDeviceInfo) {
                     this.#editor.device_manager.deviceInfo = newDeviceInfo
-                    // Update project offsets with the new T/C values from device
-                    if (this.#editor.project?.offsets) {
-                        const offsets = this.#editor.project.offsets
-                        if (typeof newDeviceInfo.timer_offset === 'number') {
-                            const timerSize = (newDeviceInfo.timer_count || 0) * (newDeviceInfo.timer_struct_size || 9)
-                            offsets.timer = { offset: newDeviceInfo.timer_offset, size: timerSize }
-                        }
-                        if (typeof newDeviceInfo.counter_offset === 'number') {
-                            const counterSize = (newDeviceInfo.counter_count || 0) * (newDeviceInfo.counter_struct_size || 5)
-                            offsets.counter = { offset: newDeviceInfo.counter_offset, size: counterSize }
-                        }
-                    }
                 }
             } catch (infoErr) {
                 console.warn('Failed to refresh device info after upload:', infoErr)
@@ -5072,6 +5074,9 @@ export default class WindowManager {
         if (!bytes || !bytes.length) return
         const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
         const liveValues = editor.live_symbol_values || new Map()
+        
+        // Get device endianness (default to little-endian if unknown)
+        const isLittleEndian = editor.device_manager?.deviceInfo?.isLittleEndian ?? true
 
         items.forEach(({symbol, layout}) => {
             const offset = layout.absolute - readStart
@@ -5103,26 +5108,26 @@ export default class WindowManager {
                 value = view.getInt8(offset)
                 text = String(value)
             } else if (type === 'int' || type === 'i16') {
-                value = view.getInt16(offset, true)
+                value = view.getInt16(offset, isLittleEndian)
                 text = String(value)
             } else if (type === 'u16') {
-                value = view.getUint16(offset, true)
+                value = view.getUint16(offset, isLittleEndian)
                 text = String(value)
             } else if (type === 'dint' || type === 'i32') {
-                value = view.getInt32(offset, true)
+                value = view.getInt32(offset, isLittleEndian)
                 text = String(value)
             } else if (type === 'u32' || type === 'dword') {
-                value = view.getUint32(offset, true)
+                value = view.getUint32(offset, isLittleEndian)
                 text = String(value)
             } else if (type === 'real' || type === 'float' || type === 'f32') {
-                value = view.getFloat32(offset, true)
+                value = view.getFloat32(offset, isLittleEndian)
                 text = Number.isFinite(value) ? value.toFixed(3) : String(value)
             } else if (type === 'f64') {
-                value = view.getFloat64(offset, true)
+                value = view.getFloat64(offset, isLittleEndian)
                 text = Number.isFinite(value) ? value.toFixed(3) : String(value)
             } else if (type === 'u64' || type === 'i64' || type === 'lword') {
                 try {
-                    value = type === 'u64' || type === 'lword' ? view.getBigUint64(offset, true) : view.getBigInt64(offset, true)
+                    value = type === 'u64' || type === 'lword' ? view.getBigUint64(offset, isLittleEndian) : view.getBigInt64(offset, isLittleEndian)
                     text = String(value)
                 } catch (e) {
                     /* fallback */ value = 0n

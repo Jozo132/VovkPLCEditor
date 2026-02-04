@@ -75,6 +75,8 @@ export default class SimulationConnection extends ConnectionBase {
             counter_offset: normalized?.counter?.offset ?? 0,
             counter_count: 0,
             counter_struct_size: 5,
+            flags: 1, // WASM is always little-endian
+            isLittleEndian: true,
         }
     }
 
