@@ -15,6 +15,9 @@ import plcscriptLanguage, { PLC_PLCScript } from "./plcscript/language.js"
 import stRenderer from "./st/renderer.js"
 import stLanguage, { PLC_ST } from "./st/language.js"
 
+// Export new CanvasCodeEditor for use in renderers
+export { CanvasCodeEditor } from "./CanvasCodeEditor.js"
+
 
 /** 
  * @typedef {{ [property: string]: any }} PLC_ProgramProperty

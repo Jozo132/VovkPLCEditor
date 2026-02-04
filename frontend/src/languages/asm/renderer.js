@@ -1,7 +1,11 @@
 import {MiniCodeEditor} from '../MiniCodeEditor.js'
+import {CanvasCodeEditor} from '../CanvasCodeEditor.js'
 import {RendererModule} from '../types.js'
 import {Popup} from '../../editor/UI/Elements/components/popup.js'
 // import { resolveBlockState } from "./evaluator.js"
+
+// Feature flag for testing CanvasCodeEditor (set to true to test)
+const USE_CANVAS_EDITOR = false
 
 // De-duplicating logger to avoid spam
 const createDedupLogger = () => {
@@ -79,7 +83,11 @@ export const ladderRenderer = {
         if (!block_container) throw new Error('Block code not found')
 
         // If loaded from JSON, props.text_editor might be a plain object
-        if (props.text_editor && !(props.text_editor instanceof MiniCodeEditor)) {
+        // Also check for CanvasCodeEditor when USE_CANVAS_EDITOR is true
+        const EditorClass = USE_CANVAS_EDITOR ? CanvasCodeEditor : MiniCodeEditor
+        if (props.text_editor && !(props.text_editor instanceof EditorClass)) {
+            // Cleanup old editor if switching types
+            if (props.text_editor.dispose) props.text_editor.dispose()
             props.text_editor = null
         }
 
@@ -413,13 +421,64 @@ export const ladderRenderer = {
                 }
             }
 
-            const updateBlockSize = () => {
-                const height = text_editor.getScrollHeight()
-                const block_height = height > 800 ? 800 : height < 100 ? 100 : height // @ts-ignore
-                block_container.style.height = `${block_height}px`
-            }
-            const text_editor = new MiniCodeEditor(block_container, {
-                language: 'asm',
+            let text_editor
+
+            // Use CanvasCodeEditor if enabled (for testing)
+            if (USE_CANVAS_EDITOR) {
+                const updateBlockSize = () => {
+                    const lineCount = (block.code || '').split('\n').length
+                    const lineHeight = 19
+                    const padding = 16
+                    const minHeight = 100
+                    const maxHeight = 800
+                    const calculatedHeight = Math.min(maxHeight, Math.max(minHeight, lineCount * lineHeight + padding))
+                    block_container.style.height = calculatedHeight + 'px'
+                }
+
+                text_editor = new CanvasCodeEditor(block_container, {
+                    language: 'asm',
+                    value: block.code,
+                    font: '14px Consolas, monospace',
+                    readOnly: !!editor.edit_locked,
+                    lintProvider: async () => {
+                        if (!block.id || !editor.lintBlock) return []
+                        return await editor.lintBlock(block.id)
+                    },
+                    onScroll: pos => {
+                        block.scrollTop = pos.top
+                        block.scrollLeft = pos.left
+                    },
+                    onChange: value => {
+                        block.code = value
+                        updateBlockSize()
+                    },
+                })
+
+                props.text_editor = text_editor
+                if (typeof text_editor.setReadOnly === 'function') {
+                    text_editor.setReadOnly(!!editor.edit_locked)
+                }
+                if (typeof text_editor.setScroll === 'function') {
+                    requestAnimationFrame(() => {
+                        const hasTop = typeof block.scrollTop === 'number'
+                        const hasLeft = typeof block.scrollLeft === 'number'
+                        if (hasTop || hasLeft) {
+                            text_editor.setScroll({
+                                top: hasTop ? block.scrollTop : undefined,
+                                left: hasLeft ? block.scrollLeft : undefined,
+                            })
+                        }
+                    })
+                }
+                setTimeout(updateBlockSize, 100)
+            } else {
+                // Original MiniCodeEditor path
+                const updateBlockSize = () => {
+                    const height = text_editor.getScrollHeight()
+                    const block_height = height > 800 ? 800 : height < 100 ? 100 : height // @ts-ignore
+                    block_container.style.height = `${block_height}px`
+                }
+                text_editor = new MiniCodeEditor(block_container, {
                 value: block.code,
                 font: '12px Consolas, monospace',
                 editorId: editor._nav_id,
@@ -887,6 +946,7 @@ export const ladderRenderer = {
                 })
             }
             setTimeout(updateBlockSize, 400) // Wait for the editor to be created
+            } // Close the else block for MiniCodeEditor
         }
     },
 }
