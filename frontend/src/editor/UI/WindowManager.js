@@ -2640,6 +2640,31 @@ export default class WindowManager {
             this.hideLoading()
             this.logToConsole('Program uploaded successfully.', 'success')
             this.logToConsole(`Upload took ${(endTime - startTime).toFixed(0)}ms`, 'info')
+
+            // Refresh device info after upload to get updated T/C offsets
+            // The CONFIG_TC instruction in the bytecode will execute on first scan,
+            // setting the runtime's timer/counter offsets which are then reflected in getInfo()
+            try {
+                const newDeviceInfo = await this.#editor.device_manager.connection.getInfo()
+                if (newDeviceInfo) {
+                    this.#editor.device_manager.deviceInfo = newDeviceInfo
+                    // Update project offsets with the new T/C values from device
+                    if (this.#editor.project?.offsets) {
+                        const offsets = this.#editor.project.offsets
+                        if (typeof newDeviceInfo.timer_offset === 'number') {
+                            const timerSize = (newDeviceInfo.timer_count || 0) * (newDeviceInfo.timer_struct_size || 9)
+                            offsets.timer = { offset: newDeviceInfo.timer_offset, size: timerSize }
+                        }
+                        if (typeof newDeviceInfo.counter_offset === 'number') {
+                            const counterSize = (newDeviceInfo.counter_count || 0) * (newDeviceInfo.counter_struct_size || 5)
+                            offsets.counter = { offset: newDeviceInfo.counter_offset, size: counterSize }
+                        }
+                    }
+                }
+            } catch (infoErr) {
+                console.warn('Failed to refresh device info after upload:', infoErr)
+            }
+
             this.logToConsole('----------------------------------------', 'info')
 
             // Reset data fetcher to clear stale memory cache

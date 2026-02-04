@@ -368,7 +368,7 @@ export default class ProjectManager {
 
   /**
    * Compiles the current project using the VOVKPLCPROJECT format
-   * @returns {Promise<{size: number, output: string, bytecode?: string, problem?: any, compileTime?: number, memory?: any, flash?: any, execution?: any}>}
+   * @returns {Promise<{size: number, output: string, bytecode?: string, problem?: any, compileTime?: number, memory?: any, flash?: any, execution?: any, memoryAreas?: any[]}>}
    */
   async compile() {
     // Ensure project state is up to date before compiling
@@ -397,6 +397,19 @@ export default class ProjectManager {
             }
         }
 
+        // Extract T/C offsets from compiler-computed memory areas and update project offsets
+        const memoryAreas = result.output?.memoryAreas || []
+        if (memoryAreas.length > 0 && this.#editor.project) {
+            const offsets = this.#editor.project.offsets
+            for (const area of memoryAreas) {
+                if (area.name === 'T') {
+                    offsets.timer = { offset: area.start, size: area.size }
+                } else if (area.name === 'C') {
+                    offsets.counter = { offset: area.start, size: area.size }
+                }
+            }
+        }
+
         return {
             size: result.output?.flash?.used || 0,
             output: result.bytecode || '',
@@ -404,7 +417,8 @@ export default class ProjectManager {
             compileTime: result.compileTime,
             memory: result.output?.memory,
             flash: result.output?.flash,
-            execution: result.output?.execution
+            execution: result.output?.execution,
+            memoryAreas
         }
     } catch (e) {
         await runtime.setSilent(false)

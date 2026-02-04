@@ -200,7 +200,7 @@ export const stlRenderer = {
                         const addr = symbol.address
                         const loc = symbol.location || 'marker'
                         // Map location to prefix - support both Siemens and PLCASM style
-                        const prefixMap = {input: 'I', output: 'Q', marker: 'M', system: 'S', control: 'K', counter: 'C', timer: 'T'}
+                        const prefixMap = {input: 'I', output: 'Q', marker: 'M', system: 'S', counter: 'C', timer: 'T'}
                         const prefix = prefixMap[loc] || 'M'
                         if (fullType === 'bit') {
                             const byte = Math.floor(addr)

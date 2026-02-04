@@ -97,7 +97,7 @@ export const ladderRenderer = {
                         fullType = symbol.type
                         const addr = symbol.address
                         const loc = symbol.location || 'marker'
-                        const prefixMap = {input: 'X', output: 'Y', marker: 'M', system: 'S', control: 'K', counter: 'C', timer: 'T'}
+                        const prefixMap = {input: 'X', output: 'Y', marker: 'M', system: 'S', counter: 'C', timer: 'T'}
                         const prefix = prefixMap[loc] || 'M'
                         if (fullType === 'bit') {
                             const byte = Math.floor(addr)
