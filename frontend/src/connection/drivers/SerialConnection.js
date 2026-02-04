@@ -246,31 +246,35 @@ export default class SerialConnection extends ConnectionBase {
                         memory: +parts[8],
                         program: +parts[9],
                     }
-                    if (parts.length >= 27) {
-                        // New format with timer and counter info
+                    if (parts.length >= 25) {
+                        // New format: system, input, output, marker, timer, counter info
+                        // Format: [header,arch,ver_maj,ver_min,ver_patch,build,date,stack,mem,prog,
+                        //          sys_off,sys_size,in_off,in_size,out_off,out_size,mark_off,mark_size,
+                        //          timer_off,timer_count,timer_struct,counter_off,counter_count,counter_struct,device]
                         return {
                             ...base,
-                            control_offset: +parts[10],
-                            control_size: +parts[11],
+                            system_offset: +parts[10],
+                            system_size: +parts[11],
                             input_offset: +parts[12],
                             input_size: +parts[13],
                             output_offset: +parts[14],
                             output_size: +parts[15],
-                            system_offset: +parts[16],
-                            system_size: +parts[17],
-                            marker_offset: +parts[18],
-                            marker_size: +parts[19],
-                            timer_offset: +parts[20],
-                            timer_count: +parts[21],
-                            timer_struct_size: +parts[22],
-                            counter_offset: +parts[23],
-                            counter_count: +parts[24],
-                            counter_struct_size: +parts[25],
-                            device: parts[26],
+                            marker_offset: +parts[16],
+                            marker_size: +parts[17],
+                            timer_offset: +parts[18],
+                            timer_count: +parts[19],
+                            timer_struct_size: +parts[20],
+                            counter_offset: +parts[21],
+                            counter_count: +parts[22],
+                            counter_struct_size: +parts[23],
+                            device: parts[24],
+                            // Legacy compatibility aliases
+                            control_offset: +parts[10],
+                            control_size: +parts[11],
                         }
                     }
                     if (parts.length >= 21) {
-                        // Legacy format without timer/counter info
+                        // Legacy format with control_offset naming (backwards compatibility)
                         return {
                             ...base,
                             control_offset: +parts[10],
