@@ -435,6 +435,12 @@ export default class NavigationTreeManager {
         const ctx_fixed_program = [
             { type: 'item', name: 'open', label: 'Open' },
         ]
+        
+        /** @type { MenuElement[] } */
+        const ctx_main_program = [
+            { type: 'item', name: 'open', label: 'Open' },
+            { type: 'item', name: 'show_generated', label: 'Show Generated Project' },
+        ]
 
         /** @type { (event: any, element: any) => MenuElement[] } */
         const on_context_open_navigation_tree = (event, element) => {
@@ -454,6 +460,7 @@ export default class NavigationTreeManager {
             }
             if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-symbols' || className === 'plc-navigation-memory') {
                 if (connected) return ctx_online_program
+                if (full_path === '/main') return ctx_main_program
                 if (is_fixed) return ctx_fixed_program
                 return ctx_edit_program
             }
@@ -607,6 +614,43 @@ export default class NavigationTreeManager {
         if (action === 'open') {
             // Trigger click on the element
             element.click()
+        }
+        if (action === 'show_generated') {
+            try {
+               const text = this.#editor.project_manager.buildProjectText()
+               const container = document.createElement('div')
+               container.style.cssText = 'height: 400px; display: flex; flex-direction: column;'
+               
+               const textarea = document.createElement('textarea')
+               textarea.value = text
+               textarea.readOnly = true
+               textarea.style.cssText = `
+                   flex: 1;
+                   width: 100%;
+                   background: #1e1e1e;
+                   color: #d4d4d4;
+                   font-family: 'Consolas', monospace;
+                   font-size: 13px;
+                   border: 1px solid #3c3c3c;
+                   resize: none;
+                   padding: 8px;
+                   box-sizing: border-box;
+                   white-space: pre;
+                   overflow: auto;
+               `
+               container.appendChild(textarea)
+
+               await Popup.promise({
+                   title: 'Generated Project Source',
+                   description: 'This is the raw project file used for compilation:',
+                   content: container,
+                   width: '600px',
+                   buttons: [{ text: 'Close', value: 'close' }]
+               })
+            } catch (e) {
+                console.error(e)
+                new Popup({ title: 'Error', description: 'Failed to generate project text: ' + e.message, buttons: [{ text: 'OK' }] })
+            }
         }
         if (action === 'delete') {
             if (isRoot) throw new Error(`Cannot delete root <${type}>"${name}"`)

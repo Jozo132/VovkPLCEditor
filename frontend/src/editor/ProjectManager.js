@@ -1052,8 +1052,9 @@ export default class ProjectManager {
 
     // Symbols section
     const symbols = project.symbols || []
-    const userSymbols = symbols.filter(s => !s.readonly)
-    if (userSymbols.length > 0) {
+    // Include all symbols for compilation (User, System, Device)
+    const compileSymbols = symbols 
+    if (compileSymbols.length > 0) {
         lines.push('SYMBOLS')
         
         // Map PLC symbol types to project compiler types
@@ -1078,7 +1079,7 @@ export default class ProjectManager {
             'counter': 'C'
         }
         
-        for (const sym of userSymbols) {
+        for (const sym of compileSymbols) {
             if (sym.name && sym.type && sym.address !== undefined) {
                 const prefix = locationPrefix[sym.location] || 'M'
                 const mappedType = typeMap[sym.type] || sym.type.toUpperCase()
