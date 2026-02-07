@@ -771,7 +771,7 @@ export default class NavigationTreeManager {
         }
 
         if (reload) {
-            default_root_state.files.forEach(item => this.createTreeItem({ item, recursive: true, fixed: true, redraw: false }))
+            default_root_state.files.forEach(item => this.createTreeItem({ item: { ...item, blocks: [] }, recursive: true, fixed: true, redraw: false }))
             default_root_state.folders.forEach(path => this.createTreeItem({ path, recursive: true, fixed: true, redraw: false }))
 
             empty_folders.forEach(path => this.createTreeItem({ path, recursive: true, redraw: false }))
