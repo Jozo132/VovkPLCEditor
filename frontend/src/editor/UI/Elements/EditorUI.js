@@ -1,7 +1,18 @@
 import { ElementSynthesis, ElementSynthesisMany, CSSimporter } from "../../../utils/tools.js"
 import { PLC_Program, PLC_ProgramBlock, PLCEditor } from "../../../utils/types.js"
-import { getIconType } from "./components/icons.js"
+import { getIconType, getThumbnailDataUrl } from "./components/icons.js"
 import { Popup } from "./components/popup.js"
+
+const SHORT_NAMES = {
+    ladder: 'LAD',
+    asm: 'ASM',
+    stl: 'STL',
+    st: 'ST',
+    plcscript: 'PSC',
+}
+
+/** @param {string} type @returns {string} */
+const shortName = (type) => SHORT_NAMES[(type || '').toLowerCase()] || (type || '???').toUpperCase().substring(0, 3)
 
 
 const importCSS = CSSimporter(import.meta.url)
@@ -269,7 +280,7 @@ export default class EditorUI {
                             <div class="plc-program-block-header-content">
                                 <div class="plc-program-block-header-title">
                                     <div class="plc-program-block-header-icon">
-                                        ${(type || '???').toUpperCase().substring(0, 3)}
+                                        ${shortName(type)}
                                     </div>
                                     <div class="plc-program-block-title">${name || ''}</div>
                                     <p class="plc-comment-simple">${comment || ''}</p>
@@ -432,211 +443,183 @@ export default class EditorUI {
             const container = document.createElement('div')
             container.style.display = 'flex'
             container.style.flexDirection = 'column'
-            container.style.gap = '15px'
-            container.style.marginTop = '10px'
-            
-            // Name Input
+            container.style.gap = '16px'
+            container.style.marginTop = '8px'
+            container.style.minWidth = '460px'
+
+            // --- Input fields ---
+            const inputSection = document.createElement('div')
+            inputSection.style.cssText = 'display:flex; gap:10px;'
+
             const nameContainer = document.createElement('div')
-            nameContainer.style.display = 'flex'
-            nameContainer.style.flexDirection = 'column'
-            nameContainer.style.gap = '5px'
-            
+            nameContainer.style.cssText = 'display:flex; flex-direction:column; gap:4px; flex:1;'
             const nameLabel = document.createElement('label')
             nameLabel.innerText = 'Name'
-            nameLabel.style.fontSize = '12px'
-            nameLabel.style.fontWeight = 'bold'
-            nameLabel.style.color = '#333'
-            
+            nameLabel.style.cssText = 'font-size:11px; font-weight:600; color:#999; text-transform:uppercase; letter-spacing:0.5px;'
             const nameInput = document.createElement('input')
             nameInput.type = 'text'
             nameInput.value = 'Network ' + ((this.program.blocks ? this.program.blocks.length : 0) + 1)
-            nameInput.style.padding = '5px'
-            nameInput.style.backgroundColor = '#fff'
-            nameInput.style.border = '1px solid #ccc'
-            nameInput.style.color = '#333'
-            nameInput.style.borderRadius = '3px'
-            
-            nameContainer.appendChild(nameLabel)
-            nameContainer.appendChild(nameInput)
-            container.appendChild(nameContainer)
-            
-            // Comment Input
+            nameInput.style.cssText = 'padding:8px 10px; background:#2a2a2a; border:1px solid #444; color:#e0e0e0; border-radius:4px; font-size:13px; outline:none; transition: border-color 0.2s;'
+            nameInput.onfocus = () => nameInput.style.borderColor = '#4a9eff'
+            nameInput.onblur = () => nameInput.style.borderColor = '#444'
+            nameContainer.append(nameLabel, nameInput)
+
             const commentContainer = document.createElement('div')
-            commentContainer.style.display = 'flex'
-            commentContainer.style.flexDirection = 'column'
-            commentContainer.style.gap = '5px'
-            
+            commentContainer.style.cssText = 'display:flex; flex-direction:column; gap:4px; flex:1;'
             const commentLabel = document.createElement('label')
             commentLabel.innerText = 'Description'
-            commentLabel.style.fontSize = '12px'
-            commentLabel.style.fontWeight = 'bold'
-            commentLabel.style.color = '#333'
-            
+            commentLabel.style.cssText = 'font-size:11px; font-weight:600; color:#999; text-transform:uppercase; letter-spacing:0.5px;'
             const commentInput = document.createElement('input')
             commentInput.type = 'text'
             commentInput.placeholder = 'Optional description'
-            commentInput.style.padding = '5px'
-            commentInput.style.backgroundColor = '#fff'
-            commentInput.style.border = '1px solid #ccc'
-            commentInput.style.color = '#333'
-            commentInput.style.borderRadius = '3px'
-            
-            commentContainer.appendChild(commentLabel)
-            commentContainer.appendChild(commentInput)
-            container.appendChild(commentContainer)
-            
-            // Type Selection
-            const typeContainer = document.createElement('div')
-            typeContainer.style.display = 'flex'
-            typeContainer.style.flexDirection = 'column'
-            typeContainer.style.gap = '5px'
+            commentInput.style.cssText = 'padding:8px 10px; background:#2a2a2a; border:1px solid #444; color:#e0e0e0; border-radius:4px; font-size:13px; outline:none; transition: border-color 0.2s;'
+            commentInput.onfocus = () => commentInput.style.borderColor = '#4a9eff'
+            commentInput.onblur = () => commentInput.style.borderColor = '#444'
+            commentContainer.append(commentLabel, commentInput)
 
-            const typeLabel = document.createElement('div')
-            typeLabel.innerText = 'Select Type:'
-            typeLabel.style.fontSize = '12px'
-            typeLabel.style.fontWeight = 'bold'
-            typeLabel.style.color = '#333'
-            typeContainer.appendChild(typeLabel)
-            
-            // Button Grid (2 columns, auto-expanding rows)
-            const buttonGroup = document.createElement('div')
-            buttonGroup.style.display = 'grid'
-            buttonGroup.style.gridTemplateColumns = 'repeat(2, 1fr)'
-            buttonGroup.style.gap = '10px'
-            
-            let selectedType = 'ladder' // Default selection
+            inputSection.append(nameContainer, commentContainer)
+            container.appendChild(inputSection)
+
+            // --- Language selection ---
+            let selectedType = 'ladder'
             const typeButtons = []
 
             const updateButtonVisuals = () => {
                 typeButtons.forEach(b => {
                     const isSelected = b.dataset.type === selectedType
-                    // Reset to base styles
-                    b.className = 'plc-btn' 
-                    b.style.userSelect = 'none' // Disable text select
-                    b.style.display = 'flex'
-                    b.style.alignItems = 'center'
-                    b.style.justifyContent = 'flex-start'
-                    b.style.gap = '8px'
-                    
-                     // Compensate for border width difference to prevent layout shift
-                    // Selected: 2px border + 9px padding = 11px
-                    // Unselected: 1px border + 10px padding = 11px
-                    b.style.padding = isSelected ? '9px 14px' : '10px 15px'
-                    b.style.border = isSelected ? '2px solid #007bff' : '1px solid #ccc' 
-                    b.style.backgroundColor = isSelected ? '#e6f0ff' : '#f9f9f9'
-                    b.style.color = isSelected ? '#0056b3' : '#333'
-                    b.style.fontWeight = '600'
+                    b.style.borderColor = isSelected ? '#4a9eff' : '#333'
+                    b.style.backgroundColor = isSelected ? '#1a2a3a' : '#222'
+                    b.style.boxShadow = isSelected ? '0 0 0 1px #4a9eff44, 0 2px 8px #0004' : '0 1px 3px #0003'
+                    const check = b.querySelector('.lang-check')
+                    if (check) check.style.opacity = isSelected ? '1' : '0'
                 })
             }
 
-            const createTypeBtn = (id, label) => {
+            const createTypeBtn = (id, label, subtitle, thumbnailType) => {
                 const btn = document.createElement('button')
                 btn.dataset.type = id
-                
-                // Icon (First 3 chars)
-                const icon = document.createElement('span')
-                icon.innerText = id.toUpperCase().substring(0, 3)
-                icon.style.color = '#60a8da'
-                // Replicate header icon style
-                icon.style.fontSize = '12px' 
-                icon.style.fontWeight = 'bold'
-                
-                const text = document.createElement('span')
-                text.innerText = label
-                
-                btn.appendChild(icon)
-                btn.appendChild(text)
-                
-                btn.onclick = () => {
-                   selectedType = id
-                   updateButtonVisuals()
+                btn.type = 'button'
+                btn.style.cssText = `
+                    display: flex; align-items: center; gap: 12px;
+                    padding: 10px 12px; border: 1.5px solid #333; border-radius: 6px;
+                    background: #222; cursor: pointer; text-align: left; width: 100%;
+                    transition: all 0.15s ease; position: relative; user-select: none;
+                `
+                btn.onmouseenter = () => { if (btn.dataset.type !== selectedType) btn.style.backgroundColor = '#2a2a2a' }
+                btn.onmouseleave = () => { if (btn.dataset.type !== selectedType) btn.style.backgroundColor = '#222' }
+
+                // Thumbnail
+                const thumb = document.createElement('div')
+                thumb.style.cssText = `
+                    width: 80px; height: 44px; border-radius: 4px; background: #181818;
+                    border: 1px solid #333; flex-shrink: 0; overflow: hidden;
+                    display: flex; align-items: center; justify-content: center;
+                `
+                const thumbSrc = getThumbnailDataUrl(thumbnailType)
+                if (thumbSrc) {
+                    const img = document.createElement('img')
+                    img.src = thumbSrc
+                    img.style.cssText = 'width:100%; height:100%; object-fit:contain;'
+                    img.draggable = false
+                    thumb.appendChild(img)
                 }
+
+                // Short name badge
+                const badge = document.createElement('div')
+                badge.style.cssText = `
+                    font-size: 10px; font-weight: 700; color: #60a8da; letter-spacing: 0.5px;
+                    min-width: 28px; text-align: center; flex-shrink: 0; user-select: none;
+                `
+                badge.innerText = shortName(id)
+
+                // Text content
+                const textCol = document.createElement('div')
+                textCol.style.cssText = 'display:flex; flex-direction:column; gap:2px; flex:1; min-width:0;'
+                const titleEl = document.createElement('div')
+                titleEl.style.cssText = 'font-size:13px; font-weight:600; color:#e0e0e0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'
+                titleEl.innerText = label
+                const subEl = document.createElement('div')
+                subEl.style.cssText = 'font-size:11px; color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'
+                subEl.innerText = subtitle
+                textCol.append(titleEl, subEl)
+
+                // Checkmark
+                const check = document.createElement('div')
+                check.className = 'lang-check'
+                check.style.cssText = `
+                    width: 18px; height: 18px; border-radius: 50%; background: #4a9eff;
+                    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+                    opacity: 0; transition: opacity 0.15s ease;
+                `
+                check.innerHTML = `<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+
+                btn.append(thumb, badge, textCol, check)
+                btn.onclick = () => { selectedType = id; updateButtonVisuals() }
+                typeButtons.push(btn)
                 return btn
             }
-            
-            const btnLadder = createTypeBtn('ladder', 'Ladder Diagram (LAD)')
-            const btnStl = createTypeBtn('stl', 'Siemens STL')
-            const btnAsm = createTypeBtn('asm', 'Assembly (ASM)')
-            const btnPlcscript = createTypeBtn('plcscript', 'PLCScript')
-            const btnSt = createTypeBtn('st', 'Structured Text (ST)')
-            
-            typeButtons.push(btnLadder, btnStl, btnAsm, btnPlcscript, btnSt)
-            updateButtonVisuals() // Initial state
-            
-            buttonGroup.appendChild(btnLadder)
-            buttonGroup.appendChild(btnStl)
-            buttonGroup.appendChild(btnAsm)
-            buttonGroup.appendChild(btnPlcscript)
-            buttonGroup.appendChild(btnSt)
-            typeContainer.appendChild(buttonGroup)
 
-            /*
-            const radioGroup = document.createElement('div')
-            radioGroup.style.display = 'flex'
-            radioGroup.style.gap = '15px'
-            
-            const createRadio = (id, label, checked = false) => {
-                const wrapper = document.createElement('div')
-                wrapper.style.display = 'flex'
-                wrapper.style.alignItems = 'center'
-                wrapper.style.gap = '5px'
-                
-                const radio = document.createElement('input')
-                radio.type = 'radio'
-                radio.name = 'block_type'
-                radio.value = id
-                radio.id = 'radio_' + id
-                radio.checked = checked
-                
-                const lbl = document.createElement('label')
-                lbl.innerText = label
-                lbl.setAttribute('for', 'radio_' + id)
-                lbl.style.color = '#333'
-                lbl.style.cursor = 'pointer'
+            // --- IEC 61131-3 Languages group ---
+            const iecGroup = document.createElement('div')
+            iecGroup.style.cssText = 'display:flex; flex-direction:column; gap:6px;'
+            const iecLabel = document.createElement('div')
+            iecLabel.style.cssText = 'font-size:11px; font-weight:600; color:#999; text-transform:uppercase; letter-spacing:0.5px; padding-bottom:2px; border-bottom:1px solid #333; margin-bottom:2px;'
+            iecLabel.innerText = 'IEC 61131-3 Languages'
+            const iecGrid = document.createElement('div')
+            iecGrid.style.cssText = 'display:flex; flex-direction:column; gap:6px;'
 
-                wrapper.appendChild(radio)
-                wrapper.appendChild(lbl)
-                return { wrapper, radio }
-            }
+            iecGrid.append(
+                createTypeBtn('ladder', 'Ladder Diagram', 'Visual relay logic editor', 'lang-ladder'),
+                createTypeBtn('st', 'Structured Text', 'High-level IEC programming language also known as SCL', 'lang-st'),
+                createTypeBtn('stl', 'Statement List', 'Siemens-style instruction list', 'lang-stl'),
+            )
+            iecGroup.append(iecLabel, iecGrid)
 
-            const r1 = createRadio('ladder', 'Ladder Diagram (LAD)', true)
-            const r2 = createRadio('asm', 'Assembly (ASM)')
-            
-            radioGroup.appendChild(r1.wrapper)
-            radioGroup.appendChild(r2.wrapper)
-            typeContainer.appendChild(radioGroup)
-            */
-            container.appendChild(typeContainer)
+            // --- Custom PLC Languages group ---
+            const customGroup = document.createElement('div')
+            customGroup.style.cssText = 'display:flex; flex-direction:column; gap:6px;'
+            const customLabel = document.createElement('div')
+            customLabel.style.cssText = 'font-size:11px; font-weight:600; color:#999; text-transform:uppercase; letter-spacing:0.5px; padding-bottom:2px; border-bottom:1px solid #333; margin-bottom:2px;'
+            customLabel.innerText = 'VovkPLC Languages'
+            const customGrid = document.createElement('div')
+            customGrid.style.cssText = 'display:flex; flex-direction:column; gap:6px;'
+
+            customGrid.append(
+                createTypeBtn('plcscript', 'PLCScript', 'High-level TS-like scripting language', 'lang-plcscript'),
+                createTypeBtn('asm', 'PLCASM', 'Low-level PLC assembly', 'lang-asm'),
+            )
+            customGroup.append(customLabel, customGrid)
+
+            updateButtonVisuals()
+            container.append(iecGroup, customGroup)
 
             let popup = null
-
             popup = new Popup({
                 title: 'Add Program Block',
-                description: 'Enter details and select language:',
                 content: container,
                 buttons: [
-                    { 
-                        text: 'Add', 
-                        value: 'confirm', 
-                        background: '#007bff',
+                    {
+                        text: 'Add Block',
+                        value: 'confirm',
+                        background: '#4a9eff',
                         color: 'white',
                         verify: () => {
                             if (!nameInput.value.trim()) {
-                                nameInput.style.borderColor = 'red'
+                                nameInput.style.borderColor = '#ff4444'
+                                nameInput.focus()
                                 return false
                             }
                             return true
                         }
                     },
-                    { text: 'Cancel', value: 'cancel' } 
+                    { text: 'Cancel', value: 'cancel' }
                 ],
                 onClose: (val) => {
                     if (val === 'confirm') {
-                        // Use the selectedType variable instead of querying radios
-                        resolve({ 
-                            type: selectedType, 
-                            name: nameInput.value, 
-                            comment: commentInput.value 
+                        resolve({
+                            type: selectedType,
+                            name: nameInput.value,
+                            comment: commentInput.value
                         })
                     } else {
                         resolve(null)

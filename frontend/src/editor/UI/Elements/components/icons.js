@@ -3,6 +3,8 @@ import { ImageRenderer, importCSSCode } from "../../../../utils/tools.js"
 class IconDealer {
     /** @type { Map<string, string> } */
     icons = new Map()
+    /** @type { Map<string, string> } */
+    thumbnails = new Map()
 
     static getInstance() {
         window['____vovkplceditor_icon_dealer'] = window['____vovkplceditor_icon_dealer'] || new IconDealer()
@@ -20,12 +22,25 @@ class IconDealer {
         if (this.icons.has(type)) return this.icons.get(type) || ''
         return ''
     }
+
+    /** @param {{ type: string, source: { width: number, height: number, scale?: number, data: string } }} options */
+    registerThumbnail({ type, source }) {
+        const dataUrl = ImageRenderer.renderSVG(source)
+        this.thumbnails.set(type, dataUrl)
+    }
+
+    /** @param { string } type * @returns { string } */
+    getThumbnailDataUrl(type) {
+        return this.thumbnails.get(type) || ''
+    }
 }
 const icon_dealer = IconDealer.getInstance()
 /** @type { (name: string, type: string, image: string) => Promise<void> } */
 export const importIcon = (name, type, image) => icon_dealer.importIcon({ name, type, image })
 /** @type { (type: string) => string } */
 export const getIconType = (type) => icon_dealer.getIconType(type)
+/** @param { string } type * @returns { string } Data URL for the thumbnail image */
+export const getThumbnailDataUrl = (type) => icon_dealer.getThumbnailDataUrl(type)
 
 
 // Simple 12x12 folder icon in yellow color, with the ear sticking out on the top left in dark yellow
@@ -321,3 +336,154 @@ await icon_dealer.importIcon({ type: 'project-properties', name: 'plc-icon-proje
 await icon_dealer.importIcon({ type: 'cut', name: 'plc-icon-cut', image: `url('${ImageRenderer.renderSVG(cut_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'copy', name: 'plc-icon-copy', image: `url('${ImageRenderer.renderSVG(copy_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'paste', name: 'plc-icon-paste', image: `url('${ImageRenderer.renderSVG(paste_icon_source)}')` })
+
+// ============================================================================
+// Language Thumbnails - preview images for the Add Block popup
+// ============================================================================
+
+const thumb_ladder_source = {
+    width: 120, height: 60,
+    data: `
+        <rect x="0" y="0" width="120" height="60" fill="#2a2a2a" rx="3"/>
+        <line x1="4" y1="3" x2="4" y2="57" stroke="#888" stroke-width="2.5"/>
+
+        <!-- Rung 1: contact -> branch (2 contacts) -> coil, with termination stub -->
+        <line x1="4" y1="13" x2="12" y2="13" stroke="#00dddd" stroke-width="1.5"/>
+        <line x1="12" y1="8" x2="12" y2="18" stroke="#00dddd" stroke-width="1.5"/>
+        <line x1="17" y1="8" x2="17" y2="18" stroke="#00dddd" stroke-width="1.5"/>
+        <text x="14.5" y="23" text-anchor="middle" fill="#CCC" font-size="4.5" font-family="Consolas, monospace">X0</text>
+        <line x1="17" y1="13" x2="26" y2="13" stroke="#00dddd" stroke-width="1.5"/>
+
+        <!-- Branch: split into top and bottom paths -->
+        <line x1="26" y1="6" x2="26" y2="13" stroke="#00dddd" stroke-width="1.5"/>
+        <line x1="26" y1="13" x2="26" y2="20" stroke="#888" stroke-width="1.5"/>
+
+        <!-- Top branch: contact M0.0 -->
+        <line x1="26" y1="6" x2="31" y2="6" stroke="#00dddd" stroke-width="1.5"/>
+        <line x1="31" y1="2" x2="31" y2="10" stroke="#00dddd" stroke-width="1.5"/>
+        <line x1="36" y1="2" x2="36" y2="10" stroke="#00dddd" stroke-width="1.5"/>
+        <line x1="36" y1="6" x2="46" y2="6" stroke="#00dddd" stroke-width="1.5"/>
+
+        <!-- Bottom branch: contact M0.1 -->
+        <line x1="26" y1="20" x2="31" y2="20" stroke="#888" stroke-width="1.5"/>
+        <line x1="31" y1="16" x2="31" y2="24" stroke="#888" stroke-width="1.5"/>
+        <line x1="36" y1="16" x2="36" y2="24" stroke="#888" stroke-width="1.5"/>
+        <line x1="36" y1="20" x2="46" y2="20" stroke="#888" stroke-width="1.5"/>
+
+        <!-- Rejoin -->
+        <line x1="46" y1="6" x2="46" y2="13" stroke="#00dddd" stroke-width="1.5"/>
+        <line x1="46" y1="13" x2="46" y2="20" stroke="#888" stroke-width="1.5"/>
+
+        <!-- Coil Y0.1 + termination stub -->
+        <line x1="46" y1="13" x2="54" y2="13" stroke="#00dddd" stroke-width="1.5"/>
+        <circle cx="58" cy="13" r="4" fill="none" stroke="#00dddd" stroke-width="1.2"/>
+        <line x1="62" y1="13" x2="68" y2="13" stroke="#00dddd" stroke-width="1.5"/>
+        <text x="58" y="23" text-anchor="middle" fill="#CCC" font-size="4.5" font-family="Consolas, monospace">Y0</text>
+
+        <!-- Rung 2: contact -> TON timer block -> coil, with termination stub -->
+        <line x1="4" y1="42" x2="12" y2="42" stroke="#888" stroke-width="1.5"/>
+        <line x1="12" y1="37" x2="12" y2="47" stroke="#888" stroke-width="1.5"/>
+        <line x1="17" y1="37" x2="17" y2="47" stroke="#888" stroke-width="1.5"/>
+        <text x="14.5" y="53" text-anchor="middle" fill="#999" font-size="4.5" font-family="Consolas, monospace">X1</text>
+        <line x1="17" y1="42" x2="30" y2="42" stroke="#888" stroke-width="1.5"/>
+
+        <!-- TON timer block -->
+        <rect x="30" y="33" width="32" height="18" rx="1.5" fill="#2a2a2a" stroke="#888" stroke-width="1.2"/>
+        <rect x="30" y="33" width="32" height="7" rx="1.5" fill="#444" stroke="#888" stroke-width="0.8"/>
+        <text x="46" y="38.5" text-anchor="middle" fill="#DDD" font-size="5" font-family="Consolas, monospace" font-weight="bold">TON</text>
+        <text x="33" y="46" fill="#999" font-size="4" font-family="Consolas, monospace">IN</text>
+        <text x="55" y="46" text-anchor="end" fill="#999" font-size="4" font-family="Consolas, monospace">Q</text>
+        <text x="33" y="50.5" fill="#777" font-size="3.5" font-family="Consolas, monospace">PT</text>
+
+        <!-- Timer output wire -> coil Y1 + termination stub -->
+        <line x1="62" y1="42" x2="72" y2="42" stroke="#888" stroke-width="1.5"/>
+        <circle cx="76" cy="42" r="4" fill="none" stroke="#888" stroke-width="1.2"/>
+        <line x1="80" y1="42" x2="86" y2="42" stroke="#888" stroke-width="1.5"/>
+        <text x="76" y="53" text-anchor="middle" fill="#999" font-size="4.5" font-family="Consolas, monospace">Y1</text>
+    `
+}
+
+const thumb_stl_source = {
+    width: 120, height: 60,
+    data: `
+        <text x="6" y="14" fill="#569cd6" font-size="9" font-family="monospace" font-weight="bold">A</text>
+        <text x="22" y="14" fill="#c8c8c8" font-size="9" font-family="monospace">I0.0</text>
+        <text x="6" y="26" fill="#569cd6" font-size="9" font-family="monospace" font-weight="bold">AN</text>
+        <text x="22" y="26" fill="#c8c8c8" font-size="9" font-family="monospace">I0.1</text>
+        <text x="6" y="38" fill="#569cd6" font-size="9" font-family="monospace" font-weight="bold">O</text>
+        <text x="22" y="38" fill="#c8c8c8" font-size="9" font-family="monospace">I0.2</text>
+        <text x="6" y="50" fill="#d4a843" font-size="9" font-family="monospace" font-weight="bold">=</text>
+        <text x="22" y="50" fill="#c8c8c8" font-size="9" font-family="monospace">Q0.0</text>
+    `
+}
+
+const thumb_st_source = {
+    width: 120, height: 60,
+    data: `
+        <text x="6" y="14" fill="#c586c0" font-size="8.5" font-family="monospace" font-weight="bold">IF</text>
+        <text x="24" y="14" fill="#c8c8c8" font-size="8.5" font-family="monospace">sensor</text>
+        <text x="6" y="26" fill="#c586c0" font-size="8.5" font-family="monospace" font-weight="bold">THEN</text>
+        <text x="14" y="38" fill="#c8c8c8" font-size="8.5" font-family="monospace">motor</text>
+        <text x="52" y="38" fill="#d4d4d4" font-size="8.5" font-family="monospace">:=</text>
+        <text x="66" y="38" fill="#b5cea8" font-size="8.5" font-family="monospace">TRUE;</text>
+        <text x="6" y="50" fill="#c586c0" font-size="8.5" font-family="monospace" font-weight="bold">END_IF;</text>
+    `
+}
+
+const thumb_asm_source = {
+    width: 120, height: 60,
+    data: `
+        <text x="6" y="14" fill="#4ec9b0" font-size="9" font-family="monospace">u8</text>
+        <text x="18" y="14" fill="#d4d4d4" font-size="9" font-family="monospace">.</text>
+        <text x="24" y="14" fill="#569cd6" font-size="9" font-family="monospace">readBit</text>
+        <text x="66" y="14" fill="#d68d5e" font-size="9" font-family="monospace">X0.0</text>
+        <text x="6" y="30" fill="#569cd6" font-size="9" font-family="monospace" font-weight="bold">ton</text>
+        <text x="28" y="30" fill="#d68d5e" font-size="9" font-family="monospace">T0</text>
+        <text x="42" y="30" fill="#abdad2" font-size="9" font-family="monospace">T#15s</text>
+        <text x="6" y="46" fill="#4ec9b0" font-size="9" font-family="monospace">u8</text>
+        <text x="18" y="46" fill="#d4d4d4" font-size="9" font-family="monospace">.</text>
+        <text x="24" y="46" fill="#569cd6" font-size="9" font-family="monospace">writeBit</text>
+        <text x="72" y="46" fill="#d68d5e" font-size="9" font-family="monospace">Y0.0</text>
+    `
+}
+
+const thumb_plcscript_source = {
+    width: 120, height: 60,
+    data: `
+        <text x="5" y="12" fill="#c586c0" font-size="8" font-family="monospace" font-weight="bold">let</text>
+        <text x="22" y="12" fill="#9cdcfe" font-size="8" font-family="monospace">cnt</text>
+        <text x="37" y="12" fill="#d4d4d4" font-size="8" font-family="monospace">:</text>
+        <text x="42" y="12" fill="#4ec9b0" font-size="8" font-family="monospace">u8</text>
+        <text x="53" y="12" fill="#d4d4d4" font-size="8" font-family="monospace">=</text>
+        <text x="60" y="12" fill="#b5cea8" font-size="8" font-family="monospace">5</text>
+
+        <text x="5" y="24" fill="#c586c0" font-size="8" font-family="monospace" font-weight="bold">let</text>
+        <text x="22" y="24" fill="#9cdcfe" font-size="8" font-family="monospace">result</text>
+        <text x="52" y="24" fill="#d4d4d4" font-size="8" font-family="monospace">:</text>
+        <text x="57" y="24" fill="#4ec9b0" font-size="8" font-family="monospace">str</text>
+        <text x="72" y="24" fill="#d4d4d4" font-size="8" font-family="monospace">=</text>
+        <text x="79" y="24" fill="#ce9178" font-size="8" font-family="monospace">""</text>
+
+        <text x="5" y="36" fill="#9cdcfe" font-size="8" font-family="monospace">cnt</text>
+        <text x="21" y="36" fill="#d4d4d4" font-size="8" font-family="monospace">=</text>
+        <text x="28" y="36" fill="#9cdcfe" font-size="8" font-family="monospace">cnt</text>
+        <text x="44" y="36" fill="#d4d4d4" font-size="8" font-family="monospace">&gt;</text>
+        <text x="51" y="36" fill="#b5cea8" font-size="8" font-family="monospace">10</text>
+        <text x="62" y="36" fill="#d4d4d4" font-size="8" font-family="monospace">?</text>
+        <text x="69" y="36" fill="#b5cea8" font-size="8" font-family="monospace">-10</text>
+        <text x="84" y="36" fill="#d4d4d4" font-size="8" font-family="monospace">:</text>
+        <text x="89" y="36" fill="#9cdcfe" font-size="8" font-family="monospace">cnt</text>
+
+        <text x="5" y="48" fill="#9cdcfe" font-size="8" font-family="monospace">result</text>
+        <text x="35" y="48" fill="#d4d4d4" font-size="8" font-family="monospace">=</text>
+        <text x="42" y="48" fill="#ce9178" font-size="8" font-family="monospace">\`Counter </text>
+        <text x="84" y="48" fill="#9cdcfe" font-size="8" font-family="monospace">\${cnt}</text>
+        <text x="112" y="48" fill="#ce9178" font-size="8" font-family="monospace">\`</text>
+    `
+}
+
+icon_dealer.registerThumbnail({ type: 'lang-ladder', source: thumb_ladder_source })
+icon_dealer.registerThumbnail({ type: 'lang-stl', source: thumb_stl_source })
+icon_dealer.registerThumbnail({ type: 'lang-st', source: thumb_st_source })
+icon_dealer.registerThumbnail({ type: 'lang-asm', source: thumb_asm_source })
+icon_dealer.registerThumbnail({ type: 'lang-plcscript', source: thumb_plcscript_source })
