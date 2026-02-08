@@ -5271,6 +5271,12 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
           pasteSelection(editor, ladder, contextMenuX, contextMenuY)
         }
 
+        // Handle properties action
+        if (selected_action === 'properties') {
+          const blockAtPosition = ladder.blocks.find(b => b.x === contextMenuX && b.y === contextMenuY)
+          showBlockProperties(editor, blockAtPosition || null, ladder, contextMenuX, contextMenuY)
+        }
+
         // Trigger redraw after any context menu action
         ladderRenderer.render(editor, ladder)
         
@@ -6232,6 +6238,580 @@ const resolveAddressToSymbol = (editor, addressOrSymbol) => {
   })
   
   return matchingSymbol ? matchingSymbol.name : trimmed
+}
+
+/**
+ * Show a Properties popup for a ladder block with live-updating values
+ * @param {VovkPLCEditor} editor
+ * @param {PLC_LadderBlock | null} block - The block at the right-clicked position, or null if empty
+ * @param {any} ladder - The ladder block
+ * @param {number} gridX - Grid X position
+ * @param {number} gridY - Grid Y position
+ */
+async function showBlockProperties(editor, block, ladder, gridX, gridY) {
+  if (!block) {
+    // Empty cell - show minimal info
+    await Popup.promise({
+      title: 'Properties - Empty Cell',
+      width: '360px',
+      content: `<div style="padding: 8px; color: #ccc; font-size: 13px;">
+        <table style="width:100%; border-collapse:collapse;">
+          <tr><td style="padding:4px 8px; color:#999;">Position</td><td style="padding:4px 8px;">(${gridX}, ${gridY})</td></tr>
+          <tr><td style="padding:4px 8px; color:#999;">Type</td><td style="padding:4px 8px;">Empty</td></tr>
+        </table>
+      </div>`,
+      buttons: [{ text: 'Close', value: 'close' }]
+    })
+    return
+  }
+
+  // Resolve block state and symbol
+  const resolvedBlock = getBlockState(editor, block)
+  const symbol = resolvedBlock.state?.symbol
+  const offsets = ensureOffsets(editor.project?.offsets || {})
+
+  // Determine block category and display info
+  const isContact = block.type === 'contact'
+  const isCoil = ['coil', 'coil_set', 'coil_rset'].includes(block.type)
+  const isTimer = ['timer_ton', 'timer_tof', 'timer_tp'].includes(block.type)
+  const isCounter = ['counter_u', 'counter_d', 'counter_ctu', 'counter_ctd', 'counter_ctud'].includes(block.type)
+  const isFB = isFunctionBlock(block.type)
+
+  // Block type labels
+  const typeLabels = {
+    'contact': 'Contact (NO)',
+    'coil': 'Coil (Assign)',
+    'coil_set': 'Coil (Set)',
+    'coil_rset': 'Coil (Reset)',
+    'timer_ton': 'Timer - TON (On Delay)',
+    'timer_tof': 'Timer - TOF (Off Delay)',
+    'timer_tp': 'Timer - TP (Pulse)',
+    'counter_u': 'Counter - CTU (Count Up)',
+    'counter_d': 'Counter - CTD (Count Down)',
+    'counter_ctu': 'Counter - CTU (Count Up)',
+    'counter_ctd': 'Counter - CTD (Count Down)',
+    'counter_ctud': 'Counter - CTUD (Up/Down)',
+  }
+  let typeLabel = typeLabels[block.type] || (isFB ? `Function Block - ${getFunctionBlockLabel(block.type)}` : block.type)
+
+  // For contacts with special attributes
+  if (isContact && block.inverted) typeLabel = 'Contact (NC)'
+  if (isContact && block.trigger === 'rising') typeLabel = 'Contact - Rising Edge (P)'
+  if (isContact && block.trigger === 'falling') typeLabel = 'Contact - Falling Edge (N)'
+  if (isContact && block.trigger === 'change') typeLabel = 'Contact - Any Change'
+  if (isCoil && block.inverted) typeLabel = typeLabel.replace('(Assign)', '(Inverted)')
+
+  // Category icon
+  const categoryMap = {
+    'contact': 'Input',
+    'coil': 'Output', 'coil_set': 'Output', 'coil_rset': 'Output',
+    'timer_ton': 'Timer', 'timer_tof': 'Timer', 'timer_tp': 'Timer',
+    'counter_u': 'Counter', 'counter_d': 'Counter', 'counter_ctu': 'Counter', 'counter_ctd': 'Counter', 'counter_ctud': 'Counter',
+  }
+  const category = categoryMap[block.type] || (isFB ? 'Function Block' : 'Unknown')
+
+  // Compute absolute address for the primary symbol
+  const computeAbsoluteAddress = (sym) => {
+    if (!sym) return null
+    const key = sym.location === 'memory' ? 'marker' : sym.location
+    const baseOffset = offsets[key]?.offset || 0
+    const byteAddr = Math.floor(sym.address)
+    return baseOffset + byteAddr
+  }
+
+  const absoluteAddr = computeAbsoluteAddress(symbol)
+
+  // Type size info
+  const typeSizes = { 'bit': 1, 'byte': 1, 'u8': 1, 'i8': 1, 'u16': 2, 'i16': 2, 'u32': 4, 'i32': 4, 'f32': 4, 'f64': 8, 'i64': 8, 'u64': 8 }
+
+  // Build parameters section based on block type
+  const buildParameterRows = () => {
+    const rows = []
+
+    if (isContact || isCoil) {
+      // Simple: just symbol
+      const addrStr = symbol ? `${absoluteAddr}` : '—'
+      const bitStr = symbol?.type === 'bit' ? `.${Math.round((symbol.address % 1) * 10) % 8}` : ''
+      rows.push({
+        label: isContact ? 'Input' : 'Output',
+        symbol: block.symbol || '(none)',
+        location: symbol?.location || '—',
+        type: symbol?.type || '—',
+        address: symbol ? `Byte ${addrStr}${bitStr}` : '—',
+        id: 'param_main'
+      })
+    }
+
+    if (isTimer) {
+      const timerAddr = offsets.timer?.offset || 448
+      const timerAbsAddr = timerAddr + Math.floor(symbol?.address || 0) * 9
+      rows.push({
+        label: 'Timer Symbol',
+        symbol: block.symbol || '(none)',
+        location: symbol?.location || 'timer',
+        type: 'u32 (ET)',
+        address: symbol ? `Byte ${timerAbsAddr}` : '—',
+        id: 'param_et'
+      })
+
+      let presetStr = block.preset || 'T#1s'
+      if (typeof presetStr === 'number') presetStr = formatTimeDuration(presetStr)
+      rows.push({
+        label: 'Preset (PT)',
+        symbol: presetStr,
+        location: '—',
+        type: 'const',
+        address: '—',
+        id: 'param_pt'
+      })
+      rows.push({
+        label: 'Flags',
+        symbol: `${block.symbol || '?'} (flags)`,
+        location: symbol?.location || 'timer',
+        type: 'byte',
+        address: symbol ? `Byte ${timerAbsAddr + 8}` : '—',
+        id: 'param_flags'
+      })
+    }
+
+    if (isCounter) {
+      const counterAddr = offsets.counter?.offset || 448
+      const counterAbsAddr = counterAddr + Math.floor(symbol?.address || 0) * 5
+      rows.push({
+        label: 'Counter Symbol',
+        symbol: block.symbol || '(none)',
+        location: symbol?.location || 'counter',
+        type: 'i32 (CV)',
+        address: symbol ? `Byte ${counterAbsAddr}` : '—',
+        id: 'param_cv'
+      })
+      rows.push({
+        label: 'Preset (PV)',
+        symbol: String(block.preset ?? 10),
+        location: '—',
+        type: 'const',
+        address: '—',
+        id: 'param_pv'
+      })
+      rows.push({
+        label: 'Flags',
+        symbol: `${block.symbol || '?'} (flags)`,
+        location: symbol?.location || 'counter',
+        type: 'byte',
+        address: symbol ? `Byte ${counterAbsAddr + 4}` : '—',
+        id: 'param_flags'
+      })
+    }
+
+    if (isFB) {
+      const isUnary = isUnaryMathBlock(block.type)
+      const isMove = isMoveBlock(block.type)
+      const isIncDec = isIncDecBlock(block.type)
+      const dt = block.dataType || 'i16'
+      const dtSize = typeSizes[dt] || 2
+
+      if (isIncDec) {
+        // INC/DEC use same address for in and out
+        const addr = block.in1 || block.symbol || ''
+        const parsed = parseAddressToSymbol(addr)
+        const abs = parsed ? computeAbsoluteAddress(parsed) : null
+        rows.push({
+          label: 'IN/OUT',
+          symbol: addr || '(none)',
+          location: parsed?.location || '—',
+          type: dt,
+          address: abs !== null ? `Byte ${abs} (${dtSize}B)` : '—',
+          id: 'param_inout'
+        })
+      } else if (isUnary || isMove) {
+        // Unary: IN1 -> OUT
+        const in1Addr = block.in1 || ''
+        const outAddr = block.out || block.symbol || ''
+        const parsedIn1 = parseAddressToSymbol(in1Addr)
+        const parsedOut = parseAddressToSymbol(outAddr)
+        const absIn1 = parsedIn1 ? computeAbsoluteAddress(parsedIn1) : null
+        const absOut = parsedOut ? computeAbsoluteAddress(parsedOut) : null
+        rows.push({
+          label: 'IN',
+          symbol: in1Addr || '(none)',
+          location: parsedIn1?.location || '—',
+          type: dt,
+          address: absIn1 !== null ? `Byte ${absIn1} (${dtSize}B)` : '—',
+          id: 'param_in1'
+        })
+        rows.push({
+          label: 'OUT',
+          symbol: outAddr || '(none)',
+          location: parsedOut?.location || '—',
+          type: dt,
+          address: absOut !== null ? `Byte ${absOut} (${dtSize}B)` : '—',
+          id: 'param_out'
+        })
+      } else {
+        // Binary: IN1 op IN2 -> OUT
+        const in1Addr = block.in1 || ''
+        const in2Addr = block.in2 || ''
+        const outAddr = block.out || block.symbol || ''
+        const parsedIn1 = parseAddressToSymbol(in1Addr)
+        const parsedIn2 = parseAddressToSymbol(in2Addr)
+        const parsedOut = parseAddressToSymbol(outAddr)
+        const absIn1 = parsedIn1 ? computeAbsoluteAddress(parsedIn1) : null
+        const absIn2 = parsedIn2 ? computeAbsoluteAddress(parsedIn2) : null
+        const absOut = parsedOut ? computeAbsoluteAddress(parsedOut) : null
+        rows.push({
+          label: 'IN1',
+          symbol: in1Addr || '(none)',
+          location: parsedIn1?.location || '—',
+          type: dt,
+          address: absIn1 !== null ? `Byte ${absIn1} (${dtSize}B)` : '—',
+          id: 'param_in1'
+        })
+        rows.push({
+          label: 'IN2',
+          symbol: in2Addr || '(none)',
+          location: parsedIn2?.location || '—',
+          type: dt,
+          address: absIn2 !== null ? `Byte ${absIn2} (${dtSize}B)` : '—',
+          id: 'param_in2'
+        })
+        rows.push({
+          label: 'OUT',
+          symbol: outAddr || '(none)',
+          location: parsedOut?.location || '—',
+          type: dt,
+          address: absOut !== null ? `Byte ${absOut} (${dtSize}B)` : '—',
+          id: 'param_out'
+        })
+      }
+    }
+    return rows
+  }
+
+  const paramRows = buildParameterRows()
+
+  // == Read live value functions ==
+  const readLiveValue = (sym, dataType) => {
+    if (!sym) return null
+    const liveValues = editor.live_symbol_values
+    if (liveValues) {
+      let entry = liveValues.get(sym.name)
+      if (!entry) {
+        // Try by address
+        const absAddr = computeAbsoluteAddress(sym)
+        entry = [...liveValues.values()].find(l => l.absoluteAddress === absAddr && (l.type === dataType || l.type === sym.type))
+      }
+      if (entry && entry.value !== undefined) return entry.value
+    }
+    // Fallback: read from editor.memory
+    if (editor.memory && editor.memory.length > 0) {
+      const absAddr = computeAbsoluteAddress(sym)
+      if (absAddr !== null && absAddr >= 0 && absAddr < editor.memory.length) {
+        if (sym.type === 'bit') {
+          const byteVal = editor.memory[absAddr]
+          const bit = Math.round((sym.address % 1) * 10) % 8
+          return (byteVal >> bit) & 1
+        }
+        const effectiveType = dataType || sym.type || 'byte'
+        const isLE = editor.device_manager?.deviceInfo?.isLittleEndian ?? true
+        const view = new DataView(editor.memory.buffer, editor.memory.byteOffset, editor.memory.byteLength)
+        return readTypedValue(view, absAddr, effectiveType, isLE)
+      }
+    }
+    return null
+  }
+
+  const readTimerLiveValues = () => {
+    if (!symbol || !isTimer) return null
+    const timerAddr = offsets.timer?.offset || 448
+    const timerAbsAddr = timerAddr + Math.floor(symbol.address) * 9
+    const isLE = editor.device_manager?.deviceInfo?.isLittleEndian ?? true
+
+    let et = null
+    let flags = null
+
+    // Read ET (u32 at offset 0)
+    const liveValues = editor.live_symbol_values
+    if (liveValues) {
+      let entry = liveValues.get(symbol.name)
+      if (!entry || entry.type === 'byte') {
+        entry = [...liveValues.values()].find(l => l.absoluteAddress === timerAbsAddr && (l.type === 'u32' || l.type === 'dint'))
+      }
+      if (entry && typeof entry.value === 'number') et = entry.value
+      // Flags
+      const flagsEntry = [...liveValues.values()].find(l => l.absoluteAddress === timerAbsAddr + 8 && l.type === 'byte')
+      if (flagsEntry && typeof flagsEntry.value === 'number') flags = flagsEntry.value
+    }
+    // Fallback to memory
+    if (editor.memory && editor.memory.length > timerAbsAddr + 8) {
+      if (et === null) {
+        const view = new DataView(editor.memory.buffer, editor.memory.byteOffset, editor.memory.byteLength)
+        et = readTypedValue(view, timerAbsAddr, 'u32', isLE)
+      }
+      if (flags === null) flags = editor.memory[timerAbsAddr + 8]
+    }
+    return { et, flags }
+  }
+
+  const readCounterLiveValues = () => {
+    if (!symbol || !isCounter) return null
+    const counterAddr = offsets.counter?.offset || 448
+    const counterAbsAddr = counterAddr + Math.floor(symbol.address) * 5
+    const isLE = editor.device_manager?.deviceInfo?.isLittleEndian ?? true
+
+    let cv = null
+    let flags = null
+
+    const liveValues = editor.live_symbol_values
+    if (liveValues) {
+      let entry = liveValues.get(symbol.name)
+      if (!entry || entry.type === 'byte') {
+        entry = [...liveValues.values()].find(l => l.absoluteAddress === counterAbsAddr && (l.type === 'i32' || l.type === 'dint'))
+      }
+      if (entry && typeof entry.value === 'number') cv = entry.value
+      const flagsEntry = [...liveValues.values()].find(l => l.absoluteAddress === counterAbsAddr + 4 && l.type === 'byte')
+      if (flagsEntry && typeof flagsEntry.value === 'number') flags = flagsEntry.value
+    }
+    if (editor.memory && editor.memory.length > counterAbsAddr + 4) {
+      if (cv === null) {
+        const view = new DataView(editor.memory.buffer, editor.memory.byteOffset, editor.memory.byteLength)
+        cv = readTypedValue(view, counterAbsAddr, 'i32', isLE)
+      }
+      if (flags === null) flags = editor.memory[counterAbsAddr + 4]
+    }
+    return { cv, flags }
+  }
+
+  const readFBLiveValue = (addrStr, dt) => {
+    if (!addrStr) return null
+    const parsed = parseAddressToSymbol(addrStr)
+    if (!parsed) {
+      // Try project symbols
+      const sym = editor.project?.symbols?.find(s => s.name === addrStr)
+      if (sym) return readLiveValue(sym, dt)
+      return null
+    }
+    return readLiveValue(parsed, dt)
+  }
+
+  // Format a value for display
+  const formatValue = (val, type) => {
+    if (val === null || val === undefined) return '—'
+    if (type === 'bit') return val ? '<span style="color:#32cd32;">ON (1)</span>' : '<span style="color:#f44;">OFF (0)</span>'
+    if (type === 'byte') return `${val} (0x${val.toString(16).toUpperCase().padStart(2, '0')})`
+    if (type === 'f32' || type === 'f64') return typeof val === 'number' ? val.toFixed(4) : String(val)
+    return String(val)
+  }
+
+  // Build HTML
+  const isLive = editor.device_manager.connected && !!editor.window_manager?.isMonitoringActive?.()
+  const headerColor = isLive ? '#1b7a1b' : '#444'
+
+  const tableStyle = `width:100%; border-collapse:collapse; font-size:13px;`
+  const thStyle = `padding:5px 8px; text-align:left; color:#999; border-bottom:1px solid #444; font-weight:normal; white-space:nowrap;`
+  const tdStyle = `padding:5px 8px; border-bottom:1px solid #333; white-space:nowrap;`
+
+  let html = `<div style="padding: 4px 0; color: #ccc;">`
+
+  // Node Info Section
+  html += `<div style="padding: 2px 8px 6px; border-bottom: 1px solid #555; margin-bottom: 6px;">`
+  html += `<table style="${tableStyle}">`
+  html += `<tr><td style="${tdStyle} color:#999; width:100px;">Type</td><td style="${tdStyle} color:#eee; font-weight:bold;">${typeLabel}</td></tr>`
+  html += `<tr><td style="${tdStyle} color:#999;">Category</td><td style="${tdStyle}">${category}</td></tr>`
+  html += `<tr><td style="${tdStyle} color:#999;">Position</td><td style="${tdStyle}">(${block.x}, ${block.y})</td></tr>`
+  if (isContact) {
+    html += `<tr><td style="${tdStyle} color:#999;">Inverted</td><td style="${tdStyle}">${block.inverted ? 'Yes (NC)' : 'No (NO)'}</td></tr>`
+    html += `<tr><td style="${tdStyle} color:#999;">Trigger</td><td style="${tdStyle}">${block.trigger || 'normal'}</td></tr>`
+  }
+  if (isCoil) {
+    html += `<tr><td style="${tdStyle} color:#999;">Inverted</td><td style="${tdStyle}">${block.inverted ? 'Yes' : 'No'}</td></tr>`
+  }
+  if (isFB) {
+    html += `<tr><td style="${tdStyle} color:#999;">Data Type</td><td style="${tdStyle}">${block.dataType || 'i16'}</td></tr>`
+  }
+  html += `</table></div>`
+
+  // Parameters Section
+  if (paramRows.length > 0) {
+    html += `<div style="padding: 2px 8px 6px;">`
+    html += `<div style="font-weight:bold; color:#aaa; margin-bottom:4px; font-size:12px;">PARAMETERS</div>`
+    html += `<table style="${tableStyle}">`
+    html += `<tr><th style="${thStyle}">Param</th><th style="${thStyle}">Symbol</th><th style="${thStyle}">Location</th><th style="${thStyle}">Type</th><th style="${thStyle}">Address</th>`
+    if (isLive) html += `<th style="${thStyle}">Value</th>`
+    html += `</tr>`
+    for (const row of paramRows) {
+      html += `<tr>`
+      html += `<td style="${tdStyle} color:#7af;">${row.label}</td>`
+      html += `<td style="${tdStyle} font-family:monospace;">${row.symbol}</td>`
+      html += `<td style="${tdStyle}">${row.location}</td>`
+      html += `<td style="${tdStyle} color:#f0c674;">${row.type}</td>`
+      html += `<td style="${tdStyle} font-family:monospace;">${row.address}</td>`
+      if (isLive) html += `<td style="${tdStyle}" id="props_live_${row.id}">—</td>`
+      html += `</tr>`
+    }
+    html += `</table></div>`
+  }
+
+  // Live monitoring status section
+  if (isLive) {
+    html += `<div style="padding: 4px 8px; margin-top:4px; border-top:1px solid #555;">`
+    html += `<div style="font-weight:bold; color:#aaa; margin-bottom:4px; font-size:12px;">LIVE STATUS</div>`
+    html += `<table style="${tableStyle}">`
+    html += `<tr><td style="${tdStyle} color:#999; width:120px;">State Power In</td><td style="${tdStyle}" id="props_live_power_in">—</td></tr>`
+    html += `<tr><td style="${tdStyle} color:#999;">State Powered</td><td style="${tdStyle}" id="props_live_powered">—</td></tr>`
+    if (isTimer) {
+      html += `<tr><td style="${tdStyle} color:#999;">Elapsed (ET)</td><td style="${tdStyle}" id="props_live_timer_et">—</td></tr>`
+      html += `<tr><td style="${tdStyle} color:#999;">Output (Q)</td><td style="${tdStyle}" id="props_live_timer_q">—</td></tr>`
+      html += `<tr><td style="${tdStyle} color:#999;">Running</td><td style="${tdStyle}" id="props_live_timer_running">—</td></tr>`
+      html += `<tr><td style="${tdStyle} color:#999;">IN (live)</td><td style="${tdStyle}" id="props_live_timer_in">—</td></tr>`
+    }
+    if (isCounter) {
+      html += `<tr><td style="${tdStyle} color:#999;">Count (CV)</td><td style="${tdStyle}" id="props_live_counter_cv">—</td></tr>`
+      html += `<tr><td style="${tdStyle} color:#999;">Done (Q)</td><td style="${tdStyle}" id="props_live_counter_q">—</td></tr>`
+    }
+    html += `</table></div>`
+  }
+
+  html += `</div>`
+
+  // Show the popup with a close handler so we can set up the refresh interval
+  let closePopup = null
+  let refreshInterval = null
+
+  const popupResult = Popup.promise({
+    title: `Properties — ${block.symbol || typeLabel}`,
+    width: isLive ? '600px' : '500px',
+    content: html,
+    closeOnESC: true,
+    buttons: [{ text: 'Close', value: 'close' }],
+    closeHandler: (closeFn) => { closePopup = closeFn },
+    onOpen: () => {
+      if (!isLive) return
+
+      const updateLiveValues = () => {
+        // Check if monitoring is still active
+        const stillLive = editor.device_manager.connected && !!editor.window_manager?.isMonitoringActive?.()
+        if (!stillLive) return
+
+        // Update parameter live values
+        if (isContact || isCoil) {
+          const val = readLiveValue(symbol, symbol?.type || 'bit')
+          const el = document.getElementById('props_live_param_main')
+          if (el) el.innerHTML = formatValue(val, symbol?.type || 'bit')
+        }
+
+        if (isTimer) {
+          const timerData = readTimerLiveValues()
+          if (timerData) {
+            const etEl = document.getElementById('props_live_param_et')
+            if (etEl) etEl.innerHTML = timerData.et !== null ? `${timerData.et} ms` : '—'
+            const flagsEl = document.getElementById('props_live_param_flags')
+            if (flagsEl && timerData.flags !== null) {
+              const q = !!(timerData.flags & 0x01)
+              const running = !!(timerData.flags & 0x02)
+              const inOld = !!(timerData.flags & 0x04)
+              flagsEl.innerHTML = `0x${timerData.flags.toString(16).toUpperCase().padStart(2, '0')} (Q=${q ? 1 : 0} RUN=${running ? 1 : 0} IN=${inOld ? 1 : 0})`
+            }
+
+            // Live status section
+            const etStatusEl = document.getElementById('props_live_timer_et')
+            if (etStatusEl && timerData.et !== null) {
+              let presetMs = 1000
+              const presetStr = block.preset || 'T#1s'
+              if (typeof presetStr === 'number') presetMs = presetStr
+              else { const p = parseTimeDuration(presetStr); presetMs = p.valid ? p.ms : 1000 }
+              const pct = presetMs > 0 ? Math.min(100, (timerData.et / presetMs) * 100).toFixed(1) : 0
+              etStatusEl.innerHTML = `${timerData.et} ms / ${presetMs} ms (${pct}%)`
+            }
+            if (timerData.flags !== null) {
+              const q = !!(timerData.flags & 0x01)
+              const running = !!(timerData.flags & 0x02)
+              const inOld = !!(timerData.flags & 0x04)
+              const qEl = document.getElementById('props_live_timer_q')
+              if (qEl) qEl.innerHTML = q ? '<span style="color:#32cd32;">ON</span>' : '<span style="color:#f44;">OFF</span>'
+              const runEl = document.getElementById('props_live_timer_running')
+              if (runEl) runEl.innerHTML = running ? '<span style="color:#32cd32;">Yes</span>' : 'No'
+              const inEl = document.getElementById('props_live_timer_in')
+              if (inEl) inEl.innerHTML = inOld ? '<span style="color:#32cd32;">ON</span>' : '<span style="color:#f44;">OFF</span>'
+            }
+          }
+        }
+
+        if (isCounter) {
+          const counterData = readCounterLiveValues()
+          if (counterData) {
+            const cvEl = document.getElementById('props_live_param_cv')
+            if (cvEl) cvEl.innerHTML = counterData.cv !== null ? String(counterData.cv) : '—'
+            const flagsEl = document.getElementById('props_live_param_flags')
+            if (flagsEl && counterData.flags !== null) {
+              flagsEl.innerHTML = `0x${counterData.flags.toString(16).toUpperCase().padStart(2, '0')}`
+            }
+
+            // Live status
+            const cvStatusEl = document.getElementById('props_live_counter_cv')
+            if (cvStatusEl) cvStatusEl.innerHTML = counterData.cv !== null ? String(counterData.cv) : '—'
+            const presetVal = typeof block.preset === 'number' ? block.preset : 10
+            const isDone = block.type === 'counter_d' || block.type === 'counter_ctd'
+              ? (counterData.cv !== null && counterData.cv <= 0)
+              : (counterData.cv !== null && counterData.cv >= presetVal)
+            const qEl = document.getElementById('props_live_counter_q')
+            if (qEl) qEl.innerHTML = isDone ? '<span style="color:#32cd32;">ON</span>' : '<span style="color:#f44;">OFF</span>'
+          }
+        }
+
+        if (isFB) {
+          const dt = block.dataType || 'i16'
+          const isIncDec = isIncDecBlock(block.type)
+          const isUnary = isUnaryMathBlock(block.type)
+          const isMove = isMoveBlock(block.type)
+
+          if (isIncDec) {
+            const val = readFBLiveValue(block.in1 || block.symbol || '', dt)
+            const el = document.getElementById('props_live_param_inout')
+            if (el) el.innerHTML = formatValue(val, dt)
+          } else if (isUnary || isMove) {
+            const valIn = readFBLiveValue(block.in1 || '', dt)
+            const valOut = readFBLiveValue(block.out || block.symbol || '', dt)
+            const elIn = document.getElementById('props_live_param_in1')
+            if (elIn) elIn.innerHTML = formatValue(valIn, dt)
+            const elOut = document.getElementById('props_live_param_out')
+            if (elOut) elOut.innerHTML = formatValue(valOut, dt)
+          } else {
+            const valIn1 = readFBLiveValue(block.in1 || '', dt)
+            const valIn2 = readFBLiveValue(block.in2 || '', dt)
+            const valOut = readFBLiveValue(block.out || block.symbol || '', dt)
+            const elIn1 = document.getElementById('props_live_param_in1')
+            if (elIn1) elIn1.innerHTML = formatValue(valIn1, dt)
+            const elIn2 = document.getElementById('props_live_param_in2')
+            if (elIn2) elIn2.innerHTML = formatValue(valIn2, dt)
+            const elOut = document.getElementById('props_live_param_out')
+            if (elOut) elOut.innerHTML = formatValue(valOut, dt)
+          }
+        }
+
+        // Update general state info
+        const resolvedState = resolvedBlock.state
+        if (resolvedState) {
+          const piEl = document.getElementById('props_live_power_in')
+          if (piEl) piEl.innerHTML = resolvedState.powered_input
+            ? '<span style="color:#32cd32;">Powered</span>'
+            : '<span style="color:#f44;">Not Powered</span>'
+          const pwEl = document.getElementById('props_live_powered')
+          if (pwEl) pwEl.innerHTML = resolvedState.powered
+            ? '<span style="color:#32cd32;">Yes</span>'
+            : 'No'
+        }
+      }
+
+      // Run immediately then on interval
+      updateLiveValues()
+      refreshInterval = setInterval(updateLiveValues, 200)
+    }
+  })
+
+  // Once the popup closes, clear the interval
+  popupResult.then(() => {
+    if (refreshInterval) clearInterval(refreshInterval)
+  })
 }
 
 /**
