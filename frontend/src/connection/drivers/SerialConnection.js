@@ -264,7 +264,7 @@ export default class SerialConnection extends ConnectionBase {
                         // Format: [header,arch,ver_maj,ver_min,ver_patch,build,date,stack,mem,prog,
                         //          sys_off,sys_size,in_off,in_size,out_off,out_size,mark_off,mark_size,
                         //          timer_off,timer_count,timer_struct,counter_off,counter_count,counter_struct,flags,device]
-                        const flags = +parts[24]
+                        const flags = parseInt(parts[24], 16) || 0
                         const isLittleEndian = (flags & 0x01) === 1
                         return {
                             ...base,

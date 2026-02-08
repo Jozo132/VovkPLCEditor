@@ -143,6 +143,7 @@ export default class SetupUI {
                             ${this.renderCompareRow('Markers (M)', `${offsets.marker.size}B @ ${offsets.marker.offset}`, dInfo.marker_size !== '-' ? `${dInfo.marker_size}B @ ${dInfo.marker_offset}` : '-', connected)}
                             ${this.renderCompareRow('Timers (T)', `${offsets.timer.size}B @ ${offsets.timer.offset}`, dInfo.timer_count !== '-' ? `${dInfo.timer_count * dInfo.timer_struct_size}B @ ${dInfo.timer_offset}` : '-', connected)}
                             ${this.renderCompareRow('Counters (C)', `${offsets.counter.size}B @ ${offsets.counter.offset}`, dInfo.counter_count !== '-' ? `${dInfo.counter_count * dInfo.counter_struct_size}B @ ${dInfo.counter_offset}` : '-', connected)}
+                            ${this.renderFlagsRow(info, dInfo, connected)}
                         </tbody>
                     </table>
 
@@ -206,6 +207,59 @@ export default class SetupUI {
                 <td style="padding: 8px; color: #bbb;">${label}</td>
                 <td style="padding: 8px; font-family: consolas, monospace; ${style}">${projVal}</td>
                 <td style="padding: 8px; font-family: consolas, monospace; ${devStyle}">${devVal}</td>
+            </tr>
+        `
+    }
+
+    renderFlagsRow(info, dInfo, connected) {
+        const hasDecoder = typeof VovkPLC !== 'undefined' && VovkPLC.decodeRuntimeFlags
+
+        // Project flags
+        const projFlags = typeof info.flags === 'number' ? info.flags : null
+        const projHex = projFlags !== null ? '0x' + projFlags.toString(16).toUpperCase().padStart(4, '0') : '-'
+
+        // Device flags
+        const devFlags = typeof dInfo.flags === 'number' ? dInfo.flags : null
+        const devHex = devFlags !== null ? '0x' + devFlags.toString(16).toUpperCase().padStart(4, '0') : '-'
+
+        const isDiff = projFlags !== null && devFlags !== null && projFlags !== devFlags
+        const projStyle = isDiff ? 'color: #fce9a6;' : 'color: #ccc;'
+        const devStyle = connected ? (isDiff ? 'color: #f48771;' : 'color: #aaa;') : 'color: #666;'
+
+        // Decode flags into readable badges
+        const renderBadges = (flags) => {
+            if (flags === null || !hasDecoder) return ''
+            const decoded = VovkPLC.decodeRuntimeFlags(flags)
+            const flagNames = [
+                ['LE', decoded.littleEndian],
+                ['STR', decoded.strings],
+                ['CNT', decoded.counters],
+                ['TMR', decoded.timers],
+                ['FFI', decoded.ffi],
+                ['X64', decoded.x64Ops],
+                ['SAFE', decoded.safeMode],
+                ['TRN', decoded.transport],
+                ['FLT', decoded.floatOps],
+                ['MATH', decoded.advancedMath],
+                ['I32', decoded.ops32bit],
+                ['CVT', decoded.cvt],
+                ['STK', decoded.stackOps],
+                ['BIT', decoded.bitwiseOps],
+            ]
+            return '<br>' + flagNames.map(([name, on]) =>
+                `<span style="color: ${on ? '#4ec9b0' : '#555'}; font-size: 10px;" title="${name}: ${on ? 'enabled' : 'disabled'}">${name}</span>`
+            ).join(' ')
+        }
+
+        return `
+            <tr style="border-bottom: 1px solid #333;">
+                <td style="padding: 8px; color: #bbb;">Flags</td>
+                <td style="padding: 8px; font-family: consolas, monospace; ${projStyle}">
+                    ${projHex}${renderBadges(projFlags)}
+                </td>
+                <td style="padding: 8px; font-family: consolas, monospace; ${devStyle}">
+                    ${devHex}${renderBadges(devFlags)}
+                </td>
             </tr>
         `
     }
@@ -331,6 +385,7 @@ export default class SetupUI {
         if (info.program) project.info.capacity = info.program
         if (info.date) project.info.date = info.date
         if (info.stack) project.info.stack = info.stack
+        if (typeof info.flags === 'number') project.info.flags = info.flags
         
         // Map known offsets if available in info
         // Note: control_offset from legacy devices maps to system

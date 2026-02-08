@@ -2583,15 +2583,88 @@ export default class WindowManager {
                 mismatches.push(`Version: Device (<b>${deviceInfo.version}</b>) vs Project (<b>${projectInfo.version}</b>)`)
             }
 
-            if (mismatches.length > 0) {
-                const details = `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${deviceInfo.type || '?'}</b> ${deviceInfo.arch ? '(' + deviceInfo.arch + ')' : ''} <span style="opacity: 0.7">${deviceInfo.version ? 'v' + deviceInfo.version : ''}</span></span>`
-                const description = `The connected device details do not match the project configuration:<br><br>${mismatches.join('<br>')}<br><br>Upload anyway?${details}`
+            // Check device flags against project requirements
+            const flagWarnings = []
+            if (typeof deviceInfo.flags === 'number' && typeof VovkPLC !== 'undefined' && VovkPLC.decodeRuntimeFlags) {
+                const devDecoded = VovkPLC.decodeRuntimeFlags(deviceInfo.flags)
+                const offsets = this.#editor.project?.offsets
+                const projFlags = projectInfo.flags
+
+                // If project has stored flags, do a precise per-bit comparison
+                if (typeof projFlags === 'number') {
+                    const projDecoded = VovkPLC.decodeRuntimeFlags(projFlags)
+                    const flagDefs = [
+                        ['strings', 'Strings', 'STRINGS'],
+                        ['counters', 'Counters', 'COUNTERS'],
+                        ['timers', 'Timers', 'TIMERS'],
+                        ['ffi', 'FFI', 'FFI'],
+                        ['x64Ops', '64-bit Ops', 'X64_OPS'],
+                        ['safeMode', 'Safe Mode', 'SAFE_MODE'],
+                        ['transport', 'Transport', 'TRANSPORT'],
+                        ['floatOps', 'Float Ops', 'FLOAT_OPS'],
+                        ['advancedMath', 'Advanced Math', 'ADVANCED_MATH'],
+                        ['ops32bit', '32-bit Ops', 'OPS_32BIT'],
+                        ['cvt', 'Type Conversion', 'CVT'],
+                        ['stackOps', 'Stack Ops', 'STACK_OPS'],
+                        ['bitwiseOps', 'Bitwise Ops', 'BITWISE_OPS'],
+                    ]
+                    for (const [key, label, constName] of flagDefs) {
+                        if (projDecoded[key] && !devDecoded[key]) {
+                            flagWarnings.push(`<span style="color: #f48771;">&#x26A0; ${label}</span> — Project expects <b>${constName}</b> but device has it disabled`)
+                        }
+                    }
+                } else {
+                    // No project flags — infer from offsets and warn about missing features
+                    const usesTimers = offsets?.timer?.size > 0
+                    const usesCounters = offsets?.counter?.size > 0
+
+                    if (usesTimers && !devDecoded.timers) {
+                        flagWarnings.push(`<span style="color: #f48771;">&#x26A0; Timers</span> — Project uses timers but device has <b>TIMERS</b> disabled`)
+                    }
+                    if (usesCounters && !devDecoded.counters) {
+                        flagWarnings.push(`<span style="color: #f48771;">&#x26A0; Counters</span> — Project uses counters but device has <b>COUNTERS</b> disabled`)
+                    }
+                    if (!devDecoded.floatOps) {
+                        flagWarnings.push(`<span style="color: #fce9a6;">&#x26A0; Float Ops</span> — Device has <b>FLOAT_OPS</b> disabled`)
+                    }
+                    if (!devDecoded.ops32bit) {
+                        flagWarnings.push(`<span style="color: #fce9a6;">&#x26A0; 32-bit Ops</span> — Device has <b>OPS_32BIT</b> disabled`)
+                    }
+                    if (!devDecoded.cvt) {
+                        flagWarnings.push(`<span style="color: #fce9a6;">&#x26A0; Type Conversion</span> — Device has <b>CVT</b> disabled`)
+                    }
+                    if (!devDecoded.stackOps) {
+                        flagWarnings.push(`<span style="color: #fce9a6;">&#x26A0; Stack Ops</span> — Device has <b>STACK_OPS</b> disabled`)
+                    }
+                    if (!devDecoded.bitwiseOps) {
+                        flagWarnings.push(`<span style="color: #fce9a6;">&#x26A0; Bitwise Ops</span> — Device has <b>BITWISE_OPS</b> disabled`)
+                    }
+                    if (!devDecoded.strings) {
+                        flagWarnings.push(`<span style="color: #fce9a6;">&#x26A0; Strings</span> — Device has <b>STRINGS</b> disabled`)
+                    }
+                    if (!devDecoded.advancedMath) {
+                        flagWarnings.push(`<span style="color: #fce9a6;">&#x26A0; Advanced Math</span> — Device has <b>ADVANCED_MATH</b> disabled`)
+                    }
+                    if (!devDecoded.x64Ops) {
+                        flagWarnings.push(`<span style="color: #fce9a6;">&#x26A0; 64-bit Ops</span> — Device has <b>X64_OPS</b> disabled`)
+                    }
+                }
+            }
+
+            const allWarnings = [...mismatches, ...flagWarnings]
+
+            if (allWarnings.length > 0) {
+                const flagsHex = typeof deviceInfo.flags === 'number' ? ` | Flags: <b>0x${deviceInfo.flags.toString(16).toUpperCase().padStart(4, '0')}</b>` : ''
+                const details = `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${deviceInfo.type || '?'}</b> ${deviceInfo.arch ? '(' + deviceInfo.arch + ')' : ''} <span style="opacity: 0.7">${deviceInfo.version ? 'v' + deviceInfo.version : ''}</span>${flagsHex}</span>`
+                const hasCritical = mismatches.length > 0 || flagWarnings.some(w => w.includes('#f48771'))
+                const title = mismatches.length > 0 ? 'Device Mismatch' : 'Feature Warnings'
+                const description = `${mismatches.length > 0 ? 'The connected device details do not match the project configuration:<br><br>' : ''}${mismatches.length > 0 ? mismatches.join('<br>') : ''}${mismatches.length > 0 && flagWarnings.length > 0 ? '<br><br>' : ''}${flagWarnings.length > 0 ? '<span style="font-size: 0.95em;">' + flagWarnings.join('<br>') + '</span>' : ''}<br><br>Upload anyway?${details}`
                 const confirm = await Popup.confirm({
-                    title: 'Device Mismatch',
-                    description: description,
+                    title,
+                    description,
                     confirm_text: 'Upload',
                     cancel_text: 'Cancel',
-                    confirm_button_color: '#d1852e',
+                    confirm_button_color: hasCritical ? '#d1852e' : '#0078d4',
                     confirm_text_color: '#FFF',
                 })
                 if (!confirm) {
@@ -2600,7 +2673,8 @@ export default class WindowManager {
                     return
                 }
             } else {
-                const details = `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${deviceInfo.type || '?'}</b> ${deviceInfo.arch ? '(' + deviceInfo.arch + ')' : ''} <span style="opacity: 0.7">${deviceInfo.version ? 'v' + deviceInfo.version : ''}</span></span>`
+                const flagsHex = typeof deviceInfo.flags === 'number' ? ` | Flags: <b>0x${deviceInfo.flags.toString(16).toUpperCase().padStart(4, '0')}</b>` : ''
+                const details = `<br><br><span style="color: #777; font-size: 0.9em;">Target: <b>${deviceInfo.type || '?'}</b> ${deviceInfo.arch ? '(' + deviceInfo.arch + ')' : ''} <span style="opacity: 0.7">${deviceInfo.version ? 'v' + deviceInfo.version : ''}</span>${flagsHex}</span>`
                 const confirm = await Popup.confirm({
                     title: 'Upload Program',
                     description: `Upload ${compiledSize} bytes to the device? This will overwrite the current program.${details}`,
@@ -3456,9 +3530,38 @@ export default class WindowManager {
         `
 
         // Build transports table
-        const transportsHtml = transports.length === 0 ? 
-            `<div style="color: #666; font-size: 11px; padding: 8px; text-align: center;">No interfaces reported</div>` :
-            /*HTML*/ `
+        // Determine active connection method to show as default when no transports reported
+        const activeConnectionMode = this.connectionMode || 'simulation'
+        const connectionModeLabels = { serial: 'Serial (USB)', simulation: 'Simulation (WASM)', rest: 'REST (HTTP)' }
+        const activeConnectionLabel = connectionModeLabels[activeConnectionMode] || activeConnectionMode
+
+        const transportsHtml = (() => {
+            const activeRowHtml = `
+                <tr style="background: #1e2a1e;">
+                    <td style="padding: 3px 8px; color: #4ec9b0;">${activeConnectionLabel}</td>
+                    <td style="padding: 3px 8px; color: #888;">Active connection</td>
+                    <td style="padding: 3px 8px; text-align: center;">${isConnected ? '🟢' : '⚪'}</td>
+                    <td style="padding: 3px 8px; color: #aaa; font-family: monospace; font-size: 10px;">Editor ↔ Device</td>
+                </tr>`
+            const transportRows = transports.map(t => {
+                const typeName = transportTypeNames[t.type] || `Type ${t.type}`
+                const statusIcon = t.isConnected ? '🟢' : '⚪'
+                const authIcon = t.requiresAuth ? '🔒' : ''
+                let config = ''
+                if (t.baudrate) {
+                    config = `${t.baudrate} baud`
+                } else if (t.isNetwork) {
+                    config = `${t.ip || '?'}:${t.port || '?'}`
+                    if (t.mac) config += `<br><span style="color: #666; font-size: 10px;">MAC: ${t.mac}</span>`
+                }
+                return `<tr>
+                    <td style="padding: 3px 8px; color: #ECECEC;">${t.name || typeName}</td>
+                    <td style="padding: 3px 8px; color: #aaa;">${typeName} ${authIcon}</td>
+                    <td style="padding: 3px 8px; text-align: center;">${statusIcon}</td>
+                    <td style="padding: 3px 8px; color: #aaa; font-family: monospace; font-size: 10px;">${config || '-'}</td>
+                </tr>`
+            }).join('')
+            return /*HTML*/ `
             <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
                 <tr style="background: #252525;">
                     <th style="padding: 4px 8px; text-align: left; color: #888; font-weight: normal;">Interface</th>
@@ -3466,26 +3569,11 @@ export default class WindowManager {
                     <th style="padding: 4px 8px; text-align: center; color: #888; font-weight: normal;">Status</th>
                     <th style="padding: 4px 8px; text-align: left; color: #888; font-weight: normal;">Configuration</th>
                 </tr>
-                ${transports.map(t => {
-                    const typeName = transportTypeNames[t.type] || `Type ${t.type}`
-                    const statusIcon = t.isConnected ? '🟢' : '⚪'
-                    const authIcon = t.requiresAuth ? '🔒' : ''
-                    let config = ''
-                    if (t.baudrate) {
-                        config = `${t.baudrate} baud`
-                    } else if (t.isNetwork) {
-                        config = `${t.ip || '?'}:${t.port || '?'}`
-                        if (t.mac) config += `<br><span style="color: #666; font-size: 10px;">MAC: ${t.mac}</span>`
-                    }
-                    return `<tr>
-                        <td style="padding: 3px 8px; color: #ECECEC;">${t.name || typeName}</td>
-                        <td style="padding: 3px 8px; color: #aaa;">${typeName} ${authIcon}</td>
-                        <td style="padding: 3px 8px; text-align: center;">${statusIcon}</td>
-                        <td style="padding: 3px 8px; color: #aaa; font-family: monospace; font-size: 10px;">${config || '-'}</td>
-                    </tr>`
-                }).join('')}
+                ${activeRowHtml}
+                ${transportRows ? `<tr><td colspan="4" style="padding: 0; border-top: 1px solid #333;"></td></tr>${transportRows}` : ''}
             </table>
         `
+        })()
 
         // Build symbols table
         const formatSymbolAddress = (s) => {
@@ -3520,6 +3608,59 @@ export default class WindowManager {
 
         // Error message if any
         const errorHtml = fetchError ? `<div style="color: #dc3545; font-size: 11px; padding: 8px; background: #2a1a1a; border: 1px solid #5a2a2a; border-radius: 4px; margin-bottom: 12px;">⚠️ ${fetchError}</div>` : ''
+
+        // Build flags table
+        const hasFlags = typeof deviceInfo.flags === 'number'
+        const flagsHex = hasFlags ? '0x' + deviceInfo.flags.toString(16).toUpperCase().padStart(4, '0') : null
+        const flagsHtml = (() => {
+            if (!hasFlags) {
+                return `<div style="color: #666; font-size: 11px; padding: 8px; text-align: center;">No flags information available</div>`
+            }
+            const hasDecoder = typeof VovkPLC !== 'undefined' && VovkPLC.decodeRuntimeFlags
+            if (!hasDecoder) {
+                return `<div style="color: #aaa; font-size: 11px; padding: 8px;">Flags: <span style="font-family: monospace;">${flagsHex}</span></div>`
+            }
+            const decoded = VovkPLC.decodeRuntimeFlags(deviceInfo.flags)
+            const flagDefs = [
+                ['LITTLE_ENDIAN', '0x0001', decoded.littleEndian,  'Endianness',        'Device uses little-endian byte order for multi-byte values in memory. Affects how u16/u32/f32 values are read and written.'],
+                ['STRINGS',       '0x0002', decoded.strings,       'String Operations',  'Enables string manipulation instructions (SLEN, SCOPY, SCAT, SCMP). Required for programs that work with text data.'],
+                ['COUNTERS',      '0x0004', decoded.counters,      'Counter Instructions','Enables up/down counter instructions (CTU, CTD, CTUD). Required for programs using counter memory area (C).'],
+                ['TIMERS',        '0x0008', decoded.timers,        'Timer Instructions',  'Enables timer instructions (TON, TOF, TP). Required for programs using timer memory area (T).'],
+                ['FFI',           '0x0010', decoded.ffi,           'Foreign Function Interface','Enables calling external native functions from PLC programs. Used for custom hardware drivers and platform-specific extensions.'],
+                ['X64_OPS',       '0x0020', decoded.x64Ops,        '64-bit Operations',  'Enables 64-bit integer and double-precision float operations (u64, i64, f64). Increases precision at the cost of memory and speed.'],
+                ['SAFE_MODE',     '0x0040', decoded.safeMode,      'Safe Mode',          'Enables runtime bounds checking and memory access validation. Catches out-of-range errors at the cost of slightly slower execution.'],
+                ['TRANSPORT',     '0x0080', decoded.transport,      'Transport System',   'Enables the transport communication layer for multi-device networking and remote I/O over Serial, WiFi, Ethernet, or Bluetooth.'],
+                ['FLOAT_OPS',     '0x0100', decoded.floatOps,       'Float Operations',   'Enables 32-bit floating point operations (f32.add, f32.mul, f32.cmp, etc.). Required for programs that use real/float values.'],
+                ['ADVANCED_MATH', '0x0200', decoded.advancedMath,   'Advanced Math',      'Enables mathematical functions: POW, SQRT, SIN, COS, TAN, LOG, EXP, ABS. Required for scientific or motion control programs.'],
+                ['OPS_32BIT',     '0x0400', decoded.ops32bit,       '32-bit Integer Ops', 'Enables 32-bit integer operations (u32, i32). Required for programs that need values beyond the 16-bit range (0–65535).'],
+                ['CVT',           '0x0800', decoded.cvt,            'Type Conversion',    'Enables type conversion instructions (CVT) between different data types (int↔float, u8↔u16↔u32, etc.).'],
+                ['STACK_OPS',     '0x1000', decoded.stackOps,       'Stack Manipulation',  'Enables stack manipulation instructions: SWAP, PICK, POKE, DUP, DROP. Useful for complex calculations without extra variables.'],
+                ['BITWISE_OPS',   '0x2000', decoded.bitwiseOps,     'Bitwise Operations',  'Enables bitwise logic instructions: AND, OR, XOR, NOT, SHL, SHR. Required for bit manipulation and mask operations.'],
+            ]
+            const enabledCount = flagDefs.filter(f => f[2]).length
+            return /*HTML*/ `
+                <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #aaa; font-size: 11px;">Raw: <span style="font-family: monospace; color: #ddd;">${flagsHex}</span></span>
+                    <span style="color: #888; font-size: 10px;">${enabledCount} / ${flagDefs.length} enabled</span>
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                    ${flagDefs.map(([name, hex, enabled, label, desc]) => /*HTML*/ `
+                        <tr style="border-bottom: 1px solid #2a2a2a;">
+                            <td style="padding: 5px 8px; width: 20px; text-align: center;">
+                                <span style="color: ${enabled ? '#4ec9b0' : '#555'}; font-size: 13px;">${enabled ? '●' : '○'}</span>
+                            </td>
+                            <td style="padding: 5px 6px;">
+                                <div style="color: ${enabled ? '#ECECEC' : '#666'}; font-weight: 600; font-size: 11px;">${label}</div>
+                                <div style="color: ${enabled ? '#888' : '#444'}; font-size: 10px; margin-top: 1px;">${desc}</div>
+                            </td>
+                            <td style="padding: 5px 8px; text-align: right; font-family: monospace; color: ${enabled ? '#888' : '#444'}; font-size: 10px; white-space: nowrap; vertical-align: top;">
+                                ${name}<br><span style="color: ${enabled ? '#666' : '#383838'};">${hex}</span>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </table>
+            `
+        })()
 
         // Tab CSS styles and switching script
         const tabStyles = /*HTML*/ `
@@ -3568,6 +3709,7 @@ export default class WindowManager {
                     <div class="device-details-tabs">
                         <button class="device-details-tab active" data-tab="device" onclick="${tabSwitchId}('device', this)">📋 Device</button>
                         <button class="device-details-tab" data-tab="memory" onclick="${tabSwitchId}('memory', this)">🗺️ Memory</button>
+                        <button class="device-details-tab" data-tab="flags" onclick="${tabSwitchId}('flags', this)">🚩 Flags ${flagsHex ? `<span style="color: #666; font-size: 10px;">(${flagsHex})</span>` : ''}</button>
                         <button class="device-details-tab" data-tab="interfaces" onclick="${tabSwitchId}('interfaces', this)">🔌 Interfaces <span style="color: #666; font-size: 10px;">(${transports.length})</span></button>
                         <button class="device-details-tab" data-tab="symbols" onclick="${tabSwitchId}('symbols', this)">📌 Symbols <span style="color: #666; font-size: 10px;">(${symbols.length})</span></button>
                     </div>
@@ -3583,6 +3725,12 @@ export default class WindowManager {
                         <div class="device-details-panel" data-panel="memory">
                             <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 8px; overflow: hidden;">
                                 ${memoryMapHtml}
+                            </div>
+                        </div>
+                        
+                        <div class="device-details-panel" data-panel="flags">
+                            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 8px; overflow: hidden; max-height: 350px; overflow-y: auto;">
+                                ${flagsHtml}
                             </div>
                         </div>
                         
