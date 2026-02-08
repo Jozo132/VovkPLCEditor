@@ -394,22 +394,35 @@ export const ladderRenderer = {
                                 if (['u32', 'i32', 'dint', 'real', 'float', 'dword'].includes(fullType)) size = 4
                                 if (['u64', 'i64', 'lword'].includes(fullType)) size = 8
 
-                                const data = []
+                                // Use device endianness for writes
+                                const isLittleEndian = editor.device_manager?.deviceInfo?.isLittleEndian ?? true
+                                const buffer = new ArrayBuffer(size)
+                                const view = new DataView(buffer)
+
                                 if (['real', 'float', 'f32'].includes(fullType)) {
-                                    const floatArr = new Float32Array([num])
-                                    const uintArr = new Uint8Array(floatArr.buffer)
-                                    for (let i = 0; i < size; i++) data.push(uintArr[i])
+                                    view.setFloat32(0, num, isLittleEndian)
                                 } else if (['f64'].includes(fullType)) {
-                                    const floatArr = new Float64Array([num])
-                                    const uintArr = new Uint8Array(floatArr.buffer)
-                                    for (let i = 0; i < size; i++) data.push(uintArr[i])
+                                    view.setFloat64(0, num, isLittleEndian)
+                                } else if (['i16', 'int'].includes(fullType)) {
+                                    view.setInt16(0, num, isLittleEndian)
+                                } else if (['u16', 'word'].includes(fullType)) {
+                                    view.setUint16(0, num, isLittleEndian)
+                                } else if (['i32', 'dint'].includes(fullType)) {
+                                    view.setInt32(0, num, isLittleEndian)
+                                } else if (['u32', 'dword'].includes(fullType)) {
+                                    view.setUint32(0, num, isLittleEndian)
+                                } else if (['i64', 'lword'].includes(fullType)) {
+                                    view.setBigInt64(0, BigInt(Math.floor(num)), isLittleEndian)
+                                } else if (['u64'].includes(fullType)) {
+                                    view.setBigUint64(0, BigInt(Math.floor(num)), isLittleEndian)
+                                } else if (['i8'].includes(fullType)) {
+                                    view.setInt8(0, num)
                                 } else {
-                                    let val = BigInt(Math.floor(num))
-                                    for (let i = 0; i < size; i++) {
-                                        data.push(Number(val & 0xffn))
-                                        val >>= 8n
-                                    }
+                                    // byte/u8 - single byte, no endianness
+                                    view.setUint8(0, num & 0xFF)
                                 }
+                                
+                                const data = Array.from(new Uint8Array(buffer))
                                 await connection.writeMemoryArea(absAddress, data)
                             }
                         }

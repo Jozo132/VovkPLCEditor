@@ -657,23 +657,32 @@ export default class WatchPanel {
                         if (!Number.isNaN(num)) {
                             const size = WATCH_TYPES[entry.type]?.size || 1
                             const type = entry.type
-                            const data = []
+                            
+                            // Use device endianness for writes
+                            const isLittleEndian = this.editor.device_manager?.deviceInfo?.isLittleEndian ?? true
+                            const buffer = new ArrayBuffer(size)
+                            const view = new DataView(buffer)
                             
                             if (type === 'real' || type === 'float' || type === 'f32') {
-                                const floatArr = new Float32Array([num])
-                                const uintArr = new Uint8Array(floatArr.buffer)
-                                for (let i = 0; i < size; i++) data.push(uintArr[i])
+                                view.setFloat32(0, num, isLittleEndian)
                             } else if (type === 'f64') {
-                                const floatArr = new Float64Array([num])
-                                const uintArr = new Uint8Array(floatArr.buffer)
-                                for (let i = 0; i < size; i++) data.push(uintArr[i])
+                                view.setFloat64(0, num, isLittleEndian)
+                            } else if (type === 'int' || type === 'i16') {
+                                view.setInt16(0, num, isLittleEndian)
+                            } else if (type === 'u16') {
+                                view.setUint16(0, num, isLittleEndian)
+                            } else if (type === 'dint' || type === 'i32') {
+                                view.setInt32(0, num, isLittleEndian)
+                            } else if (type === 'u32') {
+                                view.setUint32(0, num, isLittleEndian)
+                            } else if (type === 'i8') {
+                                view.setInt8(0, num)
                             } else {
-                                let val = BigInt(Math.floor(num))
-                                for (let i = 0; i < size; i++) {
-                                    data.push(Number(val & 0xFFn))
-                                    val >>= 8n
-                                }
+                                // byte/u8 - single byte, no endianness
+                                view.setUint8(0, num & 0xFF)
                             }
+                            
+                            const data = Array.from(new Uint8Array(buffer))
                             await connection.writeMemoryArea(absAddress, data)
                         }
                     }
