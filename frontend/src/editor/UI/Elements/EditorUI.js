@@ -2,6 +2,8 @@ import { ElementSynthesis, ElementSynthesisMany, CSSimporter } from "../../../ut
 import { PLC_Program, PLC_ProgramBlock, PLCEditor } from "../../../utils/types.js"
 import { getIconType, getThumbnailDataUrl } from "./components/icons.js"
 import { Popup } from "./components/popup.js"
+import { toGraph } from "../../../languages/ladder/language.js"
+import MiniCodeEditor from "../../../languages/MiniCodeEditor.js"
 
 const SHORT_NAMES = {
     ladder: 'LAD',
@@ -97,15 +99,55 @@ export default class EditorUI {
                     { type: 'item', name: 'copy', label: 'Copy' },
                     { type: 'item', name: 'paste', label: 'Paste' },
                 )
+
+                // Add "View Logic as ..." options for compilable blocks
+                if (blockIndex !== -1) {
+                    const block = this.program.blocks[blockIndex]
+                    if (block) {
+                        const viewItems = []
+                        if (block.type === 'ladder') {
+                            viewItems.push(
+                                { type: 'item', name: 'view_graph', label: 'View Logic as Ladder Graph' },
+                                { type: 'item', name: 'view_stl', label: 'View Logic as STL' },
+                                { type: 'item', name: 'view_asm', label: 'View Logic as PLCASM' },
+                            )
+                        } else if (block.type === 'stl') {
+                            viewItems.push(
+                                { type: 'item', name: 'view_asm', label: 'View Compiled PLCASM' },
+                            )
+                        } else if (block.type === 'st') {
+                            viewItems.push(
+                                { type: 'item', name: 'view_plcscript', label: 'View Compiled PLCScript' },
+                                { type: 'item', name: 'view_asm', label: 'View Compiled PLCASM' },
+                            )
+                        } else if (block.type === 'plcscript') {
+                            viewItems.push(
+                                { type: 'item', name: 'view_asm', label: 'View Compiled PLCASM' },
+                            )
+                        }
+                        if (viewItems.length > 0) {
+                            items.push({ type: 'separator' }, ...viewItems)
+                        }
+                    }
+                }
+
                 return items
             },
-            onClose: (selected) => {
+            onClose: async (selected) => {
                 // console.log(`Editor selected: ${selected}`)
                 if (selected === 'add_block') this.addBlock()
                 if (selected === 'add_above') this.addBlock(this._contextTargetIndex)
                 if (selected === 'add_below') this.addBlock(this._contextTargetIndex + 1)
                 if (selected === 'delete') this.deleteBlock(this._contextTargetIndex)
                 if (selected === 'edit') this.editBlock(this._contextTargetIndex)
+
+                // Handle "View Logic as ..." actions
+                if (['view_graph', 'view_stl', 'view_plcscript', 'view_asm'].includes(selected)) {
+                    const block = this.program?.blocks?.[this._contextTargetIndex]
+                    if (block) {
+                        await this._showCompiledLogic(block, selected)
+                    }
+                }
             }
         })
         this.reloadProgram()
@@ -405,6 +447,192 @@ export default class EditorUI {
         })
 
         requestAnimationFrame(() => this.restoreBodyScroll())
+    }
+
+    /**
+     * Pretty prints JSON with smart formatting for ladder graph display
+     * @param {any} obj - The object to stringify
+     * @param {number} indent - Current indentation level
+     * @returns {string}
+     */
+    static _smartStringify(obj, indent = 0) {
+        const spaces = '  '.repeat(indent)
+        const nextSpaces = '  '.repeat(indent + 1)
+
+        if (obj === null) return 'null'
+        if (obj === undefined) return 'undefined'
+        if (typeof obj === 'boolean' || typeof obj === 'number') return String(obj)
+        if (typeof obj === 'string') return JSON.stringify(obj)
+
+        const isSimple = v => v === null || v === undefined || typeof v === 'boolean' || typeof v === 'number' || typeof v === 'string'
+
+        if (Array.isArray(obj)) {
+            if (obj.length === 0) return '[]'
+            if (obj.every(isSimple)) {
+                return '[' + obj.map(v => v === undefined ? 'null' : JSON.stringify(v)).join(', ') + ']'
+            }
+            const items = obj.map(v => nextSpaces + EditorUI._smartStringify(v, indent + 1))
+            return '[\n' + items.join(',\n') + '\n' + spaces + ']'
+        }
+
+        if (typeof obj === 'object') {
+            const keys = Object.keys(obj)
+            if (keys.length === 0) return '{}'
+            if (keys.every(k => isSimple(obj[k]))) {
+                const pairs = keys.map(k => JSON.stringify(k) + ': ' + (obj[k] === undefined ? 'null' : JSON.stringify(obj[k])))
+                return '{ ' + pairs.join(', ') + ' }'
+            }
+            const isConnection = keys.length === 2 && keys.includes('sources') && keys.includes('destinations') &&
+                Array.isArray(obj.sources) && Array.isArray(obj.destinations) &&
+                obj.sources.every(isSimple) && obj.destinations.every(isSimple)
+            if (isConnection) {
+                const srcArr = '[' + obj.sources.map(v => JSON.stringify(v)).join(', ') + ']'
+                const dstArr = '[' + obj.destinations.map(v => JSON.stringify(v)).join(', ') + ']'
+                return '{ "sources": ' + srcArr + ', "destinations": ' + dstArr + ' }'
+            }
+            const pairs = keys.map(k => nextSpaces + JSON.stringify(k) + ': ' + EditorUI._smartStringify(obj[k], indent + 1))
+            return '{\n' + pairs.join(',\n') + '\n' + spaces + '}'
+        }
+
+        return String(obj)
+    }
+
+    /**
+     * Show compiled logic for a program block.
+     * Pipeline: Ladder→STL→PLCASM, STL→PLCASM, ST→PLCScript→PLCASM, PLCScript→PLCASM
+     * @param {any} block - The program block
+     * @param {string} action - 'view_graph', 'view_stl', 'view_plcscript', or 'view_asm'
+     */
+    async _showCompiledLogic(block, action) {
+        try {
+            const runtime = this.master.runtime
+            let finalOutput = ''
+            let titleSuffix = ''
+            let editorLanguage = 'asm'
+
+            if (block.type === 'ladder') {
+                // Ladder → Ladder Graph → STL → PLCASM
+                const graph = toGraph(block)
+
+                if (action === 'view_graph') {
+                    finalOutput = EditorUI._smartStringify(graph)
+                    titleSuffix = 'Ladder Graph'
+                    editorLanguage = 'json'
+                } else {
+                    if (!runtime || !runtime.compileLadder) {
+                        throw new Error('Runtime compiler not available')
+                    }
+                    const graphJson = JSON.stringify(graph)
+                    const ladderResult = await runtime.compileLadder(graphJson)
+                    if (!ladderResult || typeof ladderResult.output !== 'string') {
+                        throw new Error('Ladder compilation failed to produce STL')
+                    }
+                    finalOutput = ladderResult.output
+                    titleSuffix = 'STL'
+                    editorLanguage = 'stl'
+
+                    if (action === 'view_asm') {
+                        if (!finalOutput.trim()) {
+                            finalOutput = ''
+                        } else {
+                            if (!runtime.compileSTL) {
+                                throw new Error('STL compiler not available')
+                            }
+                            const asmResult = await runtime.compileSTL(finalOutput)
+                            if (!asmResult || typeof asmResult.output !== 'string') {
+                                throw new Error('STL compilation failed to produce PLCASM')
+                            }
+                            finalOutput = asmResult.output
+                        }
+                        titleSuffix = 'PLCASM'
+                        editorLanguage = 'asm'
+                    }
+                }
+            } else if (block.type === 'stl') {
+                // STL → PLCASM
+                if (!runtime || !runtime.compileSTL) {
+                    throw new Error('Runtime compiler not available')
+                }
+                const result = await runtime.compileSTL(block.code)
+                if (!result || typeof result.output !== 'string') {
+                    throw new Error('STL compilation failed to produce PLCASM')
+                }
+                finalOutput = result.output
+                titleSuffix = 'PLCASM'
+                editorLanguage = 'asm'
+            } else if (block.type === 'st') {
+                // ST → PLCScript → PLCASM
+                if (!runtime) throw new Error('Runtime not available')
+                if (typeof runtime.compileST !== 'function') {
+                    throw new Error('Structured Text compiler not available')
+                }
+                const stResult = await runtime.compileST(block.code)
+                if (!stResult || typeof stResult.output !== 'string') {
+                    throw new Error('ST compilation failed to produce PLCScript')
+                }
+                finalOutput = stResult.output
+                titleSuffix = 'PLCScript'
+                editorLanguage = 'plcscript'
+
+                if (action === 'view_asm') {
+                    if (typeof runtime.compilePLCScript !== 'function') {
+                        throw new Error('PLCScript compiler not available')
+                    }
+                    const pscResult = await runtime.compilePLCScript(finalOutput)
+                    if (!pscResult || typeof pscResult.output !== 'string') {
+                        throw new Error('PLCScript compilation failed to produce PLCASM')
+                    }
+                    finalOutput = pscResult.output
+                    titleSuffix = 'PLCASM'
+                    editorLanguage = 'asm'
+                }
+            } else if (block.type === 'plcscript') {
+                // PLCScript → PLCASM
+                if (!runtime) throw new Error('Runtime not available')
+                if (typeof runtime.compilePLCScript !== 'function') {
+                    throw new Error('PLCScript compiler not available')
+                }
+                const result = await runtime.compilePLCScript(block.code)
+                if (!result || typeof result.output !== 'string') {
+                    throw new Error('PLCScript compilation failed to produce PLCASM')
+                }
+                finalOutput = result.output
+                titleSuffix = 'PLCASM'
+                editorLanguage = 'asm'
+            } else {
+                throw new Error(`Unsupported block type: ${block.type}`)
+            }
+
+            const container = document.createElement('div')
+            Object.assign(container.style, {
+                width: '100%',
+                height: '500px',
+                position: 'relative'
+            })
+
+            new Popup({
+                title: `Compiled ${titleSuffix} (${block.name})`,
+                width: '900px',
+                content: container,
+                buttons: [{ text: 'Close', value: 'close' }]
+            })
+
+            new MiniCodeEditor(container, {
+                value: finalOutput,
+                language: editorLanguage,
+                readOnly: true,
+                preview: true
+            })
+
+        } catch (err) {
+            console.error(err)
+            new Popup({
+                title: 'Compilation Failed',
+                // @ts-ignore
+                description: err.message,
+                buttons: [{ text: 'OK', value: 'ok' }]
+            })
+        }
     }
 
     async editBlock(index) {

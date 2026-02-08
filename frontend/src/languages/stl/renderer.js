@@ -124,63 +124,6 @@ export const stlRenderer = {
         const block_container = div.querySelector('.plc-program-block-code')
         if (!block_container) throw new Error('Block code not found')
 
-        // Add Context Menu to Header for viewing compiled code
-        const block_header = div.querySelector('.plc-program-block-header')
-        if (block_header) {
-            block_header.oncontextmenu = (e) => {
-                e.preventDefault()
-                const items = [{
-                    label: 'View Compiled PLCASM',
-                    name: 'view_asm',
-                    icon: 'code',
-                    type: 'item'
-                }]
-                if (editor.context_manager) {
-                    editor.context_manager.show(e, items, async () => {
-                        try {
-                            if (!editor.runtime || !editor.runtime.compileSTL) {
-                                throw new Error("Runtime compiler not available")
-                            }
-                            const result = await editor.runtime.compileSTL(block.code)
-                            
-                            if (result && typeof result.output === 'string') {
-                                const pre = document.createElement('pre')
-                                pre.style.margin = '0'
-                                pre.style.padding = '10px'
-                                pre.style.background = '#1e1e1e'
-                                pre.style.color = '#d4d4d4'
-                                pre.style.overflow = 'auto'
-                                pre.style.maxHeight = '600px'
-                                pre.style.whiteSpace = 'pre-wrap'
-                                pre.style.fontFamily = 'Consolas, monospace'
-                                pre.style.fontSize = '12px'
-                                pre.textContent = result.output
-
-                                new Popup({
-                                    title: `Compiled PLCASM (${block.name})`,
-                                    width: '600px',
-                                    content: pre,
-                                    buttons: [{
-                                        text: 'Close',
-                                        value: 'close'
-                                    }]
-                                })
-                            }
-                        } catch (err) {
-                            new Popup({
-                                title: 'Compilation Failed',
-                                description: err.message,
-                                buttons: [{
-                                    text: 'OK',
-                                    value: 'ok'
-                                }]
-                            })
-                        }
-                    })
-                }
-            }
-        }
-
         // If loaded from JSON, props.text_editor might be a plain object
         if (props.text_editor && !(props.text_editor instanceof MiniCodeEditor)) {
             props.text_editor = null
