@@ -1179,21 +1179,25 @@ export default class ProjectManager {
   /** Create a new empty project structure */
   /** @returns {PLC_Project} */
   createEmptyProject() {
+    // Get runtime info for default project settings (WASM simulator)
+    const runtimeInfo = this.#editor?.runtime_info || {}
+    
     return {
       offsets: {
-        system: { offset: 0, size: 64 },
-        input: { offset: 64, size: 64 },
-        output: { offset: 128, size: 64 },
-        marker: { offset: 192, size: 256 },
-        timer: { offset: 0, size: 0 },
-        counter: { offset: 0, size: 0 }
+        system: { offset: runtimeInfo.system_offset ?? 0, size: runtimeInfo.system_size ?? 64 },
+        input: { offset: runtimeInfo.input_offset ?? 64, size: runtimeInfo.input_size ?? 64 },
+        output: { offset: runtimeInfo.output_offset ?? 128, size: runtimeInfo.output_size ?? 64 },
+        marker: { offset: runtimeInfo.marker_offset ?? 192, size: runtimeInfo.marker_size ?? 256 },
+        timer: { offset: runtimeInfo.timer_offset ?? 448, size: (runtimeInfo.timer_count ?? 16) * (runtimeInfo.timer_struct_size ?? 9) },
+        counter: { offset: runtimeInfo.counter_offset ?? 592, size: (runtimeInfo.counter_count ?? 16) * (runtimeInfo.counter_struct_size ?? 5) }
       },
       symbols: [...SYSTEM_SYMBOLS],
       info: {
-        type: 'Device',
-        arch: 'avr',
-        version: '0.0.1',
-        capacity: 1024
+        name: runtimeInfo.device || 'Simulator',
+        type: runtimeInfo.device || 'Simulator',
+        arch: runtimeInfo.arch || 'WASM',
+        version: '1.0.0',
+        capacity: runtimeInfo.program || 104857
       },
       folders: [],
       files: []

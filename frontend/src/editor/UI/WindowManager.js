@@ -4040,21 +4040,27 @@ export default class WindowManager {
             this.tree_manager.state.focused = null
         }
 
-        // Create a fresh empty project
+        // Get runtime info for default project settings (WASM simulator)
+        const runtimeInfo = this.#editor.runtime_info || {}
+        
+        // Create a fresh empty project with WASM simulator defaults
         const freshProject = {
             info: {
                 name: projectName,
                 version: '1.0.0',
                 author: '',
-                description: ''
+                description: '',
+                type: runtimeInfo.device || 'Simulator',
+                arch: runtimeInfo.arch || 'WASM',
+                capacity: runtimeInfo.program || 104857
             },
             offsets: {
-                system: { offset: 0, size: 64 },
-                input: { offset: 64, size: 64 },
-                output: { offset: 128, size: 64 },
-                marker: { offset: 192, size: 256 },
-                timer: { offset: 448, size: 0 },
-                counter: { offset: 448, size: 0 }
+                system: { offset: runtimeInfo.system_offset ?? 0, size: runtimeInfo.system_size ?? 64 },
+                input: { offset: runtimeInfo.input_offset ?? 64, size: runtimeInfo.input_size ?? 64 },
+                output: { offset: runtimeInfo.output_offset ?? 128, size: runtimeInfo.output_size ?? 64 },
+                marker: { offset: runtimeInfo.marker_offset ?? 192, size: runtimeInfo.marker_size ?? 256 },
+                timer: { offset: runtimeInfo.timer_offset ?? 448, size: (runtimeInfo.timer_count ?? 16) * (runtimeInfo.timer_struct_size ?? 9) },
+                counter: { offset: runtimeInfo.counter_offset ?? 592, size: (runtimeInfo.counter_count ?? 16) * (runtimeInfo.counter_struct_size ?? 5) }
             },
             symbols: [],           // Will be populated with system symbols by ensureSystemSymbols
             device_symbols: [],    // Clear device symbols

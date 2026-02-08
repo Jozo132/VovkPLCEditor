@@ -94,6 +94,12 @@ export default class SimulationConnection extends ConnectionBase {
     }
 
     async downloadProgram(bytecode) {
+        // Use downloadBytecodeHex which writes hex directly to WASM memory,
+        // bypassing streamIn/streamRead which stops at null bytes (0x00).
+        if (this.plc.downloadBytecodeHex) {
+            return this.plc.downloadBytecodeHex(bytecode)
+        }
+        // Fallback to stream-based download for older WASM builds
         return this.plc.downloadBytecode(bytecode);
     }
 
