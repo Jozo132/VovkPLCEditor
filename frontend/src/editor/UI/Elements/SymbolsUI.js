@@ -71,6 +71,7 @@ export default class SymbolsUI {
                             <th data-sort="name" class="col-name">Name <span class="sort-icon"></span></th>
                             <th data-sort="location" class="col-loc">Location <span class="sort-icon"></span></th>
                             <th data-sort="type" class="col-type">Type <span class="sort-icon"></span></th>
+                            <th data-sort="array_size" class="col-arr" title="Array size (empty = scalar)">Size <span class="sort-icon"></span></th>
                             <th data-sort="address" class="col-addr">Address <span class="sort-icon"></span></th>
                     <th data-sort="value" class="col-init">Value <span class="sort-icon"></span></th>
                             <th data-sort="comment" class="col-comm">Comment <span class="sort-icon"></span></th>
@@ -450,7 +451,7 @@ export default class SymbolsUI {
         headerTr.classList.add('symbol-section-header', `section-${sectionType}`)
         if (isCollapsed) headerTr.classList.add('collapsed')
         const headerTd = document.createElement('td')
-        headerTd.colSpan = 8
+        headerTd.colSpan = 9
         headerTd.innerHTML = `<span class="section-chevron">${chevron}</span><span class="section-title">${title}</span> <span class="section-count">(${sectionSymbols.length})</span>`
         headerTr.appendChild(headerTd)
         
@@ -470,7 +471,7 @@ export default class SymbolsUI {
                 const emptyTr = document.createElement('tr')
                 emptyTr.classList.add('symbol-empty-row')
                 const emptyTd = document.createElement('td')
-                emptyTd.colSpan = 8
+                emptyTd.colSpan = 9
                 emptyTd.style.cssText = 'color: #666; font-style: italic; padding: 8px 12px; text-align: center;'
                 emptyTd.textContent = sectionType === 'project' ? 'No symbols defined' : 'No symbols available'
                 emptyTr.appendChild(emptyTd)
@@ -582,8 +583,17 @@ export default class SymbolsUI {
         tr.appendChild(this.createCell('select', symbol.location, val => symbol.location = val, ['system', 'input', 'output', 'marker', 'timer', 'counter'], 'text', cellLocked))
 
         // Type - include explicit signed/unsigned types for device symbols
-        const typeOptions = ['bit', 'byte', 'int', 'dint', 'real', 'u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'f32']
+        const typeOptions = ['bit', 'byte', 'int', 'dint', 'real', 'u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'f32', 'str8', 'str16', 'cstr8', 'cstr16']
         tr.appendChild(this.createCell('select', symbol.type, val => symbol.type = val, typeOptions, 'text', cellLocked))
+        
+        // Array Size (0 or empty = scalar, 1+ = array)
+        const isArrayable = !['bit', 'cstr8', 'cstr16'].includes(symbol.type)
+        const arrayCell = this.createCell('input', symbol.array_size || '', val => {
+            const num = parseInt(val) || 0
+            symbol.array_size = num > 0 ? num : undefined
+        }, null, 'number', cellLocked || !isArrayable)
+        arrayCell.title = isArrayable ? 'Array size (leave empty for scalar)' : 'Arrays not supported for this type'
+        tr.appendChild(arrayCell)
 
         // Address
         let addressValue = symbol.address

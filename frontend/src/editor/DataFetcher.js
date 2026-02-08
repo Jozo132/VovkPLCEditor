@@ -210,7 +210,10 @@ export default class DataFetcher {
             int: 2, u16: 2, i16: 2, UINT: 2, WORD: 2, word: 2,
             dint: 4, u32: 4, i32: 4, UDINT: 4, DWORD: 4, dword: 4, REAL: 4, float: 4, f32: 4,
             real: 4,
-            u64: 8, i64: 8, f64: 8, lword: 8, LWORD: 8
+            u64: 8, i64: 8, f64: 8, lword: 8, LWORD: 8,
+            // String types - header + max data (actual reading handled by caller)
+            str8: 256, str16: 260, cstr8: 256, cstr16: 260,
+            STR8: 256, STR16: 260, CSTR8: 256, CSTR16: 260
         } // Extended types
         
         const baseOffset = getOffset(symbol.location)

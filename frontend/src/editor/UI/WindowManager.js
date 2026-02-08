@@ -5091,8 +5091,13 @@ export default class WindowManager {
                 return
             }
 
-            // Check end bound
-            const size = ['bit', 'byte', 'u8', 'i8'].includes(type) || type === 'bit' || type === 'byte' ? 1 : ['int', 'u16', 'i16', 'word'].includes(type) || type === 'int' ? 2 : ['dint', 'u32', 'i32', 'real', 'float', 'f32', 'dword'].includes(type) || type === 'dint' || type === 'real' ? 4 : ['u64', 'i64', 'f64', 'lword'].includes(type) ? 8 : 1
+            // Check end bound - for strings, just need the header
+            const isStringType = ['str8', 'cstr8', 'str16', 'cstr16'].includes(type)
+            const size = isStringType ? (type === 'str8' || type === 'cstr8' ? 2 : 4) :
+                ['bit', 'byte', 'u8', 'i8'].includes(type) || type === 'bit' || type === 'byte' ? 1 : 
+                ['int', 'u16', 'i16', 'word'].includes(type) || type === 'int' ? 2 : 
+                ['dint', 'u32', 'i32', 'real', 'float', 'f32', 'dword'].includes(type) || type === 'dint' || type === 'real' ? 4 : 
+                ['u64', 'i64', 'f64', 'lword'].includes(type) ? 8 : 1
 
             if (offset + size > bytes.length) return
 
@@ -5132,6 +5137,32 @@ export default class WindowManager {
                 } catch (e) {
                     /* fallback */ value = 0n
                     text = '0'
+                }
+            } else if (type === 'str8' || type === 'cstr8') {
+                // str8 format: [capacity:u8, length:u8, data...]
+                if (offset + 2 <= bytes.length) {
+                    const capacity = bytes[offset]
+                    const length = Math.min(bytes[offset + 1], capacity, bytes.length - offset - 2)
+                    const strBytes = bytes.slice(offset + 2, offset + 2 + length)
+                    try {
+                        value = new TextDecoder('utf-8', { fatal: false }).decode(strBytes)
+                    } catch {
+                        value = String.fromCharCode(...strBytes)
+                    }
+                    text = `"${value}"`
+                }
+            } else if (type === 'str16' || type === 'cstr16') {
+                // str16 format: [capacity:u16, length:u16, data...]
+                if (offset + 4 <= bytes.length) {
+                    const capacity = view.getUint16(offset, isLittleEndian)
+                    const length = Math.min(view.getUint16(offset + 2, isLittleEndian), capacity, bytes.length - offset - 4)
+                    const strBytes = bytes.slice(offset + 4, offset + 4 + length)
+                    try {
+                        value = new TextDecoder('utf-8', { fatal: false }).decode(strBytes)
+                    } catch {
+                        value = String.fromCharCode(...strBytes)
+                    }
+                    text = `"${value}"`
                 }
             } else {
                 value = bytes[offset]

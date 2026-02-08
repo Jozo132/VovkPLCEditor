@@ -16,6 +16,10 @@ const WATCH_TYPES = {
     'real':  { size: 4, label: 'REAL' },
     'f64':   { size: 8, label: 'F64' },
     'hex':   { size: 1, label: 'HEX' },
+    'str8':  { size: 0, label: 'STR8', isString: true, headerSize: 2 },   // [capacity:u8, length:u8, data...]
+    'str16': { size: 0, label: 'STR16', isString: true, headerSize: 4 },  // [capacity:u16, length:u16, data...]
+    'cstr8': { size: 0, label: 'CSTR8', isString: true, headerSize: 2, isConst: true },
+    'cstr16':{ size: 0, label: 'CSTR16', isString: true, headerSize: 4, isConst: true },
 }
 
 export default class WatchPanel {
@@ -638,12 +642,24 @@ export default class WatchPanel {
                     }
                     await connection.writeMemoryAreaMasked(absAddress, [val], [mask])
                 } else if (action === 'edit') {
+                    const typeInfo = WATCH_TYPES[entry.type]
+                    
+                    // Check if this is a const string (not writable)
+                    if (typeInfo?.isConst) {
+                        await Popup.alert({ title: 'Cannot Edit', description: 'Constant strings are read-only.' })
+                        return
+                    }
+                    
                     const currentVal = entry.value || '0'
+                    const isString = typeInfo?.isString
+                    
                     const formResult = await Popup.form({
                         title: `Edit ${entry.name}`,
-                        description: `Enter new value for ${entry.name} (${entry.type})`,
+                        description: isString 
+                            ? `Enter new string value for ${entry.name} (${entry.type})`
+                            : `Enter new value for ${entry.name} (${entry.type})`,
                         inputs: [
-                            { type: 'text', name: 'value', label: 'Value', value: String(currentVal) }
+                            { type: 'text', name: 'value', label: 'Value', value: isString ? currentVal.replace(/^"|"$/g, '') : String(currentVal) }
                         ],
                         buttons: [
                             { text: 'Write', value: 'confirm' },
@@ -653,37 +669,76 @@ export default class WatchPanel {
 
                     if (formResult && typeof formResult.value !== 'undefined') {
                         const input = String(formResult.value)
-                        let num = Number(input)
-                        if (!Number.isNaN(num)) {
-                            const size = WATCH_TYPES[entry.type]?.size || 1
-                            const type = entry.type
-                            
-                            // Use device endianness for writes
+                        
+                        if (isString) {
+                            // String write: need to read current capacity, then write [capacity, new_length, new_data...]
                             const isLittleEndian = this.editor.device_manager?.deviceInfo?.isLittleEndian ?? true
-                            const buffer = new ArrayBuffer(size)
-                            const view = new DataView(buffer)
+                            const headerSize = typeInfo.headerSize
+                            const is16Bit = entry.type === 'str16'
                             
-                            if (type === 'real' || type === 'float' || type === 'f32') {
-                                view.setFloat32(0, num, isLittleEndian)
-                            } else if (type === 'f64') {
-                                view.setFloat64(0, num, isLittleEndian)
-                            } else if (type === 'int' || type === 'i16') {
-                                view.setInt16(0, num, isLittleEndian)
-                            } else if (type === 'u16') {
-                                view.setUint16(0, num, isLittleEndian)
-                            } else if (type === 'dint' || type === 'i32') {
-                                view.setInt32(0, num, isLittleEndian)
-                            } else if (type === 'u32') {
-                                view.setUint32(0, num, isLittleEndian)
-                            } else if (type === 'i8') {
-                                view.setInt8(0, num)
+                            // Encode the string to UTF-8
+                            const encoder = new TextEncoder()
+                            const strBytes = encoder.encode(input)
+                            
+                            // Read current capacity from device
+                            const headerData = await connection.readMemoryArea(absAddress, headerSize)
+                            const headerView = new DataView(new Uint8Array(headerData).buffer)
+                            const capacity = is16Bit ? headerView.getUint16(0, isLittleEndian) : headerData[0]
+                            
+                            // Truncate string if it exceeds capacity
+                            const length = Math.min(strBytes.length, capacity)
+                            const truncatedBytes = strBytes.slice(0, length)
+                            
+                            // Build the data to write: [capacity, length, data...]
+                            const buffer = new ArrayBuffer(headerSize + length)
+                            const view = new DataView(buffer)
+                            const byteArray = new Uint8Array(buffer)
+                            
+                            if (is16Bit) {
+                                view.setUint16(0, capacity, isLittleEndian)
+                                view.setUint16(2, length, isLittleEndian)
                             } else {
-                                // byte/u8 - single byte, no endianness
-                                view.setUint8(0, num & 0xFF)
+                                byteArray[0] = capacity
+                                byteArray[1] = length
                             }
                             
-                            const data = Array.from(new Uint8Array(buffer))
-                            await connection.writeMemoryArea(absAddress, data)
+                            // Copy string data
+                            byteArray.set(truncatedBytes, headerSize)
+                            
+                            await connection.writeMemoryArea(absAddress, Array.from(byteArray))
+                        } else {
+                            let num = Number(input)
+                            if (!Number.isNaN(num)) {
+                                const size = typeInfo?.size || 1
+                                const type = entry.type
+                                
+                                // Use device endianness for writes
+                                const isLittleEndian = this.editor.device_manager?.deviceInfo?.isLittleEndian ?? true
+                                const buffer = new ArrayBuffer(size)
+                                const view = new DataView(buffer)
+                                
+                                if (type === 'real' || type === 'float' || type === 'f32') {
+                                    view.setFloat32(0, num, isLittleEndian)
+                                } else if (type === 'f64') {
+                                    view.setFloat64(0, num, isLittleEndian)
+                                } else if (type === 'int' || type === 'i16') {
+                                    view.setInt16(0, num, isLittleEndian)
+                                } else if (type === 'u16') {
+                                    view.setUint16(0, num, isLittleEndian)
+                                } else if (type === 'dint' || type === 'i32') {
+                                    view.setInt32(0, num, isLittleEndian)
+                                } else if (type === 'u32') {
+                                    view.setUint32(0, num, isLittleEndian)
+                                } else if (type === 'i8') {
+                                    view.setInt8(0, num)
+                                } else {
+                                    // byte/u8 - single byte, no endianness
+                                    view.setUint8(0, num & 0xFF)
+                                }
+                                
+                                const data = Array.from(new Uint8Array(buffer))
+                                await connection.writeMemoryArea(absAddress, data)
+                            }
                         }
                     }
                 }
@@ -772,7 +827,18 @@ export default class WatchPanel {
         }
 
         const typeInfo = WATCH_TYPES[entry.type]
-        const size = typeInfo ? typeInfo.size : (resolved.size || 1)
+        let size = typeInfo ? typeInfo.size : (resolved.size || 1)
+        
+        // For string types, read a reasonable max size (header + max string content)
+        // str8: [capacity:u8, length:u8] + data (max 254 bytes) = 256 bytes max
+        // str16: [capacity:u16, length:u16] + data (max 65534 bytes) = we limit to reasonable amount
+        if (typeInfo?.isString) {
+            if (entry.type === 'str8' || entry.type === 'cstr8') {
+                size = 256 // header (2) + max data (254)
+            } else {
+                size = 260 // header (4) + reasonable display amount (256)
+            }
+        }
         
         entry.resolved = { ...resolved, type: entry.type, size }
         entry.update = (data) => {
@@ -818,6 +884,30 @@ export default class WatchPanel {
                  if (data.length >= 4) val = view.getFloat32(0, isLittleEndian).toFixed(3)
             } else if (type === 'f64') {
                  if (data.length >= 8) val = view.getFloat64(0, isLittleEndian).toFixed(3)
+            } else if (type === 'str8' || type === 'cstr8') {
+                 // str8 format: [capacity:u8, length:u8, data...]
+                 if (data.length >= 2) {
+                     const capacity = data[0]
+                     const length = Math.min(data[1], capacity, data.length - 2)
+                     const strBytes = data.slice(2, 2 + length)
+                     try {
+                         val = `"${new TextDecoder('utf-8', { fatal: false }).decode(strBytes)}"`
+                     } catch {
+                         val = `"${String.fromCharCode(...strBytes)}"`
+                     }
+                 }
+            } else if (type === 'str16' || type === 'cstr16') {
+                 // str16 format: [capacity:u16, length:u16, data...]
+                 if (data.length >= 4) {
+                     const capacity = view.getUint16(0, isLittleEndian)
+                     const length = Math.min(view.getUint16(2, isLittleEndian), capacity, data.length - 4)
+                     const strBytes = data.slice(4, 4 + length)
+                     try {
+                         val = `"${new TextDecoder('utf-8', { fatal: false }).decode(strBytes)}"`
+                     } catch {
+                         val = `"${String.fromCharCode(...strBytes)}"`
+                     }
+                 }
             } else {
                  // Hex fallback or similar?
                  val = Array.from(data).map(b => b.toString(16).padStart(2,'0')).join(' ')

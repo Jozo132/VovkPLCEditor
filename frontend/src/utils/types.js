@@ -16,7 +16,7 @@ export let PLC_ContextState
 /** @typedef { 'counter' | 'timer' | 'input' | 'output' | 'system' | 'marker' | 'memory' } PLC_Symbol_Location * @type { PLC_Symbol_Location } */
 export let PLC_Symbol_Location
 
-/** @typedef { 'bit' | 'byte' | 'int' | 'dint' | 'real' | 'u8' | 'u16' | 'u32' | 'i8' | 'i16' | 'i32' | 'f32' } PLC_Symbol_Type * @type { PLC_Symbol_Type } */
+/** @typedef { 'bit' | 'byte' | 'int' | 'dint' | 'real' | 'u8' | 'u16' | 'u32' | 'i8' | 'i16' | 'i32' | 'f32' | 'str8' | 'str16' | 'cstr8' | 'cstr16' } PLC_Symbol_Type * @type { PLC_Symbol_Type } */
 export let PLC_Symbol_Type
 
 /** 
@@ -25,10 +25,11 @@ export let PLC_Symbol_Type
  *     location: PLC_Symbol_Location,
  *     type: PLC_Symbol_Type,
  *     address: number,
- *     initial_value: number,
+ *     initial_value: number | string,
  *     comment: string,
  *     readonly?: boolean,
- *     device?: boolean
+ *     device?: boolean,
+ *     array_size?: number
  * }} PLC_Symbol * @type { PLC_Symbol } 
 **/
 export let PLC_Symbol
