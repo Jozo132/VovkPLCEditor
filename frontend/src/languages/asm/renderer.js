@@ -5,7 +5,7 @@ import {Popup} from '../../editor/UI/Elements/components/popup.js'
 // import { resolveBlockState } from "./evaluator.js"
 
 // Feature flag for testing CanvasCodeEditor (set to true to test)
-const USE_CANVAS_EDITOR = false
+const USE_CANVAS_EDITOR = true
 
 // De-duplicating logger to avoid spam
 const createDedupLogger = () => {
@@ -123,13 +123,13 @@ export const ladderRenderer = {
                 return {addressStr, fullType}
             }
 
-            const handlePreviewAction = async (entry, actionName) => {
+            const handlePreviewAction = async (entry, actionName, inlineValue) => {
                 // ============================================================
                 // LIVE PATCHING: Timer presets and embedded constants
                 // Uses LivePatcher to modify and re-upload program bytecode
                 // ============================================================
                 if (entry?.isTimerPT && entry?.bytecode_offset !== undefined && typeof entry.presetValue === 'number') {
-                    if (actionName !== 'edit') return
+                    if (actionName !== 'edit' && actionName !== 'edit-confirm') return
 
                     if (!editor.device_manager?.connected) {
                         new Popup({
@@ -156,7 +156,96 @@ export const ladderRenderer = {
                         // FIX: Ensure value matches the type expected by Popup.js (number for type: 'number')
                         let currentInput = isIecFormat ? entry.originalName : entry.presetValue
 
-                        await Popup.form({
+                        // Helper: parse and patch timer value from a string input
+                        const parseAndPatchTimer = async (inputStr) => {
+                            const strVal = String(inputStr).trim()
+                            if (!strVal) throw new Error("Value cannot be empty")
+
+                            let newValue = 0
+                            let newToken = ''
+
+                            if (isIecFormat) {
+                                if (strVal.toUpperCase().startsWith('T#')) {
+                                    if (!/^T#(\d+(?:ms|s|m|h|d))+$/i.test(strVal)) {
+                                        throw new Error("Invalid format. Spaces are not allowed (e.g., T#45d3s)")
+                                    }
+                                    const content = strVal.substring(2)
+                                    const partRegex = /(\d+)(ms|s|m|h|d)/gi
+                                    let totalMs = 0
+                                    let hasMatch = false
+                                    let pMatch
+                                    while ((pMatch = partRegex.exec(content))) {
+                                        hasMatch = true
+                                        const val = parseInt(pMatch[1], 10)
+                                        const unit = pMatch[2].toLowerCase()
+                                        if (unit === 's') totalMs += val * 1000
+                                        else if (unit === 'm') totalMs += val * 60000
+                                        else if (unit === 'h') totalMs += val * 3600000
+                                        else if (unit === 'd') totalMs += val * 86400000
+                                        else totalMs += val
+                                    }
+                                    newValue = hasMatch ? totalMs : (() => { const s = parseInt(content, 10); if (isNaN(s)) throw new Error("Invalid T# format"); return s })()
+                                    newToken = strVal
+                                } else if (strVal.startsWith('#')) {
+                                    newValue = parseInt(strVal.substring(1), 10)
+                                    newToken = strVal
+                                } else {
+                                    newValue = parseInt(strVal, 10)
+                                    if (isNaN(newValue)) throw new Error("Invalid time format")
+                                    newToken = `#${newValue}`
+                                }
+                            } else {
+                                newValue = parseInt(strVal, 10)
+                                newToken = `#${newValue}`
+                            }
+
+                            if (isNaN(newValue) || newValue < 0 || newValue > 4294967295) {
+                                throw new Error("Value out of valid range")
+                            }
+
+                            const patchResult = await patcher.patchConstant(entry.bytecode_offset, newValue)
+                            if (!patchResult.success) throw new Error(`Write Failed: ${patchResult.message}`)
+
+                            // Update source code to match patched bytecode
+                            const oldToken = entry.originalName || `#${entry.presetValue}`
+                            console.log('[PATCH] Updating source:', { oldToken, newToken, entryStart: entry.start, entryEnd: entry.end })
+
+                            if (entry.start !== undefined && entry.end !== undefined) {
+                                block.code = block.code.substring(0, entry.start) + newToken + block.code.substring(entry.end)
+                            } else {
+                                block.code = block.code.replace(oldToken, newToken)
+                            }
+
+                            const textEditor = block.props?.text_editor
+                            if (textEditor?.setValue) {
+                                block.cached_checksum = null
+                                block.cached_asm = null
+                                block.cached_asm_map = null
+                                block.cached_symbol_refs = null
+                                block.cached_address_refs = null
+                                block.cached_timer_refs = null
+                                block.cached_symbols_checksum = null
+                                textEditor.setValue(block.code)
+                            }
+
+                            if (editor.project_manager?.checkAndSave) {
+                                editor.project_manager.checkAndSave()
+                            }
+
+                            setTimeout(async () => {
+                                console.log('[PATCH] Recompiling to rebuild IR and symbol map...')
+                                if (editor.window_manager?.handleCompile) {
+                                    await editor.window_manager.handleCompile({ silent: true })
+                                }
+                            }, 100)
+                        }
+
+                        if (actionName === 'edit-confirm' && inlineValue !== undefined) {
+                            // Inline edit — patch directly with the value from the overlay input
+                            await parseAndPatchTimer(inlineValue)
+                        } else {
+                            // Popup form edit
+                            await Popup.form({
                             title: isIecFormat ? `Edit ${entry.originalName}` : `Edit #${entry.presetValue}`,
                             description: isIecFormat ? 'Enter new timer preset (e.g. T#5s, T#500ms)' : `Enter new timer preset (milliseconds)`,
                             inputs: [{
@@ -184,125 +273,9 @@ export const ladderRenderer = {
                             verify: async (states) => {
                                 states.error.value = ''
                                 states.value.clearError()
-
-                                let newValue = 0
-                                let newToken = ''
-                                const inputValue = states.value.value
-
                                 try {
-                                    const strVal = String(inputValue).trim()
-                                    if (!strVal) throw new Error("Value cannot be empty")
-
-                                    // Parse the user input
-                                    if (isIecFormat) {
-                                        if (strVal.toUpperCase().startsWith('T#')) {
-                                            // Validates no spaces or invalid chars between components
-                                            if (!/^T#(\d+(?:ms|s|m|h|d))+$/i.test(strVal)) {
-                                                throw new Error("Invalid format. Spaces are not allowed (e.g., T#45d3s)")
-                                            }
-
-                                            const content = strVal.substring(2)
-                                            const partRegex = /(\d+)(ms|s|m|h|d)/gi
-                                            let totalMs = 0
-                                            let hasMatch = false
-                                            let pMatch
-                                            while ((pMatch = partRegex.exec(content))) {
-                                                hasMatch = true
-                                                const val = parseInt(pMatch[1], 10)
-                                                const unit = pMatch[2].toLowerCase()
-                                                if (unit === 's') totalMs += val * 1000
-                                                else if (unit === 'm') totalMs += val * 60000
-                                                else if (unit === 'h') totalMs += val * 3600000
-                                                else if (unit === 'd') totalMs += val * 86400000
-                                                else totalMs += val
-                                            }
-
-                                            if (hasMatch) {
-                                                newValue = totalMs
-                                            } else {
-                                                // Fallback usually unreachable due to regex check above, 
-                                                // but kept for safety if regex allows something odd
-                                                const simple = parseInt(content, 10)
-                                                if (isNaN(simple)) throw new Error("Invalid T# format")
-                                                newValue = simple
-                                            }
-                                            newToken = strVal
-                                        } else if (strVal.startsWith('#')) {
-                                            // User switched to raw format
-                                            newValue = parseInt(strVal.substring(1), 10)
-                                            newToken = strVal
-                                        } else {
-                                            // Assume simple number text input is milliseconds
-                                            newValue = parseInt(strVal, 10)
-                                            if (isNaN(newValue)) throw new Error("Invalid time format")
-                                            newToken = `#${newValue}`
-                                        }
-                                    } else {
-                                        newValue = parseInt(strVal, 10)
-                                        newToken = `#${newValue}`
-                                    }
-
-                                    // Range Check
-                                    if (isNaN(newValue) || newValue < 0 || newValue > 4294967295) {
-                                        throw new Error("Value out of valid range")
-                                    }
-
-                                    const patchResult = await patcher.patchConstant(entry.bytecode_offset, newValue)
-
-                                    if (patchResult.success) {
-                                        // Update source code to match patched bytecode
-                                        const oldToken = entry.originalName || `#${entry.presetValue}`
-
-                                        console.log('[PATCH] Updating source:', {
-                                            oldToken,
-                                            newToken,
-                                            entryStart: entry.start,
-                                            entryEnd: entry.end,
-                                        })
-
-                                        // Replace at the specific position, not the first occurrence
-                                        if (entry.start !== undefined && entry.end !== undefined) {
-                                            block.code = block.code.substring(0, entry.start) + newToken + block.code.substring(entry.end)
-                                        } else {
-                                            // Fallback to simple replace (shouldn't happen)
-                                            block.code = block.code.replace(oldToken, newToken)
-                                        }
-
-                                        // Update text editor to show new code
-                                        const textEditor = block.props?.text_editor
-                                        if (textEditor?.setValue) {
-                                            // Clear all caches so recompilation rebuilds everything fresh
-                                            block.cached_checksum = null
-                                            block.cached_asm = null
-                                            block.cached_asm_map = null
-                                            block.cached_symbol_refs = null
-                                            block.cached_address_refs = null
-                                            block.cached_timer_refs = null
-                                            block.cached_symbols_checksum = null
-
-                                            // Update display (pills will be regenerated by recompilation)
-                                            textEditor.setValue(block.code)
-                                        }
-
-                                        // Mark project dirty
-                                        if (editor.project_manager?.checkAndSave) {
-                                            editor.project_manager.checkAndSave()
-                                        }
-
-                                        // Trigger full recompilation to rebuild everything cleanly
-                                        setTimeout(async () => {
-                                            console.log('[PATCH] Recompiling to rebuild IR and symbol map...')
-                                            if (editor.window_manager?.handleCompile) {
-                                                await editor.window_manager.handleCompile({
-                                                    silent: true
-                                                })
-                                            }
-                                        }, 100)
-                                        return true
-                                    } else {
-                                        throw new Error(`Write Failed: ${patchResult.message}`)
-                                    }
-
+                                    await parseAndPatchTimer(states.value.value)
+                                    return true
                                 } catch (e) {
                                     states.error.value = e.message
                                     states.value.setError()
@@ -310,6 +283,7 @@ export const ladderRenderer = {
                                 }
                             }
                         })
+                        } // end else (popup form)
                     } catch (err) {
                         console.error('[ASM Renderer] Error patching constant:', err)
                         new Popup({
@@ -359,6 +333,45 @@ export const ladderRenderer = {
                 const absAddress = region.offset + (byteOffset * structSize)
 
                 try {
+                    // Helper: write a numeric value to the memory address
+                    const writeMemoryValue = async (input) => {
+                        let num = Number(input)
+                        if (Number.isNaN(num)) throw new Error('Invalid number')
+                        let size = 1
+                        if (['u16', 'i16', 'int', 'word'].includes(fullType)) size = 2
+                        if (['u32', 'i32', 'dint', 'real', 'float', 'dword'].includes(fullType)) size = 4
+                        if (['u64', 'i64', 'lword'].includes(fullType)) size = 8
+
+                        const isLittleEndian = editor.device_manager?.deviceInfo?.isLittleEndian ?? true
+                        const buffer = new ArrayBuffer(size)
+                        const view = new DataView(buffer)
+
+                        if (['real', 'float', 'f32'].includes(fullType)) {
+                            view.setFloat32(0, num, isLittleEndian)
+                        } else if (['f64'].includes(fullType)) {
+                            view.setFloat64(0, num, isLittleEndian)
+                        } else if (['i16', 'int'].includes(fullType)) {
+                            view.setInt16(0, num, isLittleEndian)
+                        } else if (['u16', 'word'].includes(fullType)) {
+                            view.setUint16(0, num, isLittleEndian)
+                        } else if (['i32', 'dint'].includes(fullType)) {
+                            view.setInt32(0, num, isLittleEndian)
+                        } else if (['u32', 'dword'].includes(fullType)) {
+                            view.setUint32(0, num, isLittleEndian)
+                        } else if (['i64', 'lword'].includes(fullType)) {
+                            view.setBigInt64(0, BigInt(Math.floor(num)), isLittleEndian)
+                        } else if (['u64'].includes(fullType)) {
+                            view.setBigUint64(0, BigInt(Math.floor(num)), isLittleEndian)
+                        } else if (['i8'].includes(fullType)) {
+                            view.setInt8(0, num)
+                        } else {
+                            view.setUint8(0, num & 0xFF)
+                        }
+                        
+                        const data = Array.from(new Uint8Array(buffer))
+                        await connection.writeMemoryArea(absAddress, data)
+                    }
+
                     if (isBit && bitIndex !== null) {
                         const mask = 1 << bitIndex
                         let val = 0
@@ -370,6 +383,9 @@ export const ladderRenderer = {
                             val = currentOn ? 0 : mask
                         }
                         await connection.writeMemoryAreaMasked(absAddress, [val], [mask])
+                    } else if (actionName === 'edit-confirm' && inlineValue !== undefined) {
+                        // Inline edit — write value directly from the overlay input
+                        await writeMemoryValue(inlineValue)
                     } else if (actionName === 'edit') {
                         let currentVal = 0
                         const liveEntry = editor.live_symbol_values?.get(entry.name) || editor.live_symbol_values?.get(addressStr)
@@ -386,45 +402,7 @@ export const ladderRenderer = {
                         })
 
                         if (formResult && typeof formResult.value !== 'undefined') {
-                            const input = formResult.value
-                            let num = Number(input)
-                            if (!Number.isNaN(num)) {
-                                let size = 1
-                                if (['u16', 'i16', 'int', 'word'].includes(fullType)) size = 2
-                                if (['u32', 'i32', 'dint', 'real', 'float', 'dword'].includes(fullType)) size = 4
-                                if (['u64', 'i64', 'lword'].includes(fullType)) size = 8
-
-                                // Use device endianness for writes
-                                const isLittleEndian = editor.device_manager?.deviceInfo?.isLittleEndian ?? true
-                                const buffer = new ArrayBuffer(size)
-                                const view = new DataView(buffer)
-
-                                if (['real', 'float', 'f32'].includes(fullType)) {
-                                    view.setFloat32(0, num, isLittleEndian)
-                                } else if (['f64'].includes(fullType)) {
-                                    view.setFloat64(0, num, isLittleEndian)
-                                } else if (['i16', 'int'].includes(fullType)) {
-                                    view.setInt16(0, num, isLittleEndian)
-                                } else if (['u16', 'word'].includes(fullType)) {
-                                    view.setUint16(0, num, isLittleEndian)
-                                } else if (['i32', 'dint'].includes(fullType)) {
-                                    view.setInt32(0, num, isLittleEndian)
-                                } else if (['u32', 'dword'].includes(fullType)) {
-                                    view.setUint32(0, num, isLittleEndian)
-                                } else if (['i64', 'lword'].includes(fullType)) {
-                                    view.setBigInt64(0, BigInt(Math.floor(num)), isLittleEndian)
-                                } else if (['u64'].includes(fullType)) {
-                                    view.setBigUint64(0, BigInt(Math.floor(num)), isLittleEndian)
-                                } else if (['i8'].includes(fullType)) {
-                                    view.setInt8(0, num)
-                                } else {
-                                    // byte/u8 - single byte, no endianness
-                                    view.setUint8(0, num & 0xFF)
-                                }
-                                
-                                const data = Array.from(new Uint8Array(buffer))
-                                await connection.writeMemoryArea(absAddress, data)
-                            }
+                            await writeMemoryValue(formResult.value)
                         }
                     }
                     if (editor.window_manager.updateLiveMonitorState) editor.window_manager.updateLiveMonitorState()
@@ -435,6 +413,271 @@ export const ladderRenderer = {
             }
 
             let text_editor
+
+            // Shared preview providers (used by both CanvasCodeEditor and MiniCodeEditor)
+            const _previewEntriesProvider = () => {
+                // Only show pills when monitoring is active AND device is connected
+                const isMonitoring = editor.window_manager?.isMonitoringActive?.()
+                const isConnected = editor.device_manager?.connected
+                if (!isMonitoring || !isConnected) {
+                    return []
+                }
+
+                // Validate cache against current code checksum
+                const currentCode = block.code || ''
+                const currentChecksum = editor._hashString?.(currentCode)?.toString() || null
+
+                if (currentChecksum && currentChecksum !== block.cached_checksum) {
+                    console.log('[PILLS] Cache invalidated - code changed!')
+                    block.cached_checksum = null
+                    block.cached_symbol_refs = null
+                    block.cached_address_refs = null
+                    block.cached_timer_refs = null
+                    block.cached_asm = null
+                    block.cached_asm_map = null
+                }
+
+                if (!block.cached_symbol_refs && typeof editor._buildSymbolCache === 'function' && typeof editor._ensureAsmCache === 'function') {
+                    console.log('[PILLS] Rebuilding cache...')
+                    const cache = editor._buildSymbolCache()
+                    editor._ensureAsmCache(block, cache.signature, cache.map, cache.details)
+                }
+                if (typeof editor._ensureBlockAddressRefs === 'function') {
+                    const {details} = editor._buildSymbolCache?.() || {}
+                    editor._ensureBlockAddressRefs(block, null, details)
+                }
+                const symbolRefs = block.cached_symbol_refs || []
+                const addressRefs = block.cached_address_refs || []
+                const timerRefs = block.cached_timer_refs || []
+
+                // Match timer constant presets with patchable constants from LivePatcher
+                if (editor.program_patcher?.patchableConstants && timerRefs.length > 0) {
+                    const patchableMap = new Map()
+
+                    for (const [offset, constant] of editor.program_patcher.patchableConstants) {
+                        if (constant.flags & 0x10 && constant.timer_address !== undefined) {
+                            patchableMap.set(constant.timer_address, constant)
+                        }
+                    }
+
+                    for (const timerRef of timerRefs) {
+                        if (timerRef.isTimerPT && !timerRef.isPresetAddress && typeof timerRef.presetValue === 'number') {
+                            if (timerRef.storageAddress !== -1) {
+                                const patchable = patchableMap.get(timerRef.storageAddress)
+                                if (patchable && patchable.current_value === timerRef.presetValue) {
+                                    timerRef.bytecode_offset = patchable.bytecode_offset
+                                    timerRef.patchable_type = patchable.operand_type
+                                    timerRef.timer_address = patchable.timer_address
+                                }
+                            }
+                        }
+                    }
+                }
+
+                const timerRanges = new Set(timerRefs.map(r => `${r.start}-${r.end}`))
+                const filteredSymbols = symbolRefs.filter(r => !timerRanges.has(`${r.start}-${r.end}`))
+                const filteredAddresses = addressRefs.filter(r => !timerRanges.has(`${r.start}-${r.end}`))
+
+                timerRefs.forEach(r => {
+                    if (r.isTimerStorage || r.isTimerOutput) {
+                        r.nonInteractive = true
+                    }
+                })
+
+                return [...timerRefs, ...filteredSymbols, ...filteredAddresses]
+            }
+
+            const _formatTime = ms => {
+                const totalSec = Math.floor(ms / 1000)
+                const d = Math.floor(totalSec / 86400)
+                const h = Math.floor((totalSec % 86400) / 3600)
+                const m = Math.floor((totalSec % 3600) / 60)
+                const s = totalSec % 60
+                const mil = ms % 1000
+
+                const milStr = mil.toString().padStart(3, '0')
+                const sStr = s.toString().padStart(2, '0')
+                const mStr = m.toString().padStart(2, '0')
+                const hStr = h.toString().padStart(2, '0')
+
+                if (d > 0) return `${d}d ${hStr}:${mStr}:${sStr}`
+                if (h > 0) return `${h}:${mStr}:${sStr}`
+                if (m > 0) return `${m}:${sStr}`
+                if (s > 0) return `${s}.${milStr}s`
+                return `${mil}ms`
+            }
+
+            const _previewValueProvider = entry => {
+                // When offline, show constant preset values
+                if (!editor.window_manager?.isMonitoringActive?.() || !editor.device_manager?.connected) {
+                    if (entry?.isTimerPT && typeof entry.presetValue === 'number') {
+                        return {text: _formatTime(entry.presetValue), className: 'u32 timer'}
+                    }
+                    return null
+                }
+
+                // When online (monitoring), show live values
+                let live = editor.live_symbol_values?.get(entry?.name)
+                if (!live && entry?.originalName) {
+                    live = editor.live_symbol_values?.get(entry.originalName)
+                }
+
+                const result = (() => {
+                    if (!live || typeof live.text !== 'string') return null
+
+                    let className = ''
+                    let text = live.text
+
+                    // Timer output state (Q bit)
+                    if (entry?.isTimerOutput) {
+                        const isOn = live.value ? true : false
+                        text = isOn ? 'ON' : 'OFF'
+                        className = `${isOn ? 'on' : 'off'} bit timer-output`
+                        return {text, className}
+                    }
+
+                    // Timer monitoring: show remaining/elapsed time
+                    if (entry?.isTimerStorage || entry?.isTimerPT) {
+                        let et = 0
+                        let pt = 0
+                        let hasPT = false
+                        let hasET = false
+
+                        if (entry.isTimerStorage) {
+                            et = live.value || 0
+                            hasET = true
+                            if (typeof entry.presetValue === 'number') {
+                                pt = entry.presetValue
+                                hasPT = true
+                            } else if (entry.presetAddress !== undefined) {
+                                const ptLive = [...editor.live_symbol_values.values()].find(
+                                    l => l.absoluteAddress === entry.presetAddress && (l.type === 'u32' || l.type === 'dint')
+                                )
+                                if (ptLive && typeof ptLive.value === 'number') {
+                                    pt = ptLive.value
+                                    hasPT = true
+                                }
+                            } else if (entry.presetName) {
+                                const ptLive = editor.live_symbol_values?.get(entry.presetName)
+                                if (ptLive && typeof ptLive.value === 'number') {
+                                    pt = ptLive.value
+                                    hasPT = true
+                                }
+                            }
+                        } else if (entry.isTimerPT) {
+                            if (entry.isPresetAddress) {
+                                pt = live.value || 0
+                                hasPT = true
+                            } else {
+                                pt = entry.presetValue || 0
+                                hasPT = true
+                            }
+
+                            if (entry.storageAddress !== -1) {
+                                const storageLive = [...editor.live_symbol_values.values()].find(l => l.absoluteAddress === entry.storageAddress && (l.type === 'u32' || l.type === 'dint'))
+                                if (storageLive) {
+                                    et = storageLive.value || 0
+                                    hasET = true
+                                }
+                            }
+                        }
+
+                        if (entry.isTimerStorage) {
+                            if (hasPT && hasET) {
+                                const remaining = Math.max(0, Number(pt) - Number(et))
+                                text = _formatTime(remaining)
+                                className += ' timer'
+                            } else if (hasET) {
+                                text = _formatTime(et)
+                                className += ' timer'
+                            }
+                        } else if (entry.isTimerPT) {
+                            if (hasPT) {
+                                text = _formatTime(pt)
+                                className += ' timer'
+                            }
+                        }
+
+                        if (entry.isTimerStorage && et > 0) {
+                            className += ' active-timer'
+                        }
+                    }
+
+                    if (entry?.type === 'bit' || live.type === 'bit') {
+                        className += ` ${live.value ? 'on' : 'off'} bit`
+                    } else if (!entry?.isTimerStorage && !entry?.isTimerPT && live.type) {
+                        className += ` ${live.type}`
+                    }
+                    return {text, className}
+                })()
+
+                return result
+            }
+
+            const _onPreviewAction = (entry, action, value) => handlePreviewAction(entry, action, value)
+
+            const _onPreviewContextMenu = (entry, event) => {
+                // Block context menu for timer storage and timer output - they're read-only
+                if (entry?.isTimerStorage || entry?.isTimerOutput) {
+                    return
+                }
+
+                // Handle timer constant presets (bytecode patching)
+                if (entry?.isTimerPT && !entry.isPresetAddress && typeof entry.presetValue === 'number' && entry.bytecode_offset !== undefined) {
+                    if (!editor.device_manager?.connected) return
+
+                    const items = [{label: 'Edit Preset...', name: 'edit', icon: 'edit', type: 'item'}]
+
+                    const contextMenu = editor.context_manager
+                    if (contextMenu && typeof contextMenu.show === 'function') {
+                        contextMenu.show(event, items, async actionName => {
+                            await handlePreviewAction(entry, actionName)
+                        })
+                    }
+                    return
+                }
+
+                // Handle memory variables (addresses and timer storage)
+                if (!editor.window_manager?.isMonitoringActive?.()) return
+                const {addressStr, fullType} = resolveEntryInfo(entry)
+
+                const addrMatch = ADDRESS_REGEX.exec(addressStr)
+                if (!addrMatch) return
+
+                let prefix = '',
+                    byteStr = '',
+                    bitStr = ''
+                if (addrMatch[1]) {
+                    prefix = addrMatch[1].toUpperCase()
+                    byteStr = addrMatch[2]
+                    bitStr = addrMatch[3]
+                } else {
+                    byteStr = addrMatch[4]
+                    bitStr = addrMatch[5] || null
+                }
+
+                const bitIndex = bitStr ? Number.parseInt(bitStr, 10) : null
+                const isBit = bitIndex !== null || fullType === 'bit'
+
+                const items = []
+                const connection = editor.device_manager?.connection
+                if (!connection) return
+
+                if (isBit && bitIndex !== null) {
+                    items.push({label: 'Set (1)', name: 'set', icon: 'check', type: 'item'})
+                    items.push({label: 'Reset (0)', name: 'reset', icon: 'close', type: 'item'})
+                    items.push({label: 'Toggle', name: 'toggle', icon: 'symbol-event', type: 'item'})
+                } else {
+                    items.push({label: 'Edit Value...', name: 'edit', icon: 'edit', type: 'item'})
+                }
+
+                const contextMenu = editor.context_manager
+                if (contextMenu && typeof contextMenu.show === 'function') {
+                    contextMenu.show(event, items, async actionName => {
+                        await handlePreviewAction(entry, actionName)
+                    })
+                }
+            }
 
             // Use CanvasCodeEditor if enabled (for testing)
             if (USE_CANVAS_EDITOR) {
@@ -453,6 +696,10 @@ export const ladderRenderer = {
                     value: block.code,
                     font: '14px Consolas, monospace',
                     readOnly: !!editor.edit_locked,
+                    previewEntriesProvider: _previewEntriesProvider,
+                    previewValueProvider: _previewValueProvider,
+                    onPreviewAction: _onPreviewAction,
+                    onPreviewContextMenu: _onPreviewContextMenu,
                     lintProvider: async () => {
                         if (!block.id || !editor.lintBlock) return []
                         return await editor.lintBlock(block.id)
@@ -499,313 +746,10 @@ export const ladderRenderer = {
                 programId: block.programId,
                 readOnly: !!editor.edit_locked,
                 blockId: block.id,
-                previewEntriesProvider: () => {
-                    // Only show pills when monitoring is active AND device is connected
-                    const isMonitoring = editor.window_manager?.isMonitoringActive?.()
-                    const isConnected = editor.device_manager?.connected
-                    if (!isMonitoring || !isConnected) {
-                        return []
-                    }
-
-                    // ✅ CRITICAL FIX: Validate cache against current code checksum
-                    // If code has changed (different checksum), invalidate ALL cached positions
-                    const currentCode = block.code || ''
-                    const currentChecksum = editor._hashString?.(currentCode)?.toString() || null
-
-                    // dlog('[PILLS DEBUG]', {
-                    //     blockId: block.id,
-                    //     currentChecksum,
-                    //     cachedChecksum: block.cached_checksum,
-                    //     codeLength: currentCode.length,
-                    //     hasCachedRefs: !!block.cached_symbol_refs,
-                    //     checksumMatch: currentChecksum === block.cached_checksum
-                    // })
-
-                    if (currentChecksum && currentChecksum !== block.cached_checksum) {
-                        // Code changed - invalidate ALL position-based caches
-                        console.log('[PILLS] Cache invalidated - code changed!')
-                        block.cached_checksum = null
-                        block.cached_symbol_refs = null
-                        block.cached_address_refs = null
-                        block.cached_timer_refs = null
-                        block.cached_asm = null
-                        block.cached_asm_map = null
-                    }
-
-                    if (!block.cached_symbol_refs && typeof editor._buildSymbolCache === 'function' && typeof editor._ensureAsmCache === 'function') {
-                        console.log('[PILLS] Rebuilding cache...')
-                        const cache = editor._buildSymbolCache()
-                        editor._ensureAsmCache(block, cache.signature, cache.map, cache.details)
-                    }
-                    if (typeof editor._ensureBlockAddressRefs === 'function') {
-                        const {details} = editor._buildSymbolCache?.() || {}
-                        editor._ensureBlockAddressRefs(block, null, details)
-                    }
-                    const symbolRefs = block.cached_symbol_refs || []
-                    const addressRefs = block.cached_address_refs || []
-                    const timerRefs = block.cached_timer_refs || []
-
-                    // dlog('[PILLS] Refs loaded:', {
-                    //     symbolRefs: symbolRefs.length,
-                    //     addressRefs: addressRefs.length,
-                    //     timerRefs: timerRefs.length,
-                    //     timerSample: timerRefs[0]
-                    // })
-
-                    // Match timer constant presets with patchable constants from LivePatcher
-                    if (editor.program_patcher?.patchableConstants && timerRefs.length > 0) {
-                        const patchableMap = new Map()
-
-                        // Build map of timer_address -> constant
-                        for (const [offset, constant] of editor.program_patcher.patchableConstants) {
-                            if (constant.flags & 0x10 && constant.timer_address !== undefined) {
-                                patchableMap.set(constant.timer_address, constant)
-                            }
-                        }
-
-                        // Match timer preset refs by storage address
-                        for (const timerRef of timerRefs) {
-                            if (timerRef.isTimerPT && !timerRef.isPresetAddress && typeof timerRef.presetValue === 'number') {
-                                // This is a constant preset (#500) - try to match with patchable constant
-                                if (timerRef.storageAddress !== -1) {
-                                    const patchable = patchableMap.get(timerRef.storageAddress)
-                                    if (patchable && patchable.current_value === timerRef.presetValue) {
-                                        // Match found! Enhance the ref with bytecode info
-                                        timerRef.bytecode_offset = patchable.bytecode_offset
-                                        timerRef.patchable_type = patchable.operand_type
-                                        timerRef.timer_address = patchable.timer_address
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Avoid duplicate pills at same position
-                    const timerRanges = new Set(timerRefs.map(r => `${r.start}-${r.end}`))
-                    const filteredSymbols = symbolRefs.filter(r => !timerRanges.has(`${r.start}-${r.end}`))
-                    const filteredAddresses = addressRefs.filter(r => !timerRanges.has(`${r.start}-${r.end}`))
-
-                    // Mark timer storage as non-interactive (visible but not selectable)
-                    // Mark timer output as non-interactive too
-                    timerRefs.forEach(r => {
-                        if (r.isTimerStorage || r.isTimerOutput) {
-                            r.nonInteractive = true
-                        }
-                    })
-
-                    return [...timerRefs, ...filteredSymbols, ...filteredAddresses]
-                },
-                previewValueProvider: entry => {
-                    // Helper to format time with auto-scaling units
-                    const formatTime = ms => {
-                        const totalSec = Math.floor(ms / 1000)
-                        const d = Math.floor(totalSec / 86400)
-                        const h = Math.floor((totalSec % 86400) / 3600)
-                        const m = Math.floor((totalSec % 3600) / 60)
-                        const s = totalSec % 60
-                        const mil = ms % 1000
-
-                        const milStr = mil.toString().padStart(3, '0')
-                        const sStr = s.toString().padStart(2, '0')
-                        const mStr = m.toString().padStart(2, '0')
-                        const hStr = h.toString().padStart(2, '0')
-
-                        if (d > 0) return `${d}d ${hStr}:${mStr}:${sStr}`
-                        if (h > 0) return `${h}:${mStr}:${sStr}`
-                        if (m > 0) return `${m}:${sStr}`
-                        if (s > 0) return `${s}.${milStr}s`
-                        return `${mil}ms`
-                    }
-
-                    // When offline, show constant preset values
-                    if (!editor.window_manager?.isMonitoringActive?.() || !editor.device_manager?.connected) {
-                        if (entry?.isTimerPT && typeof entry.presetValue === 'number') {
-                            return {text: formatTime(entry.presetValue), className: 'u32 timer'}
-                        }
-                        return null
-                    }
-
-                    // When online (monitoring), show live values
-                    let live = editor.live_symbol_values?.get(entry?.name)
-                    if (!live && entry?.originalName) {
-                        live = editor.live_symbol_values?.get(entry.originalName)
-                    }
-
-                    // DEBUG: Log what we're trying to display
-                    const result = (() => {
-                        if (!live || typeof live.text !== 'string') return null
-
-                        let className = ''
-                        let text = live.text
-
-                        // Timer output state (Q bit)
-                        if (entry?.isTimerOutput) {
-                            const isOn = live.value ? true : false
-                            text = isOn ? 'ON' : 'OFF'
-                            className = `${isOn ? 'on' : 'off'} bit timer-output`
-                            return {text, className}
-                        }
-
-                        // Timer monitoring: show remaining/elapsed time
-                        if (entry?.isTimerStorage || entry?.isTimerPT) {
-                            let et = 0
-                            let pt = 0
-                            let hasPT = false
-                            let hasET = false
-
-                            if (entry.isTimerStorage) {
-                                // Storage shows elapsed time
-                                et = live.value || 0
-                                hasET = true
-                                // Try to get preset value
-                                if (typeof entry.presetValue === 'number') {
-                                    pt = entry.presetValue
-                                    hasPT = true
-                                } else if (entry.presetAddress !== undefined) {
-                                    // Preset is in memory via address - robust lookup
-                                    const ptLive = [...editor.live_symbol_values.values()].find(
-                                        l => l.absoluteAddress === entry.presetAddress && (l.type === 'u32' || l.type === 'dint')
-                                    )
-                                    if (ptLive && typeof ptLive.value === 'number') {
-                                        pt = ptLive.value
-                                        hasPT = true
-                                    }
-                                } else if (entry.presetName) {
-                                    // Preset is in memory - look it up
-                                    const ptLive = editor.live_symbol_values?.get(entry.presetName)
-                                    if (ptLive && typeof ptLive.value === 'number') {
-                                        pt = ptLive.value
-                                        hasPT = true
-                                    }
-                                }
-                            } else if (entry.isTimerPT) {
-                                // Preset pills
-                                if (entry.isPresetAddress) {
-                                    // TON_MEM: preset is in memory, show live value
-                                    pt = live.value || 0
-                                    hasPT = true
-                                } else {
-                                    // TON_CONST: preset is constant (#500)
-                                    pt = entry.presetValue || 0
-                                    hasPT = true
-                                }
-
-                                // Get elapsed time from storage
-                                if (entry.storageAddress !== -1) {
-                                    const storageLive = [...editor.live_symbol_values.values()].find(l => l.absoluteAddress === entry.storageAddress && (l.type === 'u32' || l.type === 'dint'))
-                                    if (storageLive) {
-                                        et = storageLive.value || 0
-                                        hasET = true
-                                    }
-                                }
-                            }
-
-                            if (entry.isTimerStorage) {
-                                // Storage pill: Always dynamic. Show Remaining Time if possible, else ET.
-                                // User said: "that's what the first parameter live value is for" (counting down)
-                                if (hasPT && hasET) {
-                                    const remaining = Math.max(0, Number(pt) - Number(et))
-                                    text = formatTime(remaining)
-                                    className += ' timer'
-                                } else if (hasET) {
-                                    text = formatTime(et)
-                                    className += ' timer'
-                                }
-                            } else if (entry.isTimerPT) {
-                                // Preset pill: Static configuration.
-                                // User said: "should not count down... to see if timer duration is set right"
-                                if (hasPT) {
-                                    text = formatTime(pt)
-                                    className += ' timer'
-                                }
-                            }
-
-                            if (entry.isTimerStorage && et > 0) {
-                                className += ' active-timer'
-                            }
-                        }
-
-                        if (entry?.type === 'bit' || live.type === 'bit') {
-                            className += ` ${live.value ? 'on' : 'off'} bit`
-                        } else if (!entry?.isTimerStorage && !entry?.isTimerPT && live.type) {
-                            className += ` ${live.type}`
-                        }
-                        return {text, className}
-                    })()
-
-                    // dlog('[PILL VALUE]', {
-                    //     name: entry?.name,
-                    //     hasLive: !!live,
-                    //     liveText: live?.text,
-                    //     result: result,
-                    //     isTimer: entry?.isTimerStorage || entry?.isTimerPT
-                    // })
-
-                    return result
-                },
-                onPreviewAction: (entry, action) => handlePreviewAction(entry, action),
-                onPreviewContextMenu: (entry, event) => {
-                    // Block context menu for timer storage and timer output - they're read-only
-                    if (entry?.isTimerStorage || entry?.isTimerOutput) {
-                        return // No context menu for read-only timer pills
-                    }
-
-                    // Handle timer constant presets (bytecode patching)
-                    if (entry?.isTimerPT && !entry.isPresetAddress && typeof entry.presetValue === 'number' && entry.bytecode_offset !== undefined) {
-                        if (!editor.device_manager?.connected) return
-
-                        const items = [{label: 'Edit Preset...', name: 'edit', icon: 'edit', type: 'item'}]
-
-                        const contextMenu = editor.context_manager
-                        if (contextMenu && typeof contextMenu.show === 'function') {
-                            contextMenu.show(event, items, async actionName => {
-                                await handlePreviewAction(entry, actionName)
-                            })
-                        }
-                        return
-                    }
-
-                    // Handle memory variables (addresses and timer storage)
-                    if (!editor.window_manager?.isMonitoringActive?.()) return
-                    const {addressStr, fullType} = resolveEntryInfo(entry)
-
-                    const addrMatch = ADDRESS_REGEX.exec(addressStr)
-                    if (!addrMatch) return
-
-                    let prefix = '',
-                        byteStr = '',
-                        bitStr = ''
-                    if (addrMatch[1]) {
-                        prefix = addrMatch[1].toUpperCase()
-                        byteStr = addrMatch[2]
-                        bitStr = addrMatch[3]
-                    } else {
-                        byteStr = addrMatch[4]
-                        bitStr = addrMatch[5] || null
-                    }
-
-                    const bitIndex = bitStr ? Number.parseInt(bitStr, 10) : null
-                    const isBit = bitIndex !== null || fullType === 'bit'
-
-                    const items = []
-                    const connection = editor.device_manager?.connection
-                    if (!connection) return
-
-                    if (isBit && bitIndex !== null) {
-                        items.push({label: 'Set (1)', name: 'set', icon: 'check', type: 'item'})
-                        items.push({label: 'Reset (0)', name: 'reset', icon: 'close', type: 'item'})
-                        items.push({label: 'Toggle', name: 'toggle', icon: 'symbol-event', type: 'item'})
-                    } else {
-                        items.push({label: 'Edit Value...', name: 'edit', icon: 'edit', type: 'item'})
-                    }
-
-                    const contextMenu = editor.context_manager
-                    if (contextMenu && typeof contextMenu.show === 'function') {
-                        contextMenu.show(event, items, async actionName => {
-                            await handlePreviewAction(entry, actionName)
-                        })
-                    }
-                },
+                previewEntriesProvider: _previewEntriesProvider,
+                previewValueProvider: _previewValueProvider,
+                onPreviewAction: _onPreviewAction,
+                onPreviewContextMenu: _onPreviewContextMenu,
                 onLintHover: payload => {
                     if (editor.window_manager?.setProblemHover) {
                         editor.window_manager.setProblemHover(payload)
