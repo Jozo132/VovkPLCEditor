@@ -67,7 +67,7 @@ export class MiniCodeEditor {
 .start-hint { position:absolute; color: #888; font-size: 0.9em; pointer-events:none; z-index:99999; background:#1e1e1e; padding:4px 8px; border:1px solid #333; display:none; border-radius: 3px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
 .kw{color:#c586c0}.num{color:#b5cea8}.str{color:#ce9178}.cmt{color:#6a9955}.live{color:#0f0;opacity:.8}
 .type-keyword{color:#569cd6}.variable{color:#9cdcfe}.function{color:#dcdcaa}.dt{color:#4ec9b0}.addr{color:#d7ba7d}
-.dot{color:#fff}
+.dot{color:#fff}.tpl-esc{color:#569cd6}
 .mce>div.overlay{position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;pointer-events:none;z-index:4}
 .mce-marker { position: absolute; pointer-events: none; z-index: 5; }
 .mce-marker.err { background: linear-gradient(135deg, transparent 40%, #f48771 40%, #f48771 60%, transparent 60%) 0 100% / 4px 3px repeat-x; }
@@ -2086,7 +2086,48 @@ MiniCodeEditor.registerLanguage('plcscript', {
         // Strings
         {regex: /'(?:[^'\\]|\\.)*'/g, className: 'str'},
         {regex: /"(?:[^"\\]|\\.)*"/g, className: 'str'},
-        {regex: /`(?:[^`\\]|\\.)*`/g, className: 'str'},
+        // Template literals with ${expression} interpolation support
+        {
+            regex: /`(?:[^`\\]|\\.)*`/g,
+            replace: (match) => {
+                if (match.indexOf('${') === -1) return '<span class="str">' + match + '</span>'
+                let result = ''
+                let i = 1
+                let strBuf = '`'
+                const flushStr = () => {
+                    if (strBuf) { result += '<span class="str">' + strBuf + '</span>'; strBuf = '' }
+                }
+                while (i < match.length - 1) {
+                    if (match[i] === '\\' && i + 1 < match.length - 1) {
+                        strBuf += match[i] + match[i + 1]
+                        i += 2
+                    } else if (match[i] === '$' && i + 1 < match.length - 1 && match[i + 1] === '{') {
+                        let depth = 1, j = i + 2
+                        while (j < match.length - 1 && depth > 0) {
+                            if (match[j] === '{') depth++
+                            else if (match[j] === '}') depth--
+                            if (depth > 0) j++
+                        }
+                        if (depth === 0) {
+                            flushStr()
+                            result += '<span class="tpl-esc">${</span>'
+                            result += match.substring(i + 2, j)
+                            result += '<span class="tpl-esc">}</span>'
+                            i = j + 1
+                        } else {
+                            strBuf += '$'
+                            i++
+                        }
+                    } else {
+                        strBuf += match[i]
+                        i++
+                    }
+                }
+                strBuf += '`'
+                flushStr()
+                return result
+            }
+        },
         // Memory addresses (PLCASM style)
         {regex: /\b[CXYMS]\d+(?:\.\d+)?\b/gi, className: 'addr'},
         {regex: /\bM[WD]?\d+\b/gi, className: 'addr'},
