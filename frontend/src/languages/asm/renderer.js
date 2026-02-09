@@ -493,6 +493,7 @@ export const ladderRenderer = {
                 }
                 text_editor = new MiniCodeEditor(block_container, {
                 value: block.code,
+                language: 'asm',
                 font: '12px Consolas, monospace',
                 editorId: editor._nav_id,
                 programId: block.programId,
