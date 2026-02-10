@@ -2009,6 +2009,12 @@ export class CanvasCodeEditor {
         while (start > 0 && isWordChar(line[start - 1])) start--
         while (end < line.length && isWordChar(line[end])) end++
         
+        // If no word found (e.g., clicking on whitespace), just set cursor
+        if (start === end) {
+            this._setCursor(pos)
+            return
+        }
+        
         const startPos = { line: pos.line, col: start, offset: this._getOffset(pos.line, start) }
         const endPos = { line: pos.line, col: end, offset: this._getOffset(pos.line, end) }
         
@@ -2018,6 +2024,9 @@ export class CanvasCodeEditor {
             end: endPos,
             isReversed: false
         }]
+        
+        this._resetCursorBlink()
+        this._updateCursorSnapshot()
     }
     
     /** Add a word selection at pos to the existing multi-cursor set */
@@ -2602,7 +2611,22 @@ export class CanvasCodeEditor {
             
             const line = this._lines[cursor.line]
             
-            if (cursor.col < line.length) {
+            if (wordMode) {
+                // Delete word forward
+                const origOffset = this._getOffset(cursor.line, cursor.col)
+                const savedCursor = { line: cursor.line, col: cursor.col, offset: origOffset }
+                this._moveCursorByWord(cursor, +1)
+                const newOffset = this._getOffset(cursor.line, cursor.col)
+                if (newOffset > origOffset) {
+                    const charsDeleted = newOffset - origOffset
+                    this._deleteRange(origOffset, newOffset)
+                    // Restore cursor to original position (text after was deleted)
+                    cursor.line = savedCursor.line
+                    cursor.col = savedCursor.col
+                    cursor.offset = origOffset - cumulativeShift
+                    cumulativeShift -= charsDeleted
+                }
+            } else if (cursor.col < line.length) {
                 // Delete single character after cursor
                 this._lines[cursor.line] = line.slice(0, cursor.col) + line.slice(cursor.col + 1)
                 cumulativeShift--
@@ -3079,6 +3103,8 @@ export class CanvasCodeEditor {
             start: { ...s.start }, end: { ...s.end }, isReversed: s.isReversed,
         }))
         this._lastCursorSnapshot = this._snapshotCursorState()
+        this._needsRender = true
+        if (this._onChange) this._onChange(this._getText())
         this._scheduleLint()
     }
     
@@ -3096,6 +3122,8 @@ export class CanvasCodeEditor {
             start: { ...s.start }, end: { ...s.end }, isReversed: s.isReversed,
         }))
         this._lastCursorSnapshot = this._snapshotCursorState()
+        this._needsRender = true
+        if (this._onChange) this._onChange(this._getText())
         this._scheduleLint()
     }
     
