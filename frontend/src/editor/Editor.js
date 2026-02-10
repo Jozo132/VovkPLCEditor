@@ -861,11 +861,29 @@ export class VovkPLCEditor {
         files.forEach(file => {
             if (file.type !== 'program' || !Array.isArray(file.blocks)) return
             file.blocks.forEach(block => {
-                if (!block.code) return
-                const { result, count } = wordBoundaryReplace(block.code, oldName, newName)
-                if (count > 0) {
-                    block.code = result
-                    replacements += count
+                // Text-based languages (STL, ST, PLCScript, ASM)
+                if (block.code) {
+                    const { result, count } = wordBoundaryReplace(block.code, oldName, newName)
+                    if (count > 0) {
+                        block.code = result
+                        replacements += count
+                        // Invalidate caches
+                        delete block.cached_asm
+                        delete block.cached_checksum
+                        delete block.cached_symbols_checksum
+                        delete block.cached_symbol_refs
+                    }
+                }
+                // Ladder blocks store symbol refs in nodes
+                if (Array.isArray(block.nodes)) {
+                    for (const node of block.nodes) {
+                        if (node.symbol === oldName) { node.symbol = newName; replacements++ }
+                        if (node.in1 === oldName) { node.in1 = newName; replacements++ }
+                        if (node.in2 === oldName) { node.in2 = newName; replacements++ }
+                        if (node.out === oldName) { node.out = newName; replacements++ }
+                        // Clear cached state so it gets re-resolved
+                        if (node.state) node.state = undefined
+                    }
                     // Invalidate caches
                     delete block.cached_asm
                     delete block.cached_checksum
@@ -896,6 +914,15 @@ export class VovkPLCEditor {
         // 5. Save project
         if (this.project_manager && typeof this.project_manager.checkAndSave === 'function') {
             this.project_manager.checkAndSave()
+        }
+
+        // 6. Re-render ladder diagrams (they use block.symbol, not block.code)
+        if (this.ladder_render_registry) {
+            for (const key in this.ladder_render_registry) {
+                if (typeof this.ladder_render_registry[key] === 'function') {
+                    this.ladder_render_registry[key]()
+                }
+            }
         }
 
         return { success: true, replacements }
