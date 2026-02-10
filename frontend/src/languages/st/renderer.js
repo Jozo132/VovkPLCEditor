@@ -1,4 +1,4 @@
-import {MiniCodeEditor} from '../MiniCodeEditor.js'
+import {CanvasCodeEditor} from '../CanvasCodeEditor.js'
 import {RendererModule} from '../types.js'
 import {Popup} from '../../editor/UI/Elements/components/popup.js'
 
@@ -35,7 +35,7 @@ const createDedupLogger = () => {
 const dlog = createDedupLogger()
 
 // IEC 61131-3 Structured Text address patterns
-const ADDRESS_REGEX = /^(?:%?([IQMKCT])([XBWD]?)(\d+)(?:\.(\d+))?|([A-Za-z_][A-Za-z0-9_]*))$/i
+const ADDRESS_REGEX = /^(?:%?([IQMCT])([XBWD]?)(\d+)(?:\.(\d+))?|([A-Za-z_][A-Za-z0-9_]*))$/i
 const LOCATION_COLORS = {
     input: '#89d185',
     output: '#d68d5e',
@@ -98,7 +98,8 @@ export const stRenderer = {
         if (!block_container) throw new Error('Block code not found')
 
         // If loaded from JSON, props.text_editor might be a plain object
-        if (props.text_editor && !(props.text_editor instanceof MiniCodeEditor)) {
+        if (props.text_editor && !(props.text_editor instanceof CanvasCodeEditor)) {
+            if (props.text_editor.dispose) props.text_editor.dispose()
             props.text_editor = null
         }
 
@@ -115,7 +116,7 @@ export const stRenderer = {
                         fullType = symbol.type
                         const addr = symbol.address
                         const loc = symbol.location || 'marker'
-                        // IEC 61131-3 style prefixes (K now maps to S/system)
+                        // IEC 61131-3 style prefixes
                         const prefixMap = {input: '%I', output: '%Q', marker: '%M', system: '%S', counter: '%C', timer: '%T'}
                         const prefix = prefixMap[loc] || '%M'
                         if (fullType === 'bit' || fullType === 'BOOL') {
@@ -154,7 +155,7 @@ export const stRenderer = {
                 const {addressStr, fullType} = resolveEntryInfo(entry)
                 
                 // Parse IEC address format %IX0.0, %QW10, etc.
-                const iecMatch = /^%?([IQMKCT])([XBWD]?)(\d+)(?:\.(\d+))?$/i.exec(addressStr)
+                const iecMatch = /^%?([IQMSCT])([XBWD]?)(\d+)(?:\.(\d+))?$/i.exec(addressStr)
                 if (!iecMatch && !editor.project?.symbols?.find(s => s.name === entry.name)) return
 
                 let prefix = '', sizeQual = '', byteOffset = 0, bitIndex = null
@@ -178,7 +179,7 @@ export const stRenderer = {
                     }
                 }
 
-                const prefixLocationMap = {K: 'system', C: 'counter', T: 'timer', I: 'input', Q: 'output', M: 'marker', S: 'system'}
+                const prefixLocationMap = {C: 'counter', T: 'timer', I: 'input', Q: 'output', M: 'marker', S: 'system'}
                 const location = prefixLocationMap[prefix] || 'marker'
                 
                 const offsets = editor.project.offsets || {}
@@ -242,10 +243,71 @@ export const stRenderer = {
                 }
             }
 
-            const text_editor = new MiniCodeEditor(block_container, {
+            const text_editor = new CanvasCodeEditor(block_container, {
                 value: block.code,
                 language: 'st',
+                font: '14px Consolas, monospace',
                 readOnly: !!editor.edit_locked,
+                symbolProvider: type => {
+                    if (!editor.project || !editor.project.symbols) return []
+                    let symbols = editor.project.symbols
+                    if (type === 'bit_symbol') symbols = symbols.filter(s => s.type === 'bit')
+                    return symbols.map(s => ({name: s.name, type: s.type}))
+                },
+                hoverProvider: word => {
+                    if (!word) return null
+                    // IEC address hover (%IX0.0, %QW10, etc.)
+                    const iecMatch = /^%?([IQMSCT])([XBWD]?)(\d+)(?:\.(\d+))?$/i.exec(word)
+                    if (iecMatch) {
+                        const prefix = iecMatch[1].toUpperCase()
+                        const sizeQual = (iecMatch[2] || '').toUpperCase()
+                        const byteValue = Number.parseInt(iecMatch[3], 10)
+                        const bitValue = iecMatch[4] ? Number.parseInt(iecMatch[4], 10) : null
+                        const prefixLocationMap = {I: 'input', Q: 'output', M: 'marker', S: 'system', C: 'counter', T: 'timer'}
+                        const location = prefixLocationMap[prefix] || 'marker'
+                        let type = 'byte'
+                        if (sizeQual === 'X' || bitValue !== null) type = 'BOOL'
+                        else if (sizeQual === 'W') type = 'INT'
+                        else if (sizeQual === 'D') type = 'DINT'
+                        const addressLabel = bitValue !== null ? `${byteValue}.${bitValue}` : `${byteValue}`
+                        const canonicalName = `%${prefix}${sizeQual}${addressLabel}`
+                        const liveEntry = editor.live_symbol_values?.get(word) || editor.live_symbol_values?.get(canonicalName)
+                        const valueText = liveEntry ? (typeof liveEntry.text === 'string' ? liveEntry.text : typeof liveEntry.value !== 'undefined' ? String(liveEntry.value) : '-') : '-'
+                        const locColor = LOCATION_COLORS[location] || '#cccccc'
+                        const typeColor = TYPE_COLORS[type === 'BOOL' ? 'bit' : type === 'INT' ? 'int' : type === 'DINT' ? 'dint' : 'byte'] || '#808080'
+                        return `
+                            <div class="cce-hover-def" style="display: flex; align-items: center; gap: 6px;">
+                                <span style="color:#4daafc">${word}</span>
+                                <span style="color:${typeColor}; margin-left: auto; font-weight: bold;">${type}</span>
+                            </div>
+                            <div class="cce-hover-desc">
+                                <div><span style="color:#bbb">Location:</span> <span style="color:${locColor}">${location}</span></div>
+                                <div><span style="color:#bbb">Value:</span> <span style="color:#b5cea8">${valueText}</span></div>
+                            </div>
+                        `
+                    }
+                    // Symbol hover
+                    if (!editor.project || !editor.project.symbols) return null
+                    const sym = editor.project.symbols.find(s => s.name === word)
+                    if (sym) {
+                        let addr = sym.address
+                        if (sym.type === 'bit' || sym.type === 'BOOL') addr = (parseFloat(addr) || 0).toFixed(1)
+                        const locColor = LOCATION_COLORS[sym.location] || '#cccccc'
+                        const typeColor = TYPE_COLORS[sym.type] || '#808080'
+                        return `
+                            <div class="cce-hover-def" style="display: flex; align-items: center; gap: 6px;">
+                                <span style="color:#4daafc">${sym.name}</span>
+                                <span style="color:${typeColor}; margin-left: auto; font-weight: bold;">${sym.type}</span>
+                            </div>
+                            <div class="cce-hover-desc">
+                                <div><span style="color:#bbb">Location:</span> <span style="color:${locColor}">${sym.location}</span></div>
+                                <div><span style="color:#bbb">Address:</span> <span style="color:#b5cea8">${addr}</span></div>
+                                ${sym.comment ? `<div style="margin-top:4px; font-style: italic; color:#6a9955">// ${sym.comment}</div>` : ''}
+                            </div>
+                        `
+                    }
+                    return null
+                },
                 onPreviewAction: (entry, action) => handlePreviewAction(entry, action),
                 onPreviewContextMenu: (entry, event) => {
                     if (!editor.window_manager?.isMonitoringActive?.()) return
@@ -253,7 +315,7 @@ export const stRenderer = {
                     const {addressStr, fullType} = resolveEntryInfo(entry)
                     
                     // Parse IEC address or symbol
-                    const iecMatch = /^%?([IQMKCT])([XBWD]?)(\d+)(?:\.(\d+))?$/i.exec(addressStr)
+                    const iecMatch = /^%?([IQMSCT])([XBWD]?)(\d+)(?:\.(\d+))?$/i.exec(addressStr)
                     let bitIndex = null
                     let sizeQual = ''
                     
@@ -320,13 +382,13 @@ export const stRenderer = {
                             }
 
                             // Check if it's an IEC address pattern (%IX0.0, %QW10, etc.)
-                            const iecMatch = /^%?([IQMKCT])([XBWD]?)(\d+)(?:\.(\d+))?$/i.exec(word)
+                            const iecMatch = /^%?([IQMSCT])([XBWD]?)(\d+)(?:\.(\d+))?$/i.exec(word)
                             if (iecMatch) {
                                 const prefix = iecMatch[1].toUpperCase()
                                 const sizeQual = (iecMatch[2] || '').toUpperCase()
                                 const bitIndex = iecMatch[4] ? parseInt(iecMatch[4], 10) : null
                                 
-                                const prefixLocationMap = {I: 'input', Q: 'output', M: 'marker', K: 'system', S: 'system', C: 'counter', T: 'timer'}
+                                const prefixLocationMap = {I: 'input', Q: 'output', M: 'marker', S: 'system', C: 'counter', T: 'timer'}
                                 const location = prefixLocationMap[prefix] || 'marker'
                                 
                                 let inferredType = 'byte'
@@ -372,6 +434,33 @@ export const stRenderer = {
 
                     return entries
                 },
+                previewValueProvider: entry => {
+                    if (!editor.window_manager?.isMonitoringActive?.() || !editor.device_manager?.connected) return null
+                    const live = editor.live_symbol_values?.get(entry?.name)
+                    if (!live || typeof live.text !== 'string') return null
+                    let className = ''
+                    let text = live.text
+                    if (entry?.type === 'bit' || entry?.type === 'BOOL' || live.type === 'bit') {
+                        const isOn = live.value === true || live.value === 1 || text === 'ON'
+                        text = isOn ? 'ON' : 'OFF'
+                        className = `${isOn ? 'on' : 'off'} bit`
+                    } else if (live.type) {
+                        className = live.type
+                    }
+                    return {text, className}
+                },
+                blockId: block.id,
+                onLintHover: payload => {
+                    if (editor.window_manager?.setProblemHover) editor.window_manager.setProblemHover(payload)
+                },
+                lintProvider: async () => {
+                    if (!block.id || !editor.lintBlock) return []
+                    return await editor.lintBlock(block.id)
+                },
+                onScroll: pos => {
+                    block.scrollTop = pos.top
+                    block.scrollLeft = pos.left
+                },
                 onChange: (newValue) => {
                     block.code = newValue
                     block.cached_checksum = null
@@ -386,7 +475,22 @@ export const stRenderer = {
             })
             
             props.text_editor = text_editor
-            updateBlockSize()
+            if (typeof text_editor.setReadOnly === 'function') {
+                text_editor.setReadOnly(!!editor.edit_locked)
+            }
+            if (typeof text_editor.setScroll === 'function') {
+                requestAnimationFrame(() => {
+                    const hasTop = typeof block.scrollTop === 'number'
+                    const hasLeft = typeof block.scrollLeft === 'number'
+                    if (hasTop || hasLeft) {
+                        text_editor.setScroll({
+                            top: hasTop ? block.scrollTop : undefined,
+                            left: hasLeft ? block.scrollLeft : undefined,
+                        })
+                    }
+                })
+            }
+            setTimeout(updateBlockSize, 400)
         } else {
             // Editor exists, just update if needed
             if (props.text_editor.getValue() !== block.code) {

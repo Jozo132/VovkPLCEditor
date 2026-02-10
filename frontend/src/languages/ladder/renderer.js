@@ -1348,7 +1348,6 @@ const memory_locations = [
   { short: 'T', name: 'timer', label: 'Timer' },
   { short: 'X', name: 'input', label: 'Input' },
   { short: 'Y', name: 'output', label: 'Output' },
-  { short: 'K', name: 'system', label: 'System' },  // K now maps to system
   { short: 'M', name: 'marker', label: 'Marker' },
   { short: 'M', name: 'memory', label: 'Marker' },
 ]
@@ -1417,7 +1416,6 @@ const parseAddressToSymbol = (addressStr) => {
 
   // Map letter to location
   const locationMap = {
-    'K': 'system',
     'C': 'counter',
     'T': 'timer',
     'X': 'input',
@@ -1428,7 +1426,7 @@ const parseAddressToSymbol = (addressStr) => {
 
   // Pattern 1: Typed address - Letter + Type + Number (e.g., MW14, MD0, MB5, MR8)
   // Type suffixes: B=byte, W=word(2), D=dword(4), R=real(4)
-  const typedMatch = trimmed.match(/^([kKcCtTxXyYsSmM])([bBwWdDrR])([0-9]+)$/i)
+  const typedMatch = trimmed.match(/^([cCtTxXyYsSmM])([bBwWdDrR])([0-9]+)$/i)
   if (typedMatch) {
     const code = typedMatch[1].toUpperCase()
     const typeCode = typedMatch[2].toUpperCase()
@@ -1456,7 +1454,7 @@ const parseAddressToSymbol = (addressStr) => {
   }
 
   // Pattern 2: Simple address - Letter + Number (e.g., X0.0, Y0, M100.2)
-  const simpleMatch = trimmed.match(/^([kKcCtTxXyYsSmM])([0-9]+(?:\.[0-9]+)?)$/i)
+  const simpleMatch = trimmed.match(/^([cCtTxXyYsSmM])([0-9]+(?:\.[0-9]+)?)$/i)
   if (simpleMatch) {
     const code = simpleMatch[1].toUpperCase()
     const valStr = simpleMatch[2]
@@ -6055,7 +6053,6 @@ const resolveAddressToSymbol = (editor, addressOrSymbol) => {
   
   // Map location codes
   const locationMap = {
-    'K': 'system',
     'C': 'counter', 
     'T': 'timer',
     'X': 'input',

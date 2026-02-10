@@ -118,7 +118,6 @@ export default class ProjectManager {
     // Supports both IEC notation (I, Q) and traditional PLC notation (X, Y)
     /** @type {Record<string, import('../utils/types.js').PLC_Symbol_Location>} */
     const areaToLocation = {
-      'K': 'system',
       'X': 'input',
       'I': 'input',    // IEC notation for input
       'Y': 'output',
@@ -737,7 +736,6 @@ export default class ProjectManager {
     }
     
     const locationMap = {
-        'K': 'system',
         'X': 'input',
         'Y': 'output',
         'S': 'system',
@@ -787,7 +785,6 @@ export default class ProjectManager {
                     if (!isNaN(value)) {
                         switch (key) {
                             case 'S': project.offsets.system.size = value; break
-                            case 'K': project.offsets.system.size = value; break  // Legacy K maps to system
                             case 'X': project.offsets.input.size = value; break
                             case 'Y': project.offsets.output.size = value; break
                             case 'M': project.offsets.marker.size = value; break

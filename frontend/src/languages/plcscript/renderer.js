@@ -1,4 +1,4 @@
-import {MiniCodeEditor} from '../MiniCodeEditor.js'
+import {CanvasCodeEditor} from '../CanvasCodeEditor.js'
 import {RendererModule} from '../types.js'
 import {Popup} from '../../editor/UI/Elements/components/popup.js'
 
@@ -35,9 +35,10 @@ const createDedupLogger = () => {
 const dlog = createDedupLogger()
 
 // PLCScript address regex: similar to PLCASM style X0.0, Y0.0, M0, etc.
-const ADDRESS_REGEX = /^(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i
+const ADDRESS_REGEX = /^(?:([IQCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i
 const ADDRESS_LOCATION_MAP = {
-    K: 'system',  // K now maps to system (formerly control)
+    I: 'input',
+    Q: 'output',
     C: 'counter',
     T: 'timer',
     X: 'input',
@@ -98,7 +99,8 @@ export const plcscriptRenderer = {
         if (!block_container) throw new Error('Block code not found')
 
         // If loaded from JSON, props.text_editor might be a plain object
-        if (props.text_editor && !(props.text_editor instanceof MiniCodeEditor)) {
+        if (props.text_editor && !(props.text_editor instanceof CanvasCodeEditor)) {
+            if (props.text_editor.dispose) props.text_editor.dispose()
             props.text_editor = null
         }
 
@@ -167,7 +169,7 @@ export const plcscriptRenderer = {
                 const bitIndex = bitStr ? Number.parseInt(bitStr, 10) : null
                 const byteOffset = Number.parseInt(byteStr, 10)
                 
-                const prefixLocationMap = {K: 'system', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}
+                const prefixLocationMap = {C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}
                 const location = prefixLocationMap[prefix] || 'marker'
                 
                 const offsets = editor.project.offsets || {}
@@ -231,10 +233,77 @@ export const plcscriptRenderer = {
                 }
             }
 
-            const text_editor = new MiniCodeEditor(block_container, {
+            const text_editor = new CanvasCodeEditor(block_container, {
                 value: block.code,
                 language: 'plcscript',
+                font: '14px Consolas, monospace',
                 readOnly: !!editor.edit_locked,
+                symbolProvider: type => {
+                    if (!editor.project || !editor.project.symbols) return []
+                    let symbols = editor.project.symbols
+                    if (type === 'bit_symbol') symbols = symbols.filter(s => s.type === 'bit')
+                    return symbols.map(s => ({name: s.name, type: s.type}))
+                },
+                hoverProvider: word => {
+                    if (!word) return null
+                    // Address hover (X0.0, Y1, M0, etc.)
+                    const addrMatch = ADDRESS_REGEX.exec(word)
+                    if (addrMatch) {
+                        let prefix = '', byteStr = '', bitStr = ''
+                        if (addrMatch[1]) {
+                            prefix = addrMatch[1].toUpperCase()
+                            byteStr = addrMatch[2]
+                            bitStr = addrMatch[3]
+                        } else {
+                            byteStr = addrMatch[4]
+                            bitStr = addrMatch[5]
+                        }
+                        const byteValue = Number.parseInt(byteStr, 10)
+                        if (Number.isFinite(byteValue)) {
+                            const bit = bitStr ? Number.parseInt(bitStr, 10) : null
+                            const location = prefix ? ADDRESS_LOCATION_MAP[prefix] || 'marker' : 'memory'
+                            const addressLabel = bit !== null ? `${byteValue}.${bit}` : `${byteValue}`
+                            const canonicalName = `${prefix}${byteValue}${bit !== null ? '.' + bit : ''}`
+                            const type = bit !== null ? 'bit' : 'byte'
+                            const liveEntry = editor.live_symbol_values?.get(canonicalName)
+                            const valueText = liveEntry ? (typeof liveEntry.text === 'string' ? liveEntry.text : typeof liveEntry.value !== 'undefined' ? String(liveEntry.value) : '-') : '-'
+                            const locColor = LOCATION_COLORS[location] || '#cccccc'
+                            const typeColor = TYPE_COLORS[type] || '#808080'
+                            return `
+                                <div class="cce-hover-def" style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="color:#4daafc">${prefix}${addressLabel}</span>
+                                    <span style="color:${typeColor}; margin-left: auto; font-weight: bold;">${type === 'bit' ? 'Bit' : 'Byte'}</span>
+                                </div>
+                                <div class="cce-hover-desc">
+                                    <div><span style="color:#bbb">Location:</span> <span style="color:${locColor}">${location}</span></div>
+                                    <div><span style="color:#bbb">Address:</span> <span style="color:#b5cea8">${prefix}${addressLabel}</span></div>
+                                    <div><span style="color:#bbb">Value:</span> <span style="color:#b5cea8">${valueText}</span></div>
+                                </div>
+                            `
+                        }
+                    }
+                    // Symbol hover
+                    if (!editor.project || !editor.project.symbols) return null
+                    const sym = editor.project.symbols.find(s => s.name === word)
+                    if (sym) {
+                        let addr = sym.address
+                        if (sym.type === 'bit') addr = (parseFloat(addr) || 0).toFixed(1)
+                        const locColor = LOCATION_COLORS[sym.location] || '#cccccc'
+                        const typeColor = TYPE_COLORS[sym.type] || '#808080'
+                        return `
+                            <div class="cce-hover-def" style="display: flex; align-items: center; gap: 6px;">
+                                <span style="color:#4daafc">${sym.name}</span>
+                                <span style="color:${typeColor}; margin-left: auto; font-weight: bold;">${sym.type}</span>
+                            </div>
+                            <div class="cce-hover-desc">
+                                <div><span style="color:#bbb">Location:</span> <span style="color:${locColor}">${sym.location}</span></div>
+                                <div><span style="color:#bbb">Address:</span> <span style="color:#b5cea8">${addr}</span></div>
+                                ${sym.comment ? `<div style="margin-top:4px; font-style: italic; color:#6a9955">// ${sym.comment}</div>` : ''}
+                            </div>
+                        `
+                    }
+                    return null
+                },
                 onPreviewAction: (entry, action) => handlePreviewAction(entry, action),
                 onPreviewContextMenu: (entry, event) => {
                     if (!editor.window_manager?.isMonitoringActive?.()) return
@@ -354,6 +423,33 @@ export const plcscriptRenderer = {
 
                     return entries
                 },
+                previewValueProvider: entry => {
+                    if (!editor.window_manager?.isMonitoringActive?.() || !editor.device_manager?.connected) return null
+                    const live = editor.live_symbol_values?.get(entry?.name)
+                    if (!live || typeof live.text !== 'string') return null
+                    let className = ''
+                    let text = live.text
+                    if (entry?.type === 'bit' || live.type === 'bit') {
+                        const isOn = live.value === true || live.value === 1 || text === 'ON'
+                        text = isOn ? 'ON' : 'OFF'
+                        className = `${isOn ? 'on' : 'off'} bit`
+                    } else if (live.type) {
+                        className = live.type
+                    }
+                    return {text, className}
+                },
+                blockId: block.id,
+                onLintHover: payload => {
+                    if (editor.window_manager?.setProblemHover) editor.window_manager.setProblemHover(payload)
+                },
+                lintProvider: async () => {
+                    if (!block.id || !editor.lintBlock) return []
+                    return await editor.lintBlock(block.id)
+                },
+                onScroll: pos => {
+                    block.scrollTop = pos.top
+                    block.scrollLeft = pos.left
+                },
                 onChange: (newValue) => {
                     block.code = newValue
                     block.cached_checksum = null
@@ -368,7 +464,22 @@ export const plcscriptRenderer = {
             })
             
             props.text_editor = text_editor
-            updateBlockSize()
+            if (typeof text_editor.setReadOnly === 'function') {
+                text_editor.setReadOnly(!!editor.edit_locked)
+            }
+            if (typeof text_editor.setScroll === 'function') {
+                requestAnimationFrame(() => {
+                    const hasTop = typeof block.scrollTop === 'number'
+                    const hasLeft = typeof block.scrollLeft === 'number'
+                    if (hasTop || hasLeft) {
+                        text_editor.setScroll({
+                            top: hasTop ? block.scrollTop : undefined,
+                            left: hasLeft ? block.scrollLeft : undefined,
+                        })
+                    }
+                })
+            }
+            setTimeout(updateBlockSize, 400)
         } else {
             // Editor exists, just update if needed
             if (props.text_editor.getValue() !== block.code) {

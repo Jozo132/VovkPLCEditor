@@ -871,7 +871,6 @@ export class VovkPLCEditor {
         }
 
         const locationMap = {
-            K: 'system',  // K now maps to system (formerly control)
             C: 'counter',
             T: 'timer',
             X: 'input',
@@ -883,7 +882,7 @@ export class VovkPLCEditor {
         }
         // Match: 1=Prefix, 2=Byte, 3=Bit (Optional) OR 4=Byte, 5=Bit
         // Extended to support I/Q (Siemens style)
-        const regex = /\b(?:([KCTXYMSIQ])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))\b/gi
+        const regex = /\b(?:([CTXYMSIQ])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))\b/gi
         let match = null
         while ((match = regex.exec(masked))) {
             let prefix = '',
@@ -992,7 +991,7 @@ export class VovkPLCEditor {
         // Match timer instructions: ton/tof/tp storage preset
         // Preset can be #123 (raw ms) or T#... (IEC style, e.g. T#5s, T#1h30m)
         // Supports both ASM space separation (TON T0 T#5s) and STL comma separation (TON T0, T#5s)
-        const timerRegex = /\b(?:u8\.)?(ton|tof|tp)\b\s+([A-Za-z_]\w*(?:\.\d+)?|[KCTXYMS]\d+(?:\.\d+)?)\s*(?:,|\s)\s*((?:T#[A-Za-z0-9_]+|#\d+)|[A-Za-z_]\w*(?:\.\d+)?|[KCTXYMS]\d+(?:\.\d+)?)\b/gi
+        const timerRegex = /\b(?:u8\.)?(ton|tof|tp)\b\s+([A-Za-z_]\w*(?:\.\d+)?|[CTXYMS]\d+(?:\.\d+)?)\s*(?:,|\s)\s*((?:T#[A-Za-z0-9_]+|#\d+)|[A-Za-z_]\w*(?:\.\d+)?|[CTXYMS]\d+(?:\.\d+)?)\b/gi
 
         let match = null
         while ((match = timerRegex.exec(masked))) {
@@ -1005,11 +1004,11 @@ export class VovkPLCEditor {
 
             let storageAddr = -1
 
-            const addrMatch = /^(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(storageToken)
+            const addrMatch = /^(?:([CTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(storageToken)
             if (addrMatch) {
                 let prefix = addrMatch[1] ? addrMatch[1].toUpperCase() : ''
                 let byte = parseInt(addrMatch[2] || addrMatch[4], 10)
-                let loc = prefix ? {K: 'system', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}[prefix] || 'marker' : 'memory'
+                let loc = prefix ? {C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}[prefix] || 'marker' : 'memory'
                 let base = loc === 'memory' ? 0 : normalizedOffsets[loc]?.offset || 0
                 // Timer (T) uses 9 bytes per unit, Counter (C) uses 5 bytes per unit
                 let structSize = prefix === 'T' ? 9 : prefix === 'C' ? 5 : 1
@@ -1055,11 +1054,11 @@ export class VovkPLCEditor {
 
             let presetAddr = -1
             if (!isConstant) {
-                const pAddrMatch = /^(?:([KCTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(presetToken)
+                const pAddrMatch = /^(?:([CTXYMS])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i.exec(presetToken)
                 if (pAddrMatch) {
                     let prefix = pAddrMatch[1] ? pAddrMatch[1].toUpperCase() : ''
                     let byte = parseInt(pAddrMatch[2] || pAddrMatch[4], 10)
-                    let loc = prefix ? {K: 'system', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}[prefix] || 'marker' : 'memory'
+                    let loc = prefix ? {C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system'}[prefix] || 'marker' : 'memory'
                     let base = loc === 'memory' ? 0 : normalizedOffsets[loc]?.offset || 0
                     // Timer (T) uses 9 bytes per unit, Counter (C) uses 5 bytes per unit
                     let structSize = prefix === 'T' ? 9 : prefix === 'C' ? 5 : 1

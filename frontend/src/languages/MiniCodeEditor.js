@@ -2040,7 +2040,7 @@ MiniCodeEditor.registerLanguage('st', {
         // Date/Time literals
         {regex: /\b(?:DATE|TOD|DT|D)#[\w\d_\-:\.]+/gi, className: 'num'},
         // IEC Addresses %IX0.0, %QW10, etc.
-        {regex: /%[IQMKCT][XBWD]?\d+(?:\.\d+)?/gi, className: 'addr'},
+        {regex: /%[IQMSCT][XBWD]?\d+(?:\.\d+)?/gi, className: 'addr'},
         // Control flow keywords
         {regex: /\b(IF|THEN|ELSE|ELSIF|END_IF|CASE|OF|END_CASE)\b/gi, className: 'kw'},
         // Loop keywords
@@ -2129,7 +2129,7 @@ MiniCodeEditor.registerLanguage('plcscript', {
             }
         },
         // Memory addresses (PLCASM style)
-        {regex: /\b[CXYMS]\d+(?:\.\d+)?\b/gi, className: 'addr'},
+        {regex: /\b[IQCXYMS]\d+(?:\.\d+)?\b/gi, className: 'addr'},
         {regex: /\bM[WD]?\d+\b/gi, className: 'addr'},
         // Keywords
         {regex: /\b(let|const|function|if|else|while|for|return|break|continue)\b/g, className: 'kw'},
@@ -2312,7 +2312,7 @@ MiniCodeEditor.registerLanguage('asm', {
         }, // Label references in jumps/calls
         {regex: /^\b(const)\b/gm, className: 'kw'}, // Const declaration
         // Specific types (Datatypes)
-        {regex: /\b[CXYMS]\d+(?:\.\d+)?\b/gi, className: 'addr'},
+        {regex: /\b[IQCXYMS]\d+(?:\.\d+)?\b/gi, className: 'addr'},
         {regex: /\b(ptr|u8|u16|u32|u64|i8|i16|i32|i64|f32|f64)\b/g, className: 'dt'},
         // BR (Binary Result) stack operations
         {regex: /\b(br)\.(save|read|copy|drop)\b/gim, className: 'type-keyword'},
@@ -2379,7 +2379,7 @@ MiniCodeEditor.registerLanguage('stl', {
         // NOP
         {regex: /\b(NOP)\b/gi, className: 'kw'},
         // Addresses - Siemens style I, Q, M, T, C and PLCASM style X, Y, K
-        {regex: /\b[IQMTCSXYK]\d+(?:\.\d+)?\b/gi, className: 'addr'},
+        {regex: /\b[IQMTCSXY]\d+(?:\.\d+)?\b/gi, className: 'addr'},
         // Numeric bit addresses (0.0 style)
         {regex: /\b\d+\.\d+\b/g, className: 'addr'},
         // Plain numbers

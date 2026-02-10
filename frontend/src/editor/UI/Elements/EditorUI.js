@@ -3,7 +3,7 @@ import { PLC_Program, PLC_ProgramBlock, PLCEditor } from "../../../utils/types.j
 import { getIconType, getThumbnailDataUrl } from "./components/icons.js"
 import { Popup } from "./components/popup.js"
 import { toGraph } from "../../../languages/ladder/language.js"
-import MiniCodeEditor from "../../../languages/MiniCodeEditor.js"
+import {CanvasCodeEditor} from "../../../languages/CanvasCodeEditor.js"
 
 const SHORT_NAMES = {
     ladder: 'LAD',
@@ -610,18 +610,19 @@ export default class EditorUI {
                 position: 'relative'
             })
 
+            const cce = new CanvasCodeEditor(container, {
+                value: finalOutput,
+                language: editorLanguage,
+                readOnly: true,
+                font: '14px Consolas, monospace',
+            })
+
             new Popup({
                 title: `Compiled ${titleSuffix} (${block.name})`,
                 width: '900px',
                 content: container,
-                buttons: [{ text: 'Close', value: 'close' }]
-            })
-
-            new MiniCodeEditor(container, {
-                value: finalOutput,
-                language: editorLanguage,
-                readOnly: true,
-                preview: true
+                buttons: [{ text: 'Close', value: 'close' }],
+                onClose: () => cce.dispose(),
             })
 
         } catch (err) {

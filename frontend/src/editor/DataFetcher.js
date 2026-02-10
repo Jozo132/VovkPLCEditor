@@ -163,8 +163,7 @@ export default class DataFetcher {
                     const val = parseFloat(valStr)
                     
                     let key = 'marker'
-                    if (code === 'K') key = 'system'
-                    else if (code === 'C') key = 'counter'
+                    if (code === 'C') key = 'counter'
                     else if (code === 'T') key = 'timer'
                     else if (code === 'X') key = 'input'
                     else if (code === 'Y') key = 'output'

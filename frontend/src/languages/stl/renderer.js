@@ -1,4 +1,4 @@
-import {MiniCodeEditor} from '../MiniCodeEditor.js'
+import {CanvasCodeEditor} from '../CanvasCodeEditor.js'
 import {RendererModule} from '../types.js'
 import {Popup} from '../../editor/UI/Elements/components/popup.js'
 
@@ -35,18 +35,16 @@ const createDedupLogger = () => {
 const dlog = createDedupLogger()
 
 // STL address regex: I0.0, Q0.0, M0.0, T0, C0, etc. and PLCASM style X0.0, Y0.0
-const ADDRESS_REGEX = /^(?:([IQMTCSXYKMN])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i
+const ADDRESS_REGEX = /^(?:([IQMTCSXY])(\d+)(?:\.(\d+))?|(\d+)\.(\d+))$/i
 const ADDRESS_LOCATION_MAP = {
-    I: 'input',    // Siemens Input
-    Q: 'output',   // Siemens Output
+    I: 'input',
+    Q: 'output',
     M: 'marker',
     T: 'timer',
     C: 'counter',
     S: 'system',
-    X: 'input',    // PLCASM Input
-    Y: 'output',   // PLCASM Output  
-    K: 'system',   // K now maps to system (formerly control)
-    N: 'counter',  // Alternative counter notation
+    X: 'input',
+    Y: 'output',
 }
 const LOCATION_COLORS = {
     input: '#89d185',
@@ -125,7 +123,8 @@ export const stlRenderer = {
         if (!block_container) throw new Error('Block code not found')
 
         // If loaded from JSON, props.text_editor might be a plain object
-        if (props.text_editor && !(props.text_editor instanceof MiniCodeEditor)) {
+        if (props.text_editor && !(props.text_editor instanceof CanvasCodeEditor)) {
+            if (props.text_editor.dispose) props.text_editor.dispose()
             props.text_editor = null
         }
 
@@ -329,7 +328,7 @@ export const stlRenderer = {
                 const bitIndex = bitStr ? Number.parseInt(bitStr, 10) : null
                 const byteOffset = Number.parseInt(byteStr, 10)
                 
-                const prefixLocationMap = {K: 'system', C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system', I: 'input', Q: 'output'}
+                const prefixLocationMap = {C: 'counter', T: 'timer', X: 'input', Y: 'output', M: 'marker', S: 'system', I: 'input', Q: 'output'}
                 const location = prefixLocationMap[prefix] || 'marker'
                 
                 const offsets = editor.project.offsets || {}
@@ -399,9 +398,10 @@ export const stlRenderer = {
             }
 
 
-            const text_editor = new MiniCodeEditor(block_container, {
+            const text_editor = new CanvasCodeEditor(block_container, {
                 value: block.code,
-                language: 'stl',  // Uses registered STL language from MiniCodeEditor
+                language: 'stl',
+                font: '14px Consolas, monospace',
                 readOnly: !!editor.edit_locked,
                 onPreviewAction: (entry, action) => handlePreviewAction(entry, action),
                 onPreviewContextMenu: (entry, event) => {
@@ -820,6 +820,7 @@ export const stlRenderer = {
                         className: className
                     }
                 },
+                blockId: block.id,
                 onLintHover: payload => {
                     if (editor.window_manager?.setProblemHover) {
                         editor.window_manager.setProblemHover(payload)
@@ -913,11 +914,11 @@ export const stlRenderer = {
                             }
 
                             return `
-                                <div class="mce-hover-def" style="display: flex; align-items: center; gap: 6px;">
+                                <div class="cce-hover-def" style="display: flex; align-items: center; gap: 6px;">
                                     <span style="color:#569cd6; font-weight: bold;">${upperWord}</span>
                                     <span style="color:#9cdcfe; margin-left: auto;">${category}</span>
                                 </div>
-                                <div class="mce-hover-desc">
+                                <div class="cce-hover-desc">
                                     <div style="color:#bbb">${description}</div>
                                 </div>
                             `
@@ -959,11 +960,11 @@ export const stlRenderer = {
                                 }
 
                                 return `
-                                    <div class="mce-hover-def" style="display: flex; align-items: center; gap: 6px;">
+                                    <div class="cce-hover-def" style="display: flex; align-items: center; gap: 6px;">
                                         <span style="color:#4daafc">${prefix}${addressLabel}</span>
                                         <span style="color:${typeColor}; margin-left: auto; font-weight: bold;">${type === 'bit' ? 'Bit' : 'Byte'}</span>
                                     </div>
-                                    <div class="mce-hover-desc">
+                                    <div class="cce-hover-desc">
                                         <div><span style="color:#bbb">Location:</span> <span style="color:${locColor}">${location}</span></div>
                                         <div><span style="color:#bbb">Address:</span> <span style="color:#b5cea8">${prefix}${addressLabel}</span></div>
                                         <div><span style="color:#bbb">Value:</span> <span style="color:${valueColor}">${valueText}</span></div>
@@ -985,11 +986,11 @@ export const stlRenderer = {
                             const before = block.code.slice(0, label.index)
                             const line = before.split('\n').length + 1
                             return `
-                                <div class="mce-hover-def" style="display: flex; align-items: center; gap: 6px;">
+                                <div class="cce-hover-def" style="display: flex; align-items: center; gap: 6px;">
                                     <span style="color:#4daafc">${label.name}</span>
                                     <span style="color:#9cdcfe; margin-left: auto; font-weight: bold;">Label</span>
                                 </div>
-                                <div class="mce-hover-desc">
+                                <div class="cce-hover-desc">
                                     <div><span style="color:#bbb">Defined at:</span> <span style="color:#b5cea8">Ln ${line}</span></div>
                                 </div>
                             `
@@ -1007,11 +1008,11 @@ export const stlRenderer = {
                         const typeColor = TYPE_COLORS[sym.type] || '#808080'
 
                         return `
-                            <div class="mce-hover-def" style="display: flex; align-items: center; gap: 6px;">
+                            <div class="cce-hover-def" style="display: flex; align-items: center; gap: 6px;">
                                 <span style="color:#4daafc">${sym.name}</span>
                                 <span style="color:${typeColor}; margin-left: auto; font-weight: bold;">${sym.type}</span>
                             </div>
-                            <div class="mce-hover-desc">
+                            <div class="cce-hover-desc">
                                 <div><span style="color:#bbb">Location:</span> <span style="color:${locColor}">${sym.location}</span></div>
                                 <div><span style="color:#bbb">Address:</span> <span style="color:#b5cea8">${addr}</span></div>
                                 ${sym.comment ? `<div style="margin-top:4px; font-style: italic; color:#6a9955">// ${sym.comment}</div>` : ''}
