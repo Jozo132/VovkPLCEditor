@@ -470,6 +470,8 @@ export const stRenderer = {
                     return {text, className}
                 },
                 blockId: block.id,
+                editorId: editor._nav_id,
+                programId: block.programId,
                 onGoToDefinition: payload => {
                     if (payload?.type === 'symbol' && editor.window_manager?.focusSymbolByName) {
                         editor.window_manager.focusSymbolByName(payload.name)

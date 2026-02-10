@@ -170,6 +170,8 @@ export class CanvasCodeEditor {
         this._blockId = options.blockId || null
         this._onRenameSymbol = options.onRenameSymbol || null
         this._onGoToDefinition = options.onGoToDefinition || null
+        this._editorId = typeof options.editorId === 'number' ? options.editorId : null
+        this._programId = options.programId || null
         
         // Hover tooltip state
         this._hoverTimer = null
@@ -185,6 +187,11 @@ export class CanvasCodeEditor {
         this._lastMouse = null
         this._linkHoverTarget = null
         this._linkHighlightRange = null
+        
+        // Navigation history state
+        this._historyTimer = null
+        this._historySuppressed = false
+        this._lastRecordedLine = null
         
         // Highlight ranges (set externally by problem panel)
         this._hoverHighlightRange = null
@@ -551,7 +558,7 @@ export class CanvasCodeEditor {
                 this._insertText(text)
             }
         })
-        input.addEventListener('focus', () => { this._needsRender = true; this._startCursorBlink() })
+        input.addEventListener('focus', () => { this._needsRender = true; this._startCursorBlink(); this._markActiveEditor() })
         input.addEventListener('blur', (e) => {
             // Don't clear pill selection when focus moves to the pill input overlay
             if (e.relatedTarget === this._pillInput) return
@@ -824,6 +831,8 @@ export class CanvasCodeEditor {
         // Don't clear _blockSelectAnchor here — it persists while Shift+Alt is held
         // Merge overlapping cursors and selections after drag completes
         this._mergeCursors()
+        this._markActiveEditor()
+        this._scheduleHistory()
     }
     
     _handleDoubleClick(e) {
@@ -873,6 +882,7 @@ export class CanvasCodeEditor {
             this._insertText(text)
             this._input.value = ''
             this._triggerAutocomplete(false)
+            this._scheduleHistory()
         }
     }
     
@@ -1073,6 +1083,7 @@ export class CanvasCodeEditor {
             e.preventDefault()
             e.stopPropagation()
             this._needsRender = true
+            this._scheduleHistory()
         }
     }
     
@@ -1489,6 +1500,8 @@ export class CanvasCodeEditor {
     /** Navigate to the definition of a resolved target */
     _goToDefinition(target) {
         if (!target) return
+        // Record current position before navigating away
+        this._recordHistory()
         if (target.type === 'label') {
             const pos = typeof target.index === 'number' ? target.index : null
             if (pos === null) return
@@ -1499,6 +1512,9 @@ export class CanvasCodeEditor {
             this._updateCursorSnapshot()
             this._ensureCursorVisible()
             this._input.focus()
+            // Record the destination too
+            this._suppressHistory(120)
+            this._recordHistory()
         } else if (target.type === 'symbol') {
             if (typeof this._onGoToDefinition === 'function') {
                 this._onGoToDefinition({ type: 'symbol', name: target.name, blockId: this._blockId })
@@ -1539,6 +1555,79 @@ export class CanvasCodeEditor {
         }
         
         ctx.globalAlpha = 1.0
+    }
+    
+    // ==========================================================================
+    // NAVIGATION HISTORY
+    // ==========================================================================
+    
+    /** Get the nav history instance from the global nav state */
+    _getNavHistory() {
+        if (this._editorId === null) return null
+        const root = typeof window !== 'undefined' ? window : globalThis
+        const navState = root.__vovkPlcNavState
+        if (!navState) return null
+        const editor = navState.editors?.get(this._editorId)
+        return editor?._nav_history || null
+    }
+    
+    /** Whether nav history tracking is possible */
+    _canTrackHistory() {
+        return !!(this._programId && this._blockId && this._getNavHistory())
+    }
+    
+    /** Mark this editor instance as active in global nav state */
+    _markActiveEditor() {
+        if (this._editorId === null) return
+        const root = typeof window !== 'undefined' ? window : globalThis
+        const navState = root.__vovkPlcNavState
+        if (navState) navState.activeEditorId = this._editorId
+    }
+    
+    /** Immediately record the current cursor position in nav history */
+    _recordHistory() {
+        if (!this._canTrackHistory() || this._historySuppressed) return
+        const history = this._getNavHistory()
+        if (!history) return
+        const cursor = this._cursors[0]
+        if (!cursor) return
+        const line = cursor.line + 1 // 1-based line for history
+        if (line === this._lastRecordedLine) return
+        this._lastRecordedLine = line
+        history.push({
+            type: 'code',
+            editorId: this._editorId,
+            programId: this._programId,
+            blockId: this._blockId,
+            index: cursor.offset,
+            line,
+        })
+    }
+    
+    /** Schedule a debounced history record (500ms) */
+    _scheduleHistory() {
+        if (!this._canTrackHistory() || this._historySuppressed) return
+        this._markActiveEditor()
+        if (this._historyTimer) clearTimeout(this._historyTimer)
+        this._historyTimer = setTimeout(() => {
+            this._historyTimer = null
+            this._recordHistory()
+        }, 500)
+    }
+    
+    /** Suppress history recording temporarily (used when restoring from nav) */
+    _suppressHistory(duration = 120) {
+        if (!this._canTrackHistory()) return
+        this._historySuppressed = true
+        if (this._historyTimer) {
+            clearTimeout(this._historyTimer)
+            this._historyTimer = null
+        }
+        const cursor = this._cursors[0]
+        if (cursor) this._lastRecordedLine = cursor.line + 1
+        setTimeout(() => {
+            this._historySuppressed = false
+        }, duration)
     }
     
     /** Show a lint diagnostic tooltip at screen coordinates */
@@ -4308,19 +4397,53 @@ export class CanvasCodeEditor {
     }
     
     /**
-     * Set cursor position
-     * @param {number} line - 0-based line number
-     * @param {number} col - 0-based column number
+     * Set cursor position.
+     * Supports two signatures:
+     *   setCursor(line, col)        — 0-based line and column
+     *   setCursor(index, opts)      — character offset + options object (MCE-compatible)
+     *     opts.reveal          {boolean}  scroll to make cursor visible (default true)
+     *     opts.suppressHistory {boolean}  suppress history recording temporarily
+     *     opts.record          {boolean}  schedule a history record
+     *     opts.ratio           {number}   viewport ratio for scroll alignment
+     * @param {number} lineOrIndex
+     * @param {number | {reveal?: boolean, suppressHistory?: boolean, record?: boolean, ratio?: number}} colOrOpts
      */
-    setCursor(line, col) {
-        line = Math.max(0, Math.min(line, this._lines.length - 1))
-        col = Math.max(0, Math.min(col, this._lines[line].length))
-        const offset = this._getOffset(line, col)
-        
-        this._cursors = [{ line, col, offset }]
-        this._selections = []
-        this._ensureCursorVisible()
-        this._needsRender = true
+    setCursor(lineOrIndex, colOrOpts) {
+        if (typeof colOrOpts === 'object' && colOrOpts !== null) {
+            // MCE-compatible signature: setCursor(index, opts)
+            const text = this._getText()
+            const maxLen = text.length
+            const safeIndex = Math.max(0, Math.min(typeof lineOrIndex === 'number' ? lineOrIndex : 0, maxLen))
+            const pos = this._getPositionFromOffset(safeIndex)
+
+            if (colOrOpts.suppressHistory) {
+                this._suppressHistory(120)
+            }
+
+            this._cursors = [pos]
+            this._selections = []
+            this._needsRender = true
+            this._input.focus()
+
+            if (colOrOpts.reveal !== false) {
+                const ratio = typeof colOrOpts.ratio === 'number' ? colOrOpts.ratio : 0.33
+                this.revealRange({ start: safeIndex, end: safeIndex + 1 }, { ratio, highlight: false })
+            }
+
+            if (colOrOpts.record) {
+                this._scheduleHistory()
+            }
+        } else {
+            // Original signature: setCursor(line, col)
+            const line = Math.max(0, Math.min(lineOrIndex, this._lines.length - 1))
+            const col = Math.max(0, Math.min(typeof colOrOpts === 'number' ? colOrOpts : 0, this._lines[line].length))
+            const offset = this._getOffset(line, col)
+
+            this._cursors = [{ line, col, offset }]
+            this._selections = []
+            this._ensureCursorVisible()
+            this._needsRender = true
+        }
     }
     
     /**
@@ -4393,6 +4516,11 @@ export class CanvasCodeEditor {
             document.removeEventListener('keydown', this._handleCtrlKey)
             document.removeEventListener('keyup', this._handleCtrlKey)
             this._handleCtrlKey = null
+        }
+        
+        if (this._historyTimer) {
+            clearTimeout(this._historyTimer)
+            this._historyTimer = null
         }
         
         if (this._lintTimer) {

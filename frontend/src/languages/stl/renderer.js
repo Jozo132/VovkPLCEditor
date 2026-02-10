@@ -821,6 +821,8 @@ export const stlRenderer = {
                     }
                 },
                 blockId: block.id,
+                editorId: editor._nav_id,
+                programId: block.programId,
                 onLintHover: payload => {
                     if (editor.window_manager?.setProblemHover) {
                         editor.window_manager.setProblemHover(payload)
