@@ -502,6 +502,8 @@ export class CanvasCodeEditor {
         
         // Focus handling
         canvas.addEventListener('mousedown', (e) => {
+            // Only handle primary (left) button — ignore back/forward (3/4), middle (1)
+            if (e.button !== 0 && e.button !== 2) return
             e.preventDefault()
             input.focus()
             this._handleMouseDown(e)
@@ -1594,12 +1596,16 @@ export class CanvasCodeEditor {
         const line = cursor.line + 1 // 1-based line for history
         if (line === this._lastRecordedLine) return
         this._lastRecordedLine = line
+        // Always compute offset fresh from line/col to avoid stale/undefined values
+        const offset = typeof cursor.offset === 'number'
+            ? cursor.offset
+            : this._getOffset(cursor.line, cursor.col)
         history.push({
             type: 'code',
             editorId: this._editorId,
             programId: this._programId,
             blockId: this._blockId,
-            index: cursor.offset,
+            index: offset,
             line,
         })
     }
