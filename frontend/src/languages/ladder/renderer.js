@@ -6017,12 +6017,15 @@ function initializeLiveMonitoring(editor, ladder, canvas) {
  * @param {string[]} [filterLocations] - Optional filter for symbol locations (e.g. ['input', 'output', 'marker'])
  * @returns {() => {value: string, label: string}[]}
  */
-const createSymbolAutocomplete = (editor, filterLocations = null) => {
+const createSymbolAutocomplete = (editor, filterLocations = null, excludeLocations = null) => {
   return () => {
     const symbols = editor.project?.symbols || []
-    const filtered = filterLocations 
+    let filtered = filterLocations 
       ? symbols.filter(s => filterLocations.includes(s.location))
       : symbols
+    if (excludeLocations) {
+      filtered = filtered.filter(s => !excludeLocations.includes(s.location))
+    }
     return filtered.map(s => ({
       value: s.name,
       label: `${s.location} ${s.type}`
@@ -6681,8 +6684,9 @@ async function promptForSymbol(editor, block, ladder) {
   const blockTypeLabel = blockTypeLabels[block.type] || block.type
   const currentSymbol = block.symbol || ''
   
-  // All symbols for autocomplete - no filtering to ensure symbols show up
-  const autocomplete = createSymbolAutocomplete(editor, null)
+  // For coils, hide read-only symbols (inputs & system) since coils are write operations
+  const isCoil = ['coil', 'coil_set', 'coil_rset'].includes(block.type)
+  const autocomplete = createSymbolAutocomplete(editor, null, isCoil ? ['input', 'system'] : null)
 
   const result = await Popup.form({
     title: `Edit ${blockTypeLabel}`,
