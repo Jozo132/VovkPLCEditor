@@ -470,6 +470,11 @@ export const stRenderer = {
                     return {text, className}
                 },
                 blockId: block.id,
+                onGoToDefinition: payload => {
+                    if (payload?.type === 'symbol' && editor.window_manager?.focusSymbolByName) {
+                        editor.window_manager.focusSymbolByName(payload.name)
+                    }
+                },
                 onLintHover: payload => {
                     if (editor.window_manager?.setProblemHover) editor.window_manager.setProblemHover(payload)
                 },

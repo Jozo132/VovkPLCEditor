@@ -169,6 +169,7 @@ export class CanvasCodeEditor {
         this._onLintHover = options.onLintHover || null
         this._blockId = options.blockId || null
         this._onRenameSymbol = options.onRenameSymbol || null
+        this._onGoToDefinition = options.onGoToDefinition || null
         
         // Hover tooltip state
         this._hoverTimer = null
@@ -178,6 +179,12 @@ export class CanvasCodeEditor {
         
         // Lint hover state
         this._lintHoverEntry = null
+        
+        // Ctrl+hover link highlight state
+        this._ctrlDown = false
+        this._lastMouse = null
+        this._linkHoverTarget = null
+        this._linkHighlightRange = null
         
         // Highlight ranges (set externally by problem panel)
         this._hoverHighlightRange = null
@@ -503,6 +510,7 @@ export class CanvasCodeEditor {
         })
         canvas.addEventListener('mouseleave', () => {
             this._hideHover()
+            this._clearLinkHover()
         })
         canvas.addEventListener('mouseup', (e) => this._handleMouseUp(e))
         canvas.addEventListener('wheel', (e) => this._handleWheel(e), { passive: false })
@@ -558,6 +566,20 @@ export class CanvasCodeEditor {
                 this._blockSelectAnchor = null
             }
         })
+        
+        // Ctrl key tracking for link-hover (go to definition)
+        this._handleCtrlKey = (e) => {
+            const next = !!(e.ctrlKey || e.metaKey)
+            if (next === this._ctrlDown) return
+            this._ctrlDown = next
+            if (!next) {
+                this._clearLinkHover()
+            } else if (this._lastMouse) {
+                this._updateLinkHover(this._lastMouse.x, this._lastMouse.y)
+            }
+        }
+        document.addEventListener('keydown', this._handleCtrlKey)
+        document.addEventListener('keyup', this._handleCtrlKey)
         
         // Global mouse events for drag selection
         document.addEventListener('mousemove', (e) => {
@@ -669,6 +691,22 @@ export class CanvasCodeEditor {
         // Close pill input overlay and hover on any mouse click
         if (this._pillInputEntry) this._closePillInput()
         this._hideHover()
+        
+        // Ctrl+click: go to definition
+        if (e.ctrlKey || e.metaKey) {
+            const pos = this._getPositionFromMouse(e)
+            if (pos) {
+                const target = this._linkHoverTarget || this._resolveDefinition(this._getWordAt(pos))
+                if (target) {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    this._clearLinkHover()
+                    this._goToDefinition(target)
+                    this._mouseDown = false
+                    return
+                }
+            }
+        }
         
         // Check for pill click — single click selects the pill, deselects text
         const pillEntry = this._getPillAtMouse(e)
@@ -798,6 +836,7 @@ export class CanvasCodeEditor {
         if (this._pillInputEntry) this._closePillInput()
         this._hideHover()
         this._hideAutocomplete()
+        this._clearLinkHover()
         
         const deltaX = e.deltaX
         const deltaY = e.deltaY
@@ -838,6 +877,16 @@ export class CanvasCodeEditor {
     }
     
     _handleKeyDown(e) {
+        // F12: go to definition of word at cursor
+        if (e.key === 'F12') {
+            const target = this._resolveDefinition(this._getWordAt(this._cursors[0]))
+            if (target) {
+                e.preventDefault()
+                this._goToDefinition(target)
+            }
+            return
+        }
+        
         // Handle keys when a pill is selected (even in readOnly mode)
         if (this._selectedPill) {
             e.preventDefault()
@@ -1240,6 +1289,16 @@ export class CanvasCodeEditor {
     
     /** Handle mouse movement for hover tooltip (non-drag) */
     _handleHoverMove(e) {
+        // Track last mouse position for Ctrl key toggling
+        this._lastMouse = { x: e.clientX, y: e.clientY }
+        
+        // Update Ctrl+hover link highlight
+        if (this._ctrlDown) {
+            this._updateLinkHover(e.clientX, e.clientY)
+        } else {
+            this._clearLinkHover()
+        }
+        
         // Cancel pending hover
         if (this._hoverTimer) {
             clearTimeout(this._hoverTimer)
@@ -1363,6 +1422,123 @@ export class CanvasCodeEditor {
             this._hoverEl.style.display = 'none'
             this._hoverEl.innerHTML = ''
         }
+    }
+    
+    // ==========================================================================
+    // CTRL+HOVER LINK HIGHLIGHT (GO TO DEFINITION)
+    // ==========================================================================
+    
+    /** Resolve a word to a navigable definition target (label or symbol) */
+    _resolveDefinition(wordInfo) {
+        if (!wordInfo || !wordInfo.word) return null
+        
+        // Check label definitions (e.g. "myLabel:" in source)
+        const text = this._getText()
+        const re = /^\s*([A-Za-z_]\w*):/gm
+        let match
+        while ((match = re.exec(text))) {
+            const label = match[1]
+            if (label === wordInfo.word) {
+                const labelOffset = match.index + match[0].indexOf(label)
+                return { type: 'label', name: wordInfo.word, index: labelOffset, wordInfo }
+            }
+        }
+        
+        // Check known symbols from symbolProvider
+        if (this._symbolProvider) {
+            const symbols = this._symbolProvider('symbol') || []
+            const normalizedList = symbols
+                .map(item => (typeof item === 'string' ? item : item?.name))
+                .filter(Boolean)
+            if (normalizedList.includes(wordInfo.word)) {
+                return { type: 'symbol', name: wordInfo.word, wordInfo }
+            }
+        }
+        
+        return null
+    }
+    
+    /** Update the Ctrl+hover link highlight at mouse position */
+    _updateLinkHover(clientX, clientY) {
+        const pos = this._getPositionFromMouse({ clientX, clientY })
+        if (!pos) { this._clearLinkHover(); return }
+        
+        const wordInfo = this._getWordAt(pos)
+        const target = this._resolveDefinition(wordInfo)
+        if (!target) { this._clearLinkHover(); return }
+        
+        // Compute the offset range of the word for rendering the underline
+        const startOffset = this._getOffset(wordInfo.line, wordInfo.startCol)
+        const endOffset = this._getOffset(wordInfo.line, wordInfo.endCol)
+        
+        this._linkHoverTarget = target
+        this._linkHighlightRange = { start: startOffset, end: endOffset }
+        this._canvas.style.cursor = 'pointer'
+        this._needsRender = true
+    }
+    
+    /** Clear the Ctrl+hover link highlight */
+    _clearLinkHover() {
+        if (!this._linkHoverTarget && !this._linkHighlightRange) return
+        this._linkHoverTarget = null
+        this._linkHighlightRange = null
+        this._canvas.style.cursor = ''
+        this._needsRender = true
+    }
+    
+    /** Navigate to the definition of a resolved target */
+    _goToDefinition(target) {
+        if (!target) return
+        if (target.type === 'label') {
+            const pos = typeof target.index === 'number' ? target.index : null
+            if (pos === null) return
+            const posObj = this._getPositionFromOffset(pos)
+            this._cursors = [posObj]
+            this._selections = []
+            this._needsRender = true
+            this._updateCursorSnapshot()
+            this._ensureCursorVisible()
+            this._input.focus()
+        } else if (target.type === 'symbol') {
+            if (typeof this._onGoToDefinition === 'function') {
+                this._onGoToDefinition({ type: 'symbol', name: target.name, blockId: this._blockId })
+            }
+        }
+    }
+    
+    /** Render the link underline highlight on canvas */
+    _renderLinkHighlight(ctx, firstLine, lastLine, contentX, baseY) {
+        const range = this._linkHighlightRange
+        if (!range || typeof range.start !== 'number' || typeof range.end !== 'number') return
+        
+        const startPos = this._getPositionFromOffset(range.start)
+        const endPos = this._getPositionFromOffset(range.end)
+        
+        const lh = this._lineHeight
+        const cw = this._charWidth
+        
+        ctx.fillStyle = '#4daafc'
+        ctx.globalAlpha = 0.9
+        
+        for (let i = Math.max(startPos.line, firstLine); i <= Math.min(endPos.line, lastLine); i++) {
+            const line = this._lines[i]
+            const gaps = this._getLineGaps(i)
+            
+            const segStart = (i === startPos.line) ? startPos.col : 0
+            const segEnd = (i === endPos.line) ? endPos.col : line.length
+            if (segEnd <= segStart) continue
+            
+            const vStart = this._textToVisualCol(segStart, gaps)
+            const vEnd = this._textToVisualCol(segEnd, gaps)
+            
+            const x = contentX + vStart * cw - this._scrollX
+            const y = baseY + (i - firstLine) * lh + lh - 2
+            const w = Math.max((vEnd - vStart) * cw, cw)
+            
+            ctx.fillRect(x, y, w, 2)
+        }
+        
+        ctx.globalAlpha = 1.0
     }
     
     /** Show a lint diagnostic tooltip at screen coordinates */
@@ -3575,6 +3751,9 @@ export class CanvasCodeEditor {
             }
         }
         
+        // Draw Ctrl+hover link underline highlight (go-to-definition)
+        this._renderLinkHighlight(ctx, firstVisibleLine, lastVisibleLine, contentX, baseY)
+        
         // Draw cursors (hidden when a pill is selected or in readOnly mode)
         if (this._cursorVisible && document.activeElement === this._input && !this._selectedPill && !this.options.readOnly) {
             ctx.fillStyle = colors.cursor
@@ -4207,6 +4386,13 @@ export class CanvasCodeEditor {
         if (this._acDocClick) {
             document.removeEventListener('mousedown', this._acDocClick)
             this._acDocClick = null
+        }
+        
+        // Clean up Ctrl key listeners for link hover
+        if (this._handleCtrlKey) {
+            document.removeEventListener('keydown', this._handleCtrlKey)
+            document.removeEventListener('keyup', this._handleCtrlKey)
+            this._handleCtrlKey = null
         }
         
         if (this._lintTimer) {

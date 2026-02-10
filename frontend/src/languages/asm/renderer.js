@@ -791,6 +791,11 @@ export const ladderRenderer = {
                         return null
                     },
                     blockId: block.id,
+                    onGoToDefinition: payload => {
+                        if (payload?.type === 'symbol' && editor.window_manager?.focusSymbolByName) {
+                            editor.window_manager.focusSymbolByName(payload.name)
+                        }
+                    },
                     onLintHover: payload => {
                         if (editor.window_manager?.setProblemHover) editor.window_manager.setProblemHover(payload)
                     },
