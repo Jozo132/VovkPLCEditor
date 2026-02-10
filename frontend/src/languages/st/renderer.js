@@ -248,6 +248,26 @@ export const stRenderer = {
                 language: 'st',
                 font: '14px Consolas, monospace',
                 readOnly: !!editor.edit_locked,
+                onRenameSymbol: (symbolName, event) => {
+                    const ctx = editor.context_manager
+                    if (!ctx || typeof ctx.show !== 'function') return
+                    ctx.show(event, [{ type: 'item', name: 'rename', label: 'Rename Symbol', icon: 'edit' }], async (action) => {
+                        if (action !== 'rename') return
+                        const result = await Popup.form({
+                            title: 'Rename Symbol',
+                            description: `Rename "${symbolName}" across the entire project`,
+                            inputs: [{ type: 'text', name: 'newName', label: 'New Name', value: symbolName }],
+                            buttons: [{ text: 'Rename', value: 'rename', background: '#007bff', color: 'white' }, { text: 'Cancel', value: 'cancel' }],
+                        })
+                        if (!result || !result.newName || result.newName === symbolName) return
+                        const res = editor.renameSymbol(symbolName, result.newName)
+                        if (!res.success) {
+                            new Popup({ title: 'Rename Failed', description: res.message, buttons: [{ text: 'OK', value: 'ok' }] })
+                        } else {
+                            text_editor.setValue(block.code)
+                        }
+                    })
+                },
                 symbolProvider: type => {
                     if (!editor.project || !editor.project.symbols) return []
                     let symbols = editor.project.symbols

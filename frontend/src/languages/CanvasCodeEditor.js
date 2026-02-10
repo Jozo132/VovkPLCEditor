@@ -168,6 +168,7 @@ export class CanvasCodeEditor {
         this._onDiagnosticsChange = options.onDiagnosticsChange || null
         this._onLintHover = options.onLintHover || null
         this._blockId = options.blockId || null
+        this._onRenameSymbol = options.onRenameSymbol || null
         
         // Hover tooltip state
         this._hoverTimer = null
@@ -573,6 +574,24 @@ export class CanvasCodeEditor {
         if (pillEntry && this._onPreviewContextMenu) {
             e.preventDefault()
             this._onPreviewContextMenu(pillEntry, e)
+            return
+        }
+        
+        // Check for symbol rename context menu
+        if (this._onRenameSymbol && this._symbolProvider) {
+            const pos = this._getPositionFromMouse(e)
+            if (pos) {
+                const wordInfo = this._getWordAt(pos)
+                if (wordInfo && wordInfo.word) {
+                    // Check if word is a known symbol
+                    const symbols = this._symbolProvider() || []
+                    const isSymbol = symbols.some(s => s.name === wordInfo.word)
+                    if (isSymbol) {
+                        e.preventDefault()
+                        this._onRenameSymbol(wordInfo.word, e)
+                    }
+                }
+            }
         }
     }
     

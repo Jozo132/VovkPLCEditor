@@ -1,5 +1,6 @@
 import { ElementSynthesis, CSSimporter } from "../../../utils/tools.js"
 import { getIconType } from "./components/icons.js"
+import { Popup } from "./components/popup.js"
 
 const importCSS = CSSimporter(import.meta.url)
 // Reuse EditorUI css for now or create new one
@@ -188,6 +189,10 @@ export default class SymbolsUI {
                     items.push({ type: 'separator' })
                     items.push({ type: 'item', name: 'paste', label: 'Paste' })
                     items.push({ type: 'separator' })
+                    if (symbol && !symbol.readonly && !symbol.device) {
+                        items.push({ type: 'item', label: 'Rename Symbol', name: 'rename', icon: 'edit' })
+                        items.push({ type: 'separator' })
+                    }
                     items.push({ type: 'item', label: 'Toggle Monitor', name: 'monitor_toggle' })
                     
                     this._ctx_menu_idx = index
@@ -217,6 +222,22 @@ export default class SymbolsUI {
                     }
                     
                     if (key === 'monitor_toggle') this.master.window_manager.toggleMonitoringActive()
+                    
+                    if (key === 'rename' && symbol && !symbol.readonly && !symbol.device) {
+                        const oldName = symbol.name
+                        Popup.form({
+                            title: 'Rename Symbol',
+                            description: `Rename "${oldName}" across the entire project`,
+                            inputs: [{ type: 'text', name: 'newName', label: 'New Name', value: oldName }],
+                            buttons: [{ text: 'Rename', value: 'rename', background: '#007bff', color: 'white' }, { text: 'Cancel', value: 'cancel' }],
+                        }).then(result => {
+                            if (!result || !result.newName || result.newName === oldName) return
+                            const res = this.master.renameSymbol(oldName, result.newName)
+                            if (!res.success) {
+                                new Popup({ title: 'Rename Failed', description: res.message, buttons: [{ text: 'OK', value: 'ok' }] })
+                            }
+                        })
+                    }
                 }
             })
         }

@@ -79,25 +79,26 @@ export default class EditorUI {
                 this._contextTargetIndex = blockIndex
 
                 let items = []
+                const isMonitoring = this.monitoringActive
 
                 if (blockIndex !== -1) {
                     items.push(
-                        { type: 'item', name: 'add_above', label: 'Add Block Above', className: `plc-icon ${getIconType('add')}` },
-                        { type: 'item', name: 'add_below', label: 'Add Block Below', className: `plc-icon ${getIconType('add')}` },
+                        { type: 'item', name: 'add_above', label: 'Add Block Above', className: `plc-icon ${getIconType('add')}`, disabled: isMonitoring },
+                        { type: 'item', name: 'add_below', label: 'Add Block Below', className: `plc-icon ${getIconType('add')}`, disabled: isMonitoring },
                     )
                 } else {
                     items.push(
-                        { type: 'item', name: 'add_block', label: 'Add Block', className: `plc-icon ${getIconType('add')}` },
+                        { type: 'item', name: 'add_block', label: 'Add Block', className: `plc-icon ${getIconType('add')}`, disabled: isMonitoring },
                     )
                 }
 
                 items.push(
                     { type: 'separator' },
                     { type: 'item', name: 'edit', label: 'Edit' },
-                    { type: 'item', name: 'delete', label: 'Delete' },
+                    { type: 'item', name: 'delete', label: 'Delete', disabled: isMonitoring },
                     { type: 'separator' },
                     { type: 'item', name: 'copy', label: 'Copy' },
-                    { type: 'item', name: 'paste', label: 'Paste' },
+                    { type: 'item', name: 'paste', label: 'Paste', disabled: isMonitoring },
                 )
 
                 // Add "View Logic as ..." options for compilable blocks
@@ -391,8 +392,12 @@ export default class EditorUI {
                     this.editBlock(this.program.blocks.indexOf(block))
                 })
 
-                // Drag and Drop
+                // Drag and Drop (disabled when monitoring)
                 header.addEventListener('dragstart', (e) => {
+                    if (this.monitoringActive) {
+                        e.preventDefault()
+                        return
+                    }
                     this._draggingBlock = block
                     block.div.classList.add('dragging')
                     e.dataTransfer.effectAllowed = 'move'

@@ -173,6 +173,16 @@ export default class WatchPanel {
                         this.activeActionIndex = idx
                         items.push({ type: 'item', label: 'Edit Watch', name: 'edit' })
                         items.push({ type: 'item', label: 'Remove Watch', name: 'remove' })
+                        // Check if this watch entry matches a project symbol
+                        const entry = this.entries[idx]
+                        if (entry) {
+                            const symbols = this.editor.project?.symbols || []
+                            const sym = symbols.find(s => s.name === entry.name && !s.readonly && !s.device)
+                            if (sym) {
+                                items.push({ type: 'separator' })
+                                items.push({ type: 'item', label: 'Rename Symbol', name: 'rename', icon: 'edit' })
+                            }
+                        }
                         items.push({ type: 'separator' })
                     }
 
@@ -198,6 +208,24 @@ export default class WatchPanel {
                         this.entries = []
                         this._notifyChange()
                         this.renderList()
+                    }
+                    if (key === 'rename' && this.activeActionIndex !== undefined) {
+                        const entry = this.entries[this.activeActionIndex]
+                        if (entry) {
+                            const oldName = entry.name
+                            Popup.form({
+                                title: 'Rename Symbol',
+                                description: `Rename "${oldName}" across the entire project`,
+                                inputs: [{ type: 'text', name: 'newName', label: 'New Name', value: oldName }],
+                                buttons: [{ text: 'Rename', value: 'rename', background: '#007bff', color: 'white' }, { text: 'Cancel', value: 'cancel' }],
+                            }).then(result => {
+                                if (!result || !result.newName || result.newName === oldName) return
+                                const res = this.editor.renameSymbol(oldName, result.newName)
+                                if (!res.success) {
+                                    new Popup({ title: 'Rename Failed', description: res.message, buttons: [{ text: 'OK', value: 'ok' }] })
+                                }
+                            })
+                        }
                     }
                 }
             })

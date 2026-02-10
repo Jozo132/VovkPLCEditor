@@ -473,7 +473,7 @@ export class VovkPLCEditor {
             }
             // Compile 'exit' to flush out any initial runtime logs
             try {
-                this.runtime.compile('exit')
+                this.runtime.compilePLCASM('exit')
             } catch (e) {}
             this.runtime_ready = true
         })
@@ -821,6 +821,84 @@ export class VovkPLCEditor {
 
         const signature = this._hashString(signatureParts.join('||')).toString()
         return {map, signature, details}
+    }
+
+    /**
+     * Rename a symbol across the entire project: symbol table, all block code, and watch entries.
+     * @param {string} oldName - The current symbol name
+     * @param {string} newName - The new symbol name
+     * @returns {{ success: boolean, message?: string, replacements?: number }}
+     */
+    renameSymbol(oldName, newName) {
+        if (!oldName || !newName || oldName === newName) return { success: false, message: 'Invalid names' }
+        if (!this.project) return { success: false, message: 'No project loaded' }
+
+        // Validate new name: must be a valid identifier
+        if (!/^[A-Za-z_]\w*$/.test(newName)) return { success: false, message: 'Invalid symbol name. Must start with a letter or underscore and contain only letters, digits, and underscores.' }
+
+        // Check for conflicts with existing symbols
+        const symbols = this.project.symbols || []
+        const conflict = symbols.find(s => s.name === newName)
+        if (conflict) return { success: false, message: `Symbol "${newName}" already exists` }
+
+        let replacements = 0
+        const wordBoundaryReplace = (text, old, replacement) => {
+            const re = new RegExp(`\\b${old.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g')
+            let count = 0
+            const result = text.replace(re, () => { count++; return replacement })
+            return { result, count }
+        }
+
+        // 1. Rename in symbol table
+        const sym = symbols.find(s => s.name === oldName)
+        if (sym) {
+            sym.name = newName
+            replacements++
+        }
+
+        // 2. Replace in all block code across all program files
+        const files = this.project.files || []
+        files.forEach(file => {
+            if (file.type !== 'program' || !Array.isArray(file.blocks)) return
+            file.blocks.forEach(block => {
+                if (!block.code) return
+                const { result, count } = wordBoundaryReplace(block.code, oldName, newName)
+                if (count > 0) {
+                    block.code = result
+                    replacements += count
+                    // Invalidate caches
+                    delete block.cached_asm
+                    delete block.cached_checksum
+                    delete block.cached_symbols_checksum
+                    delete block.cached_symbol_refs
+                }
+            })
+        })
+
+        // 3. Replace in watch entries
+        const watchPanel = this.window_manager?.watch_panel
+        if (watchPanel && Array.isArray(watchPanel.entries)) {
+            watchPanel.entries.forEach(entry => {
+                if (entry.name === oldName) {
+                    entry.name = newName
+                    replacements++
+                }
+            })
+            watchPanel.renderList()
+        }
+
+        // 4. Refresh symbol table UI
+        const symbolsUI = this.window_manager?.windows?.get('symbols')
+        if (symbolsUI && typeof symbolsUI.renderTable === 'function') {
+            symbolsUI.renderTable()
+        }
+
+        // 5. Save project
+        if (this.project_manager && typeof this.project_manager.checkAndSave === 'function') {
+            this.project_manager.checkAndSave()
+        }
+
+        return { success: true, replacements }
     }
 
     _extractAsmAddressRefsFromCode(code, offsets) {
@@ -1494,8 +1572,12 @@ export class VovkPLCEditor {
             const startIndex = match.index
 
             try {
-                // Use runtime.compile with appropriate language to transpile to PLCASM
-                const compileResult = await this.runtime.compile(code, {language})
+                // Dispatch to the correct language-specific compiler
+                let compileResult
+                if (language === 'plcscript') compileResult = await this.runtime.compilePLCScript(code)
+                else if (language === 'stl') compileResult = await this.runtime.compileSTL(code)
+                else if (language === 'st') compileResult = await this.runtime.compileST(code)
+                else throw new Error(`Unsupported language for transpilation: ${language}`)
                 if (compileResult && compileResult.output) {
                     replacements.push({
                         start: startIndex,
@@ -1561,7 +1643,7 @@ export class VovkPLCEditor {
                 }
 
                 // Step 2: STL -> PLCASM
-                const stlResult = await this.runtime.compile(ladderResult.output, {language: 'stl'})
+                const stlResult = await this.runtime.compileSTL(ladderResult.output)
                 if (stlResult && stlResult.output) {
                     replacements.push({
                         start: startIndex,
@@ -1813,7 +1895,7 @@ export class VovkPLCEditor {
         const emptyByBlock = new Map()
         blocks.forEach(({block}) => emptyByBlock.set(block.id, []))
 
-        if (!this.runtime_ready || !this.runtime || typeof this.runtime.lint !== 'function') {
+        if (!this.runtime_ready || !this.runtime || typeof this.runtime.lintPLCASM !== 'function') {
             this._lint_state = {assembly, projectText: '', diagnosticsByBlock: emptyByBlock, inFlight: null, runId: this._lint_state.runId || 0}
             this._applyLintDiagnostics(blocks, emptyByBlock)
             if (this.window_manager?.setConsoleProblems) {
@@ -1933,6 +2015,65 @@ export class VovkPLCEditor {
                     }
                 }
 
+                // Lint PLCScript blocks separately using lintPLCScript
+                if (typeof this.runtime.lintPLCScript === 'function') {
+                    for (const info of blocks) {
+                        if (info.block.type === 'plcscript') {
+                            const plcscriptCode = info.block.code || ''
+                            if (!plcscriptCode.trim()) continue
+
+                            try {
+                                const plcscriptResult = await this.runtime.lintPLCScript(plcscriptCode)
+                                if (plcscriptResult?.problems?.length) {
+                                    const plcLines = plcscriptCode.split('\n')
+                                    const plcLineStarts = [0]
+                                    for (let i = 0; i < plcLines.length; i++) {
+                                        plcLineStarts.push(plcLineStarts[i] + plcLines[i].length + 1)
+                                    }
+
+                                    const list = diagnosticsByBlock.get(info.block.id) || []
+                                    plcscriptResult.problems.forEach(p => {
+                                        const lineIndex = Math.max(0, (p.line || 1) - 1)
+                                        const colIndex = Math.max(0, (p.column || 1) - 1)
+                                        const lineStart = plcLineStarts[lineIndex] ?? 0
+                                        const start = lineStart + colIndex
+                                        const length = p.length || 1
+                                        const end = start + length
+
+                                        list.push({
+                                            type: p.type || 'error',
+                                            start,
+                                            end,
+                                            message: p.message || 'PLCScript lint error',
+                                        })
+
+                                        problemsList.push({
+                                            type: p.type || 'error',
+                                            message: p.message || 'PLCScript lint error',
+                                            token: '',
+                                            line: p.line || 1,
+                                            column: p.column || 1,
+                                            start,
+                                            end,
+                                            blockId: info.block.id,
+                                            blockName: info.block.name || '',
+                                            blockType: 'plcscript',
+                                            language: 'plcscript',
+                                            languageStack: ['plcscript'],
+                                            programName: info.program?.name || '',
+                                            programPath: info.program?.full_path || info.program?.path || '',
+                                            programId: info.program?.id || '',
+                                        })
+                                    })
+                                    diagnosticsByBlock.set(info.block.id, list)
+                                }
+                            } catch (e) {
+                                console.warn('PLCScript lint failed for block', info.block.id, e)
+                            }
+                        }
+                    }
+                }
+
                 // Lint ladder blocks for structural errors
                 for (const info of blocks) {
                     if (info.block.type === 'ladder') {
@@ -1983,11 +2124,9 @@ export class VovkPLCEditor {
                 }
 
                 // Transpile STL blocks to PLCASM before linting the full assembly
-                if (typeof this.runtime.compile === 'function') {
-                    lintAssembly = await this._transpileSTLForLinting(assembly)
-                }
+                lintAssembly = await this._transpileSTLForLinting(assembly)
 
-                problems = await this.runtime.lint(lintAssembly)
+                problems = await this.runtime.lintPLCASM(lintAssembly)
             } catch (e) {
                 console.error('Lint failed', e)
             }
@@ -2013,8 +2152,8 @@ export class VovkPLCEditor {
 
                     let target = null
                     for (const info of blocks) {
-                        // Skip STL blocks - they're handled separately by lintSTL
-                        if (info.block.type === 'stl') continue
+                        // Skip STL and PLCScript blocks - they're handled separately by their dedicated linters
+                        if (info.block.type === 'stl' || info.block.type === 'plcscript') continue
                         if (start >= info.codeStart && start <= info.codeEnd) {
                             target = info
                             break
@@ -2131,6 +2270,48 @@ export class VovkPLCEditor {
             })
         } catch (e) {
             console.error('STL lint failed', e)
+            return []
+        }
+    }
+
+    async lintPLCScriptBlock(blockId, code) {
+        if (!this.runtime_ready || !this.runtime || typeof this.runtime.lintPLCScript !== 'function') {
+            return []
+        }
+        if (!code || !code.trim()) {
+            return []
+        }
+        try {
+            const result = await this.runtime.lintPLCScript(code)
+            if (!result || !result.problems || !result.problems.length) {
+                return []
+            }
+
+            // Build line start offsets for converting line/column to character offsets
+            const lines = code.split('\n')
+            const lineStarts = [0]
+            for (let i = 0; i < lines.length; i++) {
+                lineStarts.push(lineStarts[i] + lines[i].length + 1) // +1 for newline
+            }
+
+            return result.problems.map(p => {
+                // Convert 1-based line/column to 0-based character offset
+                const lineIndex = Math.max(0, (p.line || 1) - 1)
+                const colIndex = Math.max(0, (p.column || 1) - 1)
+                const lineStart = lineStarts[lineIndex] ?? 0
+                const start = lineStart + colIndex
+                const length = p.length || 1
+                const end = start + length
+
+                return {
+                    type: p.type || 'error',
+                    start,
+                    end,
+                    message: p.message || 'PLCScript lint error',
+                }
+            })
+        } catch (e) {
+            console.error('PLCScript lint failed', e)
             return []
         }
     }

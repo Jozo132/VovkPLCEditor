@@ -110,6 +110,7 @@
     display: grid;
     grid-template-columns: auto 1fr;
     grid-template-rows: auto;
+    column-gap: 16px;
     margin: 0;
     padding: 0;
 }
@@ -137,7 +138,7 @@
     width: 100%;
 }
 .plc-popup-form label {
-    margin-right: 8px;
+    /* gap handled by column-gap on grid container */
 }
 .plc-popup-form input {
     font-size: 14px;
