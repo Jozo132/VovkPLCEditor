@@ -259,11 +259,43 @@ export default class SerialConnection extends ConnectionBase {
                         memory: +parts[8],
                         program: +parts[9],
                     }
-                    if (parts.length >= 26) {
-                        // New format with FLAGS: system, input, output, marker, timer, counter, flags, device
+                    if (parts.length >= 29) {
+                        // New format with DB info + FLAGS:
                         // Format: [header,arch,ver_maj,ver_min,ver_patch,build,date,stack,mem,prog,
                         //          sys_off,sys_size,in_off,in_size,out_off,out_size,mark_off,mark_size,
-                        //          timer_off,timer_count,timer_struct,counter_off,counter_count,counter_struct,flags,device]
+                        //          timer_off,timer_count,timer_struct,counter_off,counter_count,counter_struct,
+                        //          db_table_offset,db_slot_count,db_entry_size,flags,device]
+                        const flags = parseInt(parts[27], 16) || 0
+                        const isLittleEndian = (flags & 0x01) === 1
+                        return {
+                            ...base,
+                            system_offset: +parts[10],
+                            system_size: +parts[11],
+                            input_offset: +parts[12],
+                            input_size: +parts[13],
+                            output_offset: +parts[14],
+                            output_size: +parts[15],
+                            marker_offset: +parts[16],
+                            marker_size: +parts[17],
+                            timer_offset: +parts[18],
+                            timer_count: +parts[19],
+                            timer_struct_size: +parts[20],
+                            counter_offset: +parts[21],
+                            counter_count: +parts[22],
+                            counter_struct_size: +parts[23],
+                            db_table_offset: +parts[24],
+                            db_slot_count: +parts[25],
+                            db_entry_size: +parts[26],
+                            flags,
+                            isLittleEndian,
+                            device: parts[28],
+                            // Legacy compatibility aliases
+                            control_offset: +parts[10],
+                            control_size: +parts[11],
+                        }
+                    }
+                    if (parts.length >= 26) {
+                        // Legacy with FLAGS but no DB info
                         const flags = parseInt(parts[24], 16) || 0
                         const isLittleEndian = (flags & 0x01) === 1
                         return {
@@ -292,9 +324,6 @@ export default class SerialConnection extends ConnectionBase {
                     }
                     if (parts.length >= 25) {
                         // Previous format without FLAGS (backwards compatibility)
-                        // Format: [header,arch,ver_maj,ver_min,ver_patch,build,date,stack,mem,prog,
-                        //          sys_off,sys_size,in_off,in_size,out_off,out_size,mark_off,mark_size,
-                        //          timer_off,timer_count,timer_struct,counter_off,counter_count,counter_struct,device]
                         return {
                             ...base,
                             system_offset: +parts[10],
@@ -565,6 +594,51 @@ export default class SerialConnection extends ConnectionBase {
             
             return []
         }, { label: 'getTransportInfo', timeoutMs: 8000 });
+    }
+
+    /**
+     * Get DataBlock layout info from device
+     * Request: DA<checksum>
+     * Response: DA<slots:4hex><active:4hex><table_offset:4hex><free_space:4hex><lowest:4hex>[<db:4hex><off:4hex><sz:4hex>]...
+     * @returns {Promise<{ slots: number, active: number, table_offset: number, free_space: number, lowest_address: number, entries: Array<{ db: number, offset: number, size: number }> }>}
+     */
+    async getDataBlockInfo() {
+        return this._enqueueCommand(async () => {
+            const command = this.plc.buildCommand.dbInfo()
+            await this.serial.write(command + "\n")
+
+            const line = await this._readResponseLine(5000)
+            const raw = line.trim()
+            if (!raw || !raw.startsWith('DA')) {
+                console.warn('Unexpected DA response:', raw)
+                return { slots: 0, active: 0, table_offset: 0, free_space: 0, lowest_address: 0, entries: [] }
+            }
+
+            // Parse hex fields after "DA" prefix
+            const hex = raw.substring(2) // skip "DA"
+            const parseU16 = (offset) => parseInt(hex.slice(offset, offset + 4), 16) || 0
+
+            const slots = parseU16(0)
+            const active = parseU16(4)
+            const table_offset = parseU16(8)
+            const free_space = parseU16(12)
+            const lowest_address = parseU16(16)
+
+            // Parse active entries starting at offset 20 (each entry = 12 hex chars = 3 x u16)
+            const entries = []
+            let pos = 20
+            while (pos + 12 <= hex.length) {
+                const db = parseU16(pos)
+                const offset = parseU16(pos + 4)
+                const size = parseU16(pos + 8)
+                if (db !== 0) {
+                    entries.push({ db, offset, size })
+                }
+                pos += 12
+            }
+
+            return { slots, active, table_offset, free_space, lowest_address, entries }
+        }, { label: 'getDataBlockInfo', timeoutMs: 5000 });
     }
 
     async _waitForReply(timeout = 1000) {

@@ -43,4 +43,10 @@ export default class ConnectionBase {
 
     /** @type { () => Promise<void> } */
     async monitor() { throw new Error("monitor() not implemented"); }
+
+    /**
+     * Get DataBlock layout info from device
+     * @returns { Promise<{ slots: number, active: number, table_offset: number, free_space: number, lowest_address: number, entries: Array<{ db: number, offset: number, size: number }> }> }
+     */
+    async getDataBlockInfo() { throw new Error("getDataBlockInfo() not implemented"); }
 }

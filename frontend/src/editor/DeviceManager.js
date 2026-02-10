@@ -225,6 +225,25 @@ export default class DeviceManager {
         }
       }
 
+      // Fetch DataBlock info (DA command)
+      if (typeof this.connection.getDataBlockInfo === 'function') {
+        try {
+          console.log('[DeviceManager] Fetching datablock info (DA)...')
+          const dbInfo = await this.connection.getDataBlockInfo()
+          project.lastPhysicalDevice.datablockInfo = dbInfo || { slots: 0, active: 0, table_offset: 0, free_space: 0, lowest_address: 0, entries: [] }
+          console.log('[DeviceManager] DataBlock info:', dbInfo)
+          if (this.#editor.window_manager?.logToConsole && dbInfo?.active > 0) {
+            this.#editor.window_manager.logToConsole(`Device has ${dbInfo.active} active DataBlock(s) in ${dbInfo.slots} slot(s)`, 'info')
+          }
+          // Notify DataBlocksUI if open
+          if (this.#editor.window_manager?.notifyDataBlockInfo) {
+            this.#editor.window_manager.notifyDataBlockInfo(dbInfo)
+          }
+        } catch (e) {
+          console.warn('[DeviceManager] Could not fetch DataBlock info:', e)
+        }
+      }
+
       // Trigger project save
       if (this.#editor.project_manager?.forceSave) {
         this.#editor.project_manager.forceSave()

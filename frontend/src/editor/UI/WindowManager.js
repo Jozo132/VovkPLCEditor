@@ -11,9 +11,10 @@ import EditorUI from './Elements/EditorUI.js'
 import SymbolsUI from './Elements/SymbolsUI.js'
 import SetupUI from './Elements/SetupUI.js'
 import MemoryUI from './Elements/MemoryUI.js'
+import DataBlocksUI from './Elements/DataBlocksUI.js'
 import {CustomDropdown} from './Elements/CustomDropdown.js'
 
-/** @typedef { EditorUI | SymbolsUI | SetupUI } WindowType */
+/** @typedef { EditorUI | SymbolsUI | SetupUI | DataBlocksUI } WindowType */
 
 export default class WindowManager {
     /** @type {'edit' | 'online'} */
@@ -137,6 +138,9 @@ export default class WindowManager {
                         <span class="plc-menu-label">Settings</span>
                         <div class="plc-menu-dropdown">
                             <div class="plc-menu-option" data-action="setup"><span class="plc-icon plc-icon-setup" style="margin-right:8px;"></span>Device Setup</div>
+                            <div class="plc-menu-option" data-action="memory"><span class="plc-icon plc-icon-memory" style="margin-right:8px;"></span>Memory Map</div>
+                            <div class="plc-menu-separator"></div>
+                            <div class="plc-menu-option" data-action="load-plc-config"><span class="plc-icon plc-icon-upload" style="margin-right:8px;"></span>Load PLC Configuration</div>
                         </div>
                     </div>
                     <div class="plc-menu-item" data-menu="help">
@@ -3325,6 +3329,12 @@ export default class WindowManager {
                 case 'setup':
                     this.openProgram('setup')
                     break
+                case 'memory':
+                    this.openProgram('memory')
+                    break
+                case 'load-plc-config':
+                    this._menuLoadPLCConfig()
+                    break
                 case 'about':
                     this._menuAbout()
                     break
@@ -3336,6 +3346,77 @@ export default class WindowManager {
                     break
             }
         })
+    }
+
+    async _menuLoadPLCConfig() {
+        const editor = this.#editor
+        if (!editor.device_manager.connected) {
+            await Popup.confirm({
+                title: 'Load PLC Configuration',
+                description: 'No device is connected. Please connect to a device first.',
+            })
+            return
+        }
+
+        const confirmed = await Popup.confirm({
+            title: 'Load PLC Configuration',
+            description: 'This will overwrite your local project configuration (Type, Offsets, Sizes) with the settings from the connected device.\n\nAre you sure you want to continue?',
+        })
+        if (!confirmed) return
+
+        try {
+            const info = await editor.device_manager.connection.getInfo(true)
+            if (info) {
+                // Delegate to SetupUI if it exists
+                const setupWin = this.windows.get('setup')
+                if (setupWin && typeof setupWin.updateProjectConfig === 'function') {
+                    setupWin.updateProjectConfig(info)
+                } else {
+                    // Apply config directly
+                    const project = editor.project
+                    if (info.device) project.info.type = info.device
+                    if (info.arch) project.info.arch = info.arch
+                    if (info.version) project.info.version = info.version
+                    if (info.program) project.info.capacity = info.program
+                    if (info.date) project.info.date = info.date
+                    if (info.stack) project.info.stack = info.stack
+                    if (typeof info.flags === 'number') project.info.flags = info.flags
+                    if (typeof info.control_offset !== 'undefined') {
+                        project.offsets.system = { offset: info.control_offset, size: info.control_size }
+                    }
+                    if (typeof info.system_offset !== 'undefined') {
+                        project.offsets.system = { offset: info.system_offset, size: info.system_size }
+                    }
+                    if (typeof info.input_offset !== 'undefined') {
+                        project.offsets.input = { offset: info.input_offset, size: info.input_size }
+                    }
+                    if (typeof info.output_offset !== 'undefined') {
+                        project.offsets.output = { offset: info.output_offset, size: info.output_size }
+                    }
+                    if (typeof info.marker_offset !== 'undefined') {
+                        project.offsets.marker = { offset: info.marker_offset, size: info.marker_size }
+                    }
+                }
+                this.logToConsole?.('PLC configuration loaded successfully', 'success')
+                this.refreshActiveEditor?.()
+            }
+
+            // Try to load device symbols if the connection supports it
+            if (typeof editor.device_manager.connection.getSymbolList === 'function') {
+                try {
+                    const deviceSymbols = await editor.device_manager.connection.getSymbolList()
+                    if (deviceSymbols && deviceSymbols.length > 0) {
+                        editor.project_manager.setDeviceSymbols(deviceSymbols)
+                        this.logToConsole?.(`Loaded ${deviceSymbols.length} device symbols`, 'success')
+                        this.refreshActiveEditor?.()
+                    }
+                } catch (symErr) {
+                    console.warn('Failed to load device symbols:', symErr)
+                }
+            }
+        } catch (e) {
+            console.error('Failed to read config', e)
+        }
     }
 
     /**
@@ -4320,7 +4401,7 @@ export default class WindowManager {
                     
                     // Restore open tabs and active tab
                     // Tabs are stored as full_path (e.g. "main") or special window names (e.g. "symbols")
-                    const specialWindows = ['symbols', 'setup', 'memory']
+                    const specialWindows = ['symbols', 'setup', 'memory', 'datablocks']
                     const resolveTabId = (tabPath) => {
                         if (specialWindows.includes(tabPath)) return tabPath
                         // Find program by full_path
@@ -4809,6 +4890,8 @@ export default class WindowManager {
             editorUI = new SetupUI(this.#editor)
         } else if (id === 'memory') {
             editorUI = new MemoryUI(this.#editor)
+        } else if (id === 'datablocks') {
+            editorUI = new DataBlocksUI(this.#editor)
         } else {
             editorUI = new EditorUI(this.#editor, id)
         }
@@ -4842,7 +4925,7 @@ export default class WindowManager {
         const exists = this.windows.get(id)
         exists?.close()
         this.windows.delete(id)
-        if (id === 'symbols') {
+        if (id === 'symbols' || id === 'datablocks') {
             this.updateLiveMonitorState()
         }
 
@@ -4984,6 +5067,18 @@ export default class WindowManager {
         }
     }
 
+    /**
+     * Forward device DataBlock info to any open DataBlocksUI windows
+     * @param {{ slots: number, active: number, table_offset: number, free_space: number, lowest_address: number, entries: Array<{ db: number, offset: number, size: number }> }} dbInfo
+     */
+    notifyDataBlockInfo(dbInfo) {
+        for (const win of this.windows.values()) {
+            if (win && typeof win.receiveDeviceDBInfo === 'function') {
+                win.receiveDeviceDBInfo(dbInfo)
+            }
+        }
+    }
+
     updateLiveMonitorState() {
         const editor = this.#editor
         const connected = !!editor?.device_manager?.connected
@@ -5022,6 +5117,11 @@ export default class WindowManager {
         const memoryWin = this.windows.get('memory')
         if (memoryWin && typeof memoryWin.setMonitoringState === 'function') {
             memoryWin.setMonitoringState(shouldMonitor)
+        }
+
+        const datablocksWin = this.windows.get('datablocks')
+        if (datablocksWin && typeof datablocksWin.updateMonitoringState === 'function') {
+            datablocksWin.updateMonitoringState(monitoring)
         }
 
         if (shouldMonitor) {
@@ -5099,6 +5199,10 @@ export default class WindowManager {
         const symbols = this.windows.get('symbols')
         if (symbols && typeof symbols.updateLiveValues === 'function') {
             symbols.updateLiveValues(new Map())
+        }
+        const datablocks = this.windows.get('datablocks')
+        if (datablocks && typeof datablocks.updateLiveValues === 'function') {
+            datablocks.updateLiveValues(new Map())
         }
     }
 
@@ -5466,8 +5570,8 @@ export default class WindowManager {
 
     /** @param {string} id */
     restoreLazyTab(id) {
-        // Special windows (symbols, setup, memory) that don't live in the project tree
-        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory'
+        // Special windows (symbols, setup, memory, datablocks) that don't live in the project tree
+        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory' || id === 'datablocks'
         const prog = this.#editor.findProgram(id)
         if (!prog && !isSpecialWindow) return
         this.tab_manager.addLazyTab(id)
@@ -5478,8 +5582,8 @@ export default class WindowManager {
         const editor = this.#editor
         if (!id) throw new Error('Program ID not found')
 
-        // Special windows (symbols, setup, memory) that don't live in the project tree
-        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory'
+        // Special windows (symbols, setup, memory, datablocks) that don't live in the project tree
+        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory' || id === 'datablocks'
 
         if (isSpecialWindow) {
             if (typeof editor._pushWindowHistory === 'function') {
@@ -5498,7 +5602,7 @@ export default class WindowManager {
                 name: id,
                 path: '/',
                 full_path: `/${id}`,
-                comment: id === 'setup' ? 'Device Configuration' : id === 'symbols' ? 'Symbols Table' : 'Memory Map',
+                comment: id === 'setup' ? 'Device Configuration' : id === 'symbols' ? 'Symbols Table' : id === 'datablocks' ? 'Data Blocks' : 'Memory Map',
                 blocks: [],
             }
         }

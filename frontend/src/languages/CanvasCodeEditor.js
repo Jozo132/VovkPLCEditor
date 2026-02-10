@@ -1074,6 +1074,13 @@ export class CanvasCodeEditor {
                     handled = false
                 }
                 break
+            case "'":
+                if (ctrl && !this.options.readOnly) {
+                    this._toggleLineComment()
+                } else {
+                    handled = false
+                }
+                break
             case 'Escape':
                 this._clearSecondarySelections()
                 break
@@ -3179,6 +3186,85 @@ export class CanvasCodeEditor {
         this._notifyChange()
     }
     
+    /** Toggle line comment for all lines touched by cursors/selections */
+    _toggleLineComment() {
+        const langConfig = this._languageRules
+        const prefix = (langConfig && langConfig.commentPrefix) || '//'
+
+        // Collect all unique line indices touched by cursors/selections
+        const lineSet = new Set()
+        for (let ci = 0; ci < this._cursors.length; ci++) {
+            const cursor = this._cursors[ci]
+            const sel = this._selections[ci]
+            const startLine = sel ? sel.start.line : cursor.line
+            const endLine = sel ? sel.end.line : cursor.line
+            for (let l = startLine; l <= endLine; l++) lineSet.add(l)
+        }
+
+        const lines = [...lineSet].sort((a, b) => a - b)
+
+        // Determine if we should comment or uncomment:
+        // If ALL affected lines are already commented, uncomment; otherwise comment.
+        const prefixWithSpace = prefix + ' '
+        const allCommented = lines.every(l => {
+            const trimmed = this._lines[l].trimStart()
+            return trimmed.startsWith(prefixWithSpace) || trimmed.startsWith(prefix)
+        })
+
+        const deltaPerLine = new Map()
+
+        if (allCommented) {
+            // Uncomment: remove first occurrence of prefix (+ optional trailing space)
+            for (const l of lines) {
+                const line = this._lines[l]
+                const idx = line.indexOf(prefix)
+                if (idx === -1) { deltaPerLine.set(l, 0); continue }
+                const afterPrefix = idx + prefix.length
+                const removeSpace = line[afterPrefix] === ' ' ? 1 : 0
+                const removed = prefix.length + removeSpace
+                this._lines[l] = line.slice(0, idx) + line.slice(afterPrefix + removeSpace)
+                deltaPerLine.set(l, -removed)
+            }
+        } else {
+            // Comment: find minimum indentation, insert prefix there
+            let minIndent = Infinity
+            for (const l of lines) {
+                const line = this._lines[l]
+                if (line.trim().length === 0) continue // skip blank lines for indent calc
+                const indent = line.length - line.trimStart().length
+                if (indent < minIndent) minIndent = indent
+            }
+            if (minIndent === Infinity) minIndent = 0
+
+            for (const l of lines) {
+                const line = this._lines[l]
+                this._lines[l] = line.slice(0, minIndent) + prefixWithSpace + line.slice(minIndent)
+                deltaPerLine.set(l, prefixWithSpace.length)
+            }
+        }
+
+        // Update cursors and selections
+        for (let ci = 0; ci < this._cursors.length; ci++) {
+            const cursor = this._cursors[ci]
+            const sel = this._selections[ci]
+            const delta = deltaPerLine.get(cursor.line) || 0
+            cursor.col = Math.max(0, cursor.col + delta)
+            cursor.offset = this._getOffset(cursor.line, cursor.col)
+            if (sel) {
+                const ds = deltaPerLine.get(sel.start.line) || 0
+                sel.start.col = Math.max(0, sel.start.col + ds)
+                sel.start.offset = this._getOffset(sel.start.line, sel.start.col)
+                const de = deltaPerLine.get(sel.end.line) || 0
+                sel.end.col = Math.max(0, sel.end.col + de)
+                sel.end.offset = this._getOffset(sel.end.line, sel.end.col)
+            }
+        }
+
+        this._version++
+        this._tokenCache.clear()
+        this._notifyChange()
+    }
+
     /** Shift+TAB: remove leading whitespace (outdent by up to 2 spaces) */
     _outdentLines() {
         const processed = new Set()
@@ -3407,12 +3493,71 @@ export class CanvasCodeEditor {
         if (this._hoverHighlightRange) { this._hoverHighlightRange = null }
         if (this._selectedHighlightRange) { this._selectedHighlightRange = null }
         
+        // Adjust diagnostic offsets so squiggly lines stay in place until next lint
+        this._adjustDiagnosticOffsets()
+
         if (this._onChange) {
             this._onChange(this._getText())
         }
         
         // Schedule lint on change
         this._scheduleLint()
+    }
+
+    /**
+     * Adjust existing diagnostic start/end offsets based on the current text
+     * so that squiggly lines remain anchored to the correct line until the
+     * next lint pass overwrites them with accurate data.
+     */
+    _adjustDiagnosticOffsets() {
+        if (!this._diagnostics || this._diagnostics.length === 0) return
+
+        const text = this._getText()
+        const textLen = text.length
+
+        // Build a quick line-start offset table for the current text
+        const lineStarts = [0]
+        for (let i = 0; i < textLen; i++) {
+            if (text[i] === '\n') lineStarts.push(i + 1)
+        }
+        const numLines = lineStarts.length
+
+        const updatedDiagnostics = []
+        for (const diag of this._diagnostics) {
+            // If diagnostic had a line/col snapshot, re-map from line/col
+            if (typeof diag._line === 'number') {
+                const line = diag._line
+                const colStart = diag._colStart
+                const colEnd = diag._colEnd
+                if (line >= numLines) continue // line no longer exists
+                const lineStart = lineStarts[line]
+                const lineEnd = (line + 1 < numLines) ? lineStarts[line + 1] - 1 : textLen
+                const lineLen = lineEnd - lineStart
+                if (colStart > lineLen) continue // column beyond line length
+                const newStart = lineStart + Math.min(colStart, lineLen)
+                const newEnd = lineStart + Math.min(colEnd, lineLen)
+                if (newStart >= newEnd) continue
+                diag.start = newStart
+                diag.end = newEnd
+                updatedDiagnostics.push(diag)
+            } else {
+                // First time: snapshot line/col for future adjustments
+                if (diag.start >= textLen) continue
+                // Find which line this offset belongs to
+                let line = 0
+                for (let l = numLines - 1; l >= 0; l--) {
+                    if (diag.start >= lineStarts[l]) { line = l; break }
+                }
+                const lineStart = lineStarts[line]
+                diag._line = line
+                diag._colStart = diag.start - lineStart
+                diag._colEnd = diag.end - lineStart
+                // Clamp end to text length
+                diag.end = Math.min(diag.end, textLen)
+                if (diag.start < diag.end) updatedDiagnostics.push(diag)
+            }
+        }
+        this._diagnostics = updatedDiagnostics
     }
     
     /** Deduplicate cursors that share the same line and column */
@@ -4687,6 +4832,7 @@ const _asmInstructions = {
 
 // Assembly (PLCASM)
 CanvasCodeEditor.registerLanguage('asm', {
+    commentPrefix: '//',
     rules: [
         { regex: /\/\*[\s\S]*?\*\//g, className: 'cmt' },
         { regex: /\/\/.*$/gm, className: 'cmt' },
@@ -4710,6 +4856,7 @@ CanvasCodeEditor.registerLanguage('asm', {
 
 // STL (Statement List)
 CanvasCodeEditor.registerLanguage('stl', {
+    commentPrefix: '//',
     rules: [
         { regex: /\/\/.*$/gm, className: 'cmt' },
         { regex: /\(\*[\s\S]*?\*\)/g, className: 'cmt' },
@@ -4754,6 +4901,7 @@ CanvasCodeEditor.registerLanguage('stl', {
 
 // Structured Text (IEC 61131-3)
 CanvasCodeEditor.registerLanguage('st', {
+    commentPrefix: '//',
     rules: [
         { regex: /\(\*[\s\S]*?\*\)/g, className: 'cmt' },
         { regex: /\/\/.*$/gm, className: 'cmt' },
@@ -4785,6 +4933,7 @@ CanvasCodeEditor.registerLanguage('st', {
 
 // PLCScript
 CanvasCodeEditor.registerLanguage('plcscript', {
+    commentPrefix: '//',
     rules: [
         { regex: /\/\*[\s\S]*?\*\//g, className: 'cmt' },
         { regex: /\/\/.*$/gm, className: 'cmt' },

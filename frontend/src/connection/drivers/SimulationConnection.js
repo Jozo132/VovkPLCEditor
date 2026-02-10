@@ -77,6 +77,9 @@ export default class SimulationConnection extends ConnectionBase {
             counter_struct_size: 5,
             flags: 1, // WASM is always little-endian
             isLittleEndian: true,
+            db_table_offset: 0,
+            db_slot_count: 0,
+            db_entry_size: 6,
         }
     }
 
@@ -140,6 +143,29 @@ export default class SimulationConnection extends ConnectionBase {
     async getTransportInfo() {
         // Simulator doesn't have physical transports - return empty array
         return []
+    }
+
+    async getDataBlockInfo() {
+        // Try to get DB info from WASM exports
+        const exports = this.plc?.wasm_exports
+        if (exports && typeof exports.db_getSlotCount === 'function') {
+            const slots = exports.db_getSlotCount()
+            const active = exports.db_getActiveCount()
+            const table_offset = typeof exports.db_getTableOffset === 'function' ? exports.db_getTableOffset() : 0
+            const free_space = typeof exports.db_getFreeSpace === 'function' ? exports.db_getFreeSpace() : 0
+            const lowest_address = typeof exports.db_getLowestAddress === 'function' ? exports.db_getLowestAddress() : 0
+            const entries = []
+            for (let i = 0; i < slots; i++) {
+                const db = exports.db_getEntryDB(i)
+                if (db === 0) continue
+                const offset = exports.db_getEntryOffset(i)
+                const size = exports.db_getEntrySize(i)
+                entries.push({ db, offset, size })
+            }
+            return { slots, active, table_offset, free_space, lowest_address, entries }
+        }
+        // Fallback: no DB support in this WASM build
+        return { slots: 0, active: 0, table_offset: 0, free_space: 0, lowest_address: 0, entries: [] }
     }
 
     async getHealth() {

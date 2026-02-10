@@ -79,7 +79,8 @@ export default class EditorUI {
                 this._contextTargetIndex = blockIndex
 
                 let items = []
-                const isMonitoring = this.monitoringActive
+                const isConnected = !!this.master?.device_manager?.connected
+                const isMonitoring = this.monitoringActive && isConnected
 
                 if (blockIndex !== -1) {
                     items.push(

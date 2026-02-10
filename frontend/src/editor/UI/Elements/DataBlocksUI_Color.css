@@ -1,0 +1,154 @@
+/* DataBlocks UI Styles */
+
+/* DataBlock section headers (DB1, DB2, etc.) */
+.datablocks-table tbody tr.db-section-header {
+    background-color: #1e1e1e;
+    border-bottom: 1px solid #333;
+    cursor: pointer;
+    user-select: none;
+}
+.datablocks-table tbody tr.db-section-header:hover {
+    background-color: #252526;
+}
+.datablocks-table tbody tr.db-section-header td {
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+.datablocks-table tbody tr.db-section-header .section-chevron {
+    display: inline-block;
+    width: 14px;
+    margin-right: 6px;
+    font-size: 9px;
+    color: #666;
+    transition: transform 0.15s ease;
+}
+.datablocks-table tbody tr.db-section-header.collapsed .section-chevron {
+    color: #555;
+}
+.datablocks-table tbody tr.db-section-header .db-title {
+    color: #C586C0;
+    font-weight: 700;
+}
+.datablocks-table tbody tr.db-section-header .db-name {
+    color: #DCDCAA;
+    margin-left: 6px;
+    font-weight: 500;
+}
+.datablocks-table tbody tr.db-section-header .db-address {
+    color: #888;
+    margin-left: 8px;
+    font-weight: 400;
+    font-size: 10px;
+}
+.datablocks-table tbody tr.db-section-header .db-not-allocated {
+    color: #666;
+    font-style: italic;
+    font-size: 9px;
+}
+.datablocks-table tbody tr.db-section-header .section-count {
+    color: #555;
+    font-weight: 400;
+    margin-left: 6px;
+}
+
+/* DB section header actions */
+.datablocks-table tbody tr.db-section-header .db-header-actions {
+    float: right;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.datablocks-table tbody tr.db-section-header:hover .db-header-actions {
+    opacity: 1;
+}
+.datablocks-table tbody tr.db-section-header .db-header-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #888;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 1px 4px;
+    border-radius: 2px;
+}
+.datablocks-table tbody tr.db-section-header .db-header-btn:hover {
+    background: #333;
+    color: #ddd;
+    border-color: #555;
+}
+.datablocks-table tbody tr.db-section-header .db-header-btn.delete:hover {
+    background: #4a1515;
+    color: #f44;
+    border-color: #733;
+}
+
+/* Active/Focused Row Emphasis */
+.datablocks-table tbody tr.active-row {
+    background-color: #2a2d3e;
+    border-top: 1px solid #37373d;
+    border-bottom: 1px solid #37373d;
+}
+
+/* Field row styling */
+.datablocks-table tbody tr.db-field-row {
+    border-bottom: 1px solid #2a2a2a;
+}
+.datablocks-table tbody tr.db-field-row:hover {
+    background-color: #2a2d2e;
+}
+
+/* Selected row */
+.datablocks-table tbody tr.selected {
+    background-color: #094771 !important;
+}
+
+/* Type Colors */
+.db-cell-select {
+    font-weight: 500;
+}
+.db-cell-select.val-bit,
+.db-cell-select.val-bool { color: #569cd6 !important; }
+.db-cell-select.val-byte,
+.db-cell-select.val-u8,
+.db-cell-select.val-i8 { color: #4ec9b0 !important; }
+.db-cell-select.val-int,
+.db-cell-select.val-u16,
+.db-cell-select.val-i16 { color: #b5cea8 !important; }
+.db-cell-select.val-dint,
+.db-cell-select.val-u32,
+.db-cell-select.val-i32 { color: #dcdcaa !important; }
+.db-cell-select.val-real,
+.db-cell-select.val-f32 { color: #ce9178 !important; }
+
+/* Live value cell */
+.db-live-cell {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    min-width: 70px;
+    padding: 2px 6px !important;
+    text-align: right;
+}
+.db-live-cell.live-active {
+    color: #1fba5f;
+}
+.db-live-cell.live-dimmed {
+    color: rgba(200, 200, 200, 0.3);
+}
+
+/* Empty state placeholder */
+.datablocks-empty-row td {
+    padding: 12px;
+    color: #555;
+    font-style: italic;
+    text-align: center;
+}
+
+/* Toolbar bottom panel */
+.datablocks-bottom-panel {
+    border-top: 1px solid #333;
+    padding: 6px 8px;
+    display: flex;
+    gap: 6px;
+}

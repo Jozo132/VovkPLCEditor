@@ -64,7 +64,8 @@
 .plc-navigation-custom,
 .plc-navigation-symbols,
 .plc-navigation-setup,
-.plc-navigation-memory {
+.plc-navigation-memory,
+.plc-navigation-datablocks {
     display: flex;
     align-items: center;
     cursor: pointer;
@@ -78,12 +79,13 @@
 .plc-navigation-custom:hover,
 .plc-navigation-symbols:hover,
 .plc-navigation-setup:hover,
-.plc-navigation-memory:hover {
+.plc-navigation-memory:hover,
+.plc-navigation-datablocks:hover {
     background-color: #2a2d2e;
 }
 
 .plc-navigation-item.selected > 
-:is(.plc-navigation-folder, .plc-navigation-program, .plc-navigation-custom, .plc-navigation-symbols, .plc-navigation-setup, .plc-navigation-memory) {
+:is(.plc-navigation-folder, .plc-navigation-program, .plc-navigation-custom, .plc-navigation-symbols, .plc-navigation-setup, .plc-navigation-memory, .plc-navigation-datablocks) {
     background-color: #37373d;
     color: #ffffff;
 }

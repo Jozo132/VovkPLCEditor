@@ -27,7 +27,7 @@ const folder_item_html = ({ minimized, draggable, selected }) => /*HTML*/`
 
 /** @type { (params: { draggable: boolean, selected: boolean, type: string }) => string } */
 const custom_item_html = ({ draggable, selected, type }) => {
-    const typename = ['folder', 'program', 'symbols', 'setup', 'memory'].includes(type) ? type : 'custom'
+    const typename = ['folder', 'program', 'symbols', 'setup', 'memory', 'datablocks'].includes(type) ? type : 'custom'
     return /*HTML*/`
         <div class="plc-navigation-item ${selected ? 'selected' : ''}">
             <div class="plc-navigation-${typename}" tabindex="0" draggable="${draggable}">
@@ -50,7 +50,8 @@ const default_root_state = {
     files: [
         // Setup moved to Settings menu
         { id: 'symbols', type: 'symbols', name: 'symbols', path: '/', full_path: '/symbols', comment: 'Symbols Table', blocks: [] },
-        { id: 'memory', type: 'memory', name: 'memory', path: '/', full_path: '/memory', comment: 'Memory Map', blocks: [] },
+        // Memory moved to Settings menu
+        { id: 'datablocks', type: 'datablocks', name: 'datablocks', path: '/', full_path: '/datablocks', comment: 'Data Blocks', blocks: [] },
         { type: 'program', name: 'main', path: '/', full_path: '/main', comment: '', blocks: [] },
         // { type: 'custom', name: 'custom', path: '/', full_path: '/custom', comment: '', blocks: [] },
     ],
@@ -67,8 +68,8 @@ const sortTree = (a, b) => {
     if (a.depth !== b.depth) return a.depth - b.depth
     if (a.full_path === '/symbols') return -1
     if (b.full_path === '/symbols') return 1
-    if (a.full_path === '/memory') return -1
-    if (b.full_path === '/memory') return 1
+    if (a.full_path === '/datablocks') return -1
+    if (b.full_path === '/datablocks') return 1
     if (a.type === 'folder' && b.type !== 'folder') return -1
     if (a.type !== 'folder' && b.type === 'folder') return 1
     const a_name = (a.full_path || a.path).split('/').pop() || ''
@@ -450,7 +451,7 @@ export default class NavigationTreeManager {
 
             const item = this.findItem(element)
             const full_path = item ? item.full_path : ''
-            const fixed = new Set(['/main', '/project', '/symbols', '/memory'])
+            const fixed = new Set(['/main', '/project', '/symbols', '/memory', '/datablocks'])
             const is_fixed = fixed.has(full_path)
 
             if (className === 'plc-navigation-folder') {
@@ -458,7 +459,7 @@ export default class NavigationTreeManager {
                 if (is_fixed) return ctx_fixed_folder
                 return ctx_edit_folder
             }
-            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-symbols' || className === 'plc-navigation-memory') {
+            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-symbols' || className === 'plc-navigation-datablocks') {
                 if (connected) return ctx_online_program
                 if (full_path === '/main') return ctx_main_program
                 if (is_fixed) return ctx_fixed_program
@@ -497,7 +498,7 @@ export default class NavigationTreeManager {
             onClose: on_context_close_navigation_tree,
         })
         editor.context_manager.addListener({
-            className: 'plc-navigation-memory',
+            className: 'plc-navigation-datablocks',
             onOpen: on_context_open_navigation_tree,
             onClose: on_context_close_navigation_tree,
         })
@@ -775,8 +776,8 @@ export default class NavigationTreeManager {
             default_root_state.folders.forEach(path => this.createTreeItem({ path, recursive: true, fixed: true, redraw: false }))
 
             empty_folders.forEach(path => this.createTreeItem({ path, recursive: true, redraw: false }))
-            // Filter out setup from project files (setup moved to Settings menu)
-            files.filter(f => f.type !== 'setup' && f.full_path !== '/setup').forEach(item => this.createTreeItem({ item, recursive: true, redraw: false }))
+            // Filter out setup and memory from project files (moved to Settings menu)
+            files.filter(f => f.type !== 'setup' && f.full_path !== '/setup' && f.type !== 'memory' && f.full_path !== '/memory').forEach(item => this.createTreeItem({ item, recursive: true, redraw: false }))
         }
 
         // Evaluate each item in the root and set the depth
@@ -856,7 +857,7 @@ export default class NavigationTreeManager {
                 'plc-navigation-custom',
                 'plc-navigation-symbols',
                 'plc-navigation-setup',
-                'plc-navigation-memory',
+                'plc-navigation-datablocks',
                 'plc-navigation-tree',
             ]
             const isMatch = matches.some(match => className === match)
@@ -897,7 +898,7 @@ export default class NavigationTreeManager {
 
     highlightItem = (filter) => {
         // Special windows (symbols, setup, memory) may not be in the tree
-        const isSpecialWindow = filter === 'symbols' || filter === 'setup' || filter === 'memory'
+        const isSpecialWindow = filter === 'symbols' || filter === 'setup' || filter === 'memory' || filter === 'datablocks'
         const rootItem = this.findItem(filter)
         if (!rootItem) {
             // Don't log error for special windows that aren't in tree (like setup)

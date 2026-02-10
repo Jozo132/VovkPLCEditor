@@ -110,7 +110,13 @@ const symbols_icon_source = {
     width: 24,
     height: 24,
     data: `
-        <path fill="#4A7" d="M4 4h16v16H4V4zm2 2v3h12V6H6zm0 5v3h12v-3H6zm0 5v3h12v-3H6z"/>
+        <rect fill="none" stroke="#4EC9B0" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <line stroke="#4EC9B0" stroke-width="1" x1="3" y1="9" x2="21" y2="9"/>
+        <line stroke="#4EC9B0" stroke-width="1" x1="3" y1="14" x2="21" y2="14"/>
+        <line stroke="#4EC9B0" stroke-width="1" x1="9" y1="3" x2="9" y2="21"/>
+        <circle fill="#4EC9B0" cx="6" cy="6" r="1.2"/>
+        <circle fill="#4EC9B0" cx="6" cy="11.5" r="1.2"/>
+        <circle fill="#4EC9B0" cx="6" cy="17" r="1.2"/>
     `
 }
 
@@ -128,6 +134,22 @@ const memory_icon_source = {
     data: `
         <path fill="#9CDCFE" d="M5 6h14v10H5V6zm2 2v6h2V8H7zm4 0v6h2V8h-2zm4 0v6h2V8h-2z"/>
         <path fill="#9CDCFE" d="M7 4h2v2H7V4zm4 0h2v2h-2V4zm4 0h2v2h-2V4zM7 16h2v2H7v-2zm4 0h2v2h-2v-2zm4 0h2v2h-2v-2z"/>
+    `
+}
+
+const datablocks_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <rect fill="#C586C0" opacity="0.15" x="3" y="2" width="18" height="8" rx="2"/>
+        <rect fill="none" stroke="#C586C0" stroke-width="1.5" x="3" y="2" width="18" height="8" rx="2"/>
+        <rect fill="#C586C0" opacity="0.15" x="3" y="13" width="18" height="8" rx="2"/>
+        <rect fill="none" stroke="#C586C0" stroke-width="1.5" x="3" y="13" width="18" height="8" rx="2"/>
+        <line stroke="#C586C0" stroke-width="1" x1="7" y1="5" x2="17" y2="5"/>
+        <line stroke="#C586C0" stroke-width="1" x1="7" y1="8" x2="13" y2="8"/>
+        <line stroke="#C586C0" stroke-width="1" x1="7" y1="16" x2="17" y2="16"/>
+        <line stroke="#C586C0" stroke-width="1" x1="7" y1="19" x2="13" y2="19"/>
+        <line stroke="#C586C0" stroke-width="1.5" x1="12" y1="10" x2="12" y2="13"/>
     `
 }
 
@@ -317,6 +339,7 @@ await icon_dealer.importIcon({ type: 'program', name: 'plc-icon-gears', image: `
 await icon_dealer.importIcon({ type: 'symbols', name: 'plc-icon-symbols', image: `url('${ImageRenderer.renderSVG(symbols_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'setup', name: 'plc-icon-setup', image: `url('${ImageRenderer.renderSVG(setup_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'memory', name: 'plc-icon-memory', image: `url('${ImageRenderer.renderSVG(memory_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'datablocks', name: 'plc-icon-datablocks', image: `url('${ImageRenderer.renderSVG(datablocks_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'add', name: 'plc-icon-add', image: `url('${ImageRenderer.renderSVG(plus_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'delete', name: 'plc-icon-delete', image: `url('${ImageRenderer.renderSVG(delete_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'download', name: 'plc-icon-download', image: `url('${ImageRenderer.renderSVG(download_icon_source)}')` })

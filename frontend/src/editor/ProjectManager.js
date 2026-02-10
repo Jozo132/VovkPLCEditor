@@ -311,8 +311,8 @@ export default class ProjectManager {
             // Restore Tabs
             if (open_tabs && Array.isArray(open_tabs)) {
                 open_tabs.forEach(id => {
-                    // Special windows (symbols, setup, memory) that don't live in the project tree
-                    const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory'
+                    // Special windows (symbols, setup, memory, datablocks) that don't live in the project tree
+                    const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory' || id === 'datablocks'
                     
                     // Check if file still exists in project (or is a special window)
                     // The openTab method needs the file to exist in the tree/project structure
@@ -500,7 +500,7 @@ export default class ProjectManager {
 
     // Open tabs - convert IDs to full_path for portability
     const tabManager = this.#editor.window_manager?.tab_manager
-    const specialWindows = ['symbols', 'setup', 'memory']
+    const specialWindows = ['symbols', 'setup', 'memory', 'datablocks']
     if (tabManager && tabManager.tabs && tabManager.tabs.size > 0) {
         const openTabIds = Array.from(tabManager.tabs.keys())
         if (openTabIds.length > 0) {
@@ -613,6 +613,26 @@ export default class ProjectManager {
         lines.push('')
     }
 
+    // Data Blocks section
+    const datablocks = project.datablocks || []
+    if (datablocks.length > 0) {
+        lines.push('DATABLOCKS')
+        for (const db of datablocks) {
+            const nameStr = db.name ? ` "${db.name}"` : ''
+            const commentStr = db.comment ? ` : ${db.comment}` : ''
+            lines.push(`    DB${db.id}${nameStr}${commentStr}`)
+            for (const field of (db.fields || [])) {
+                const typeStr = (field.type || 'byte').toUpperCase()
+                const defStr = field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== 0 ? ` = ${field.defaultValue}` : ''
+                const fComment = field.comment ? ` : ${field.comment}` : ''
+                lines.push(`        ${field.name} : ${typeStr}${defStr}${fComment}`)
+            }
+            lines.push(`    END_DB`)
+        }
+        lines.push('END_DATABLOCKS')
+        lines.push('')
+    }
+
     // Program files
     const treeRoot = this.#editor.window_manager?.tree_manager?.root
     let files = []
@@ -713,6 +733,7 @@ export default class ProjectManager {
     
     const project = this.createEmptyProject()
     project.symbols = []
+    project.datablocks = []
     project.files = []
     project.folders = []
     project.watch = []
@@ -825,6 +846,69 @@ export default class ProjectManager {
                         initial_value: 0,
                         comment
                     })
+                }
+            }
+        } else if (trimmed === 'DATABLOCKS') {
+            // Parse data blocks section
+            if (!project.datablocks) project.datablocks = []
+            while ((line = readLine()) !== null) {
+                const dbLine = line.trim()
+                if (dbLine === 'END_DATABLOCKS') break
+                if (!dbLine) continue
+
+                // Format: DB<id> "name" ADDRESS=<addr> : comment
+                const dbMatch = dbLine.match(/^DB(\d+)\s*(?:"([^"]*)")?\s*(?:ADDRESS=(\d+))?\s*(?::\s*(.*))?$/)
+                if (dbMatch) {
+                    const dbId = parseInt(dbMatch[1], 10)
+                    const dbName = dbMatch[2] || `DataBlock${dbId}`
+                    const dbAddress = parseInt(dbMatch[3], 10) || 0
+                    const dbComment = (dbMatch[4] || '').trim()
+
+                    const db = {
+                        id: dbId,
+                        name: dbName,
+                        address: dbAddress,
+                        fields: [],
+                        comment: dbComment,
+                    }
+
+                    // Parse fields until END_DB
+                    while ((line = readLine()) !== null) {
+                        const fieldLine = line.trim()
+                        if (fieldLine === 'END_DB') break
+                        if (!fieldLine) continue
+
+                        // Format: name : TYPE = defaultValue : comment
+                        const parts = fieldLine.split(':').map(p => p.trim())
+                        if (parts.length >= 2) {
+                            const fieldName = parts[0]
+                            let typeAndDefault = parts[1]
+                            const fieldComment = parts.length > 2 ? parts.slice(2).join(':').trim() : ''
+
+                            let defaultValue = 0
+                            let fieldType = 'byte'
+
+                            // Check for default value: TYPE = value
+                            const eqMatch = typeAndDefault.match(/^(\S+)\s*=\s*(.+)$/)
+                            if (eqMatch) {
+                                fieldType = (typeMap[eqMatch[1].toUpperCase()] || eqMatch[1].toLowerCase())
+                                const defStr = eqMatch[2].trim()
+                                const num = parseFloat(defStr)
+                                defaultValue = isNaN(num) ? defStr : num
+                            } else {
+                                fieldType = (typeMap[typeAndDefault.toUpperCase()] || typeAndDefault.toLowerCase())
+                            }
+
+                            db.fields.push({
+                                name: fieldName,
+                                type: fieldType,
+                                defaultValue,
+                                comment: fieldComment,
+                            })
+                        }
+                    }
+
+                    project.datablocks.push(db)
                 }
             }
         } else if (trimmed.startsWith('FILE ') || trimmed.startsWith('PROGRAM ')) {
@@ -1189,6 +1273,7 @@ export default class ProjectManager {
         counter: { offset: runtimeInfo.counter_offset ?? 592, size: (runtimeInfo.counter_count ?? 16) * (runtimeInfo.counter_struct_size ?? 5) }
       },
       symbols: [...SYSTEM_SYMBOLS],
+      datablocks: [],
       info: {
         name: runtimeInfo.device || 'Simulator',
         type: runtimeInfo.device || 'Simulator',

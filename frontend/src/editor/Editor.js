@@ -743,7 +743,7 @@ export class VovkPLCEditor {
         }
         project.files.forEach(file => {
             if (file.type === 'program') return checkProgram(file)
-            const system_types = ['symbols', 'setup', 'memory']
+            const system_types = ['symbols', 'setup', 'memory', 'datablocks']
             if (system_types.includes(file.type)) return
             // @ts-ignore
             throw new Error(`Invalid child type: ${file.type}`)

@@ -46,6 +46,28 @@ export let PLC_ProjectItem
 
 
 /**
+ * @typedef {{
+ *     name: string,
+ *     type: PLC_Symbol_Type,
+ *     defaultValue?: number | string,
+ *     comment?: string,
+ * }} PLC_DataBlockField * @type { PLC_DataBlockField }
+ **/
+export let PLC_DataBlockField
+
+/**
+ * @typedef {{
+ *     id: number,
+ *     name: string,
+ *     address?: number,
+ *     fields: PLC_DataBlockField[],
+ *     comment?: string,
+ * }} PLC_DataBlock * @type { PLC_DataBlock }
+ **/
+export let PLC_DataBlock
+
+
+/**
  * @typedef {{ 
 *     info?: { name?: string, version?: string, type?: string, arch?: string, capacity?: number, author?: string, description?: string }
 *     _ui_state?: any
@@ -59,10 +81,11 @@ export let PLC_ProjectItem
 *     }
 *     symbols: PLC_Symbol[]
 *     device_symbols?: PLC_Symbol[]
+*     datablocks?: PLC_DataBlock[]
 *     folders: string[]
 *     files: PLC_ProjectItem[]
 *     watch?: { name: string, format?: string }[]
-*     lastPhysicalDevice?: { deviceInfo?: any, transports?: any[], symbols?: any[], timestamp?: string }
+*     lastPhysicalDevice?: { deviceInfo?: any, transports?: any[], symbols?: any[], datablockInfo?: { slots: number, active: number, table_offset: number, free_space: number, lowest_address: number, entries: Array<{ db: number, offset: number, size: number }> }, timestamp?: string }
 * }} PLC_Project * @type { PLC_Project }
 **/
 export let PLC_Project
