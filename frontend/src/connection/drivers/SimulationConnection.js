@@ -2,6 +2,8 @@ import ConnectionBase from "../ConnectionBase.js";
 import { PLCEditor } from "../../utils/types.js";
 import { ensureOffsets } from "../../utils/offsets.js";
 
+/** @typedef { import('../../wasm/VovkPLC.js').VovkPLC_class } VovkPLC_class */
+
 export default class SimulationConnection extends ConnectionBase {
     deviceInfo = null
     _runTimer = null
@@ -9,13 +11,16 @@ export default class SimulationConnection extends ConnectionBase {
     editor
     onDisconnected = null
 
+    /** @type { VovkPLC_class } */
+    plc
+
     /**
      * @param { PLCEditor } editor - The PLC editor instance
      */
     constructor(editor) {
         super();
         this.editor = editor
-        this.plc = editor.runtime; // Use the inherited runtime from the editor
+        this.plc = /** @type { VovkPLC_class } */ (editor.runtime) // Simulation always uses local WASM, not worker
     }
 
     async connect() {
@@ -77,8 +82,8 @@ export default class SimulationConnection extends ConnectionBase {
             counter_struct_size: 5,
             flags: 1, // WASM is always little-endian
             isLittleEndian: true,
-            db_table_offset: 0,
-            db_slot_count: 0,
+            db_table_offset: typeof this.plc.dbGetTableOffset === 'function' ? this.plc.dbGetTableOffset() : 0,
+            db_slot_count: typeof this.plc.dbGetSlotCount === 'function' ? this.plc.dbGetSlotCount() : 0,
             db_entry_size: 6,
         }
     }
@@ -146,26 +151,150 @@ export default class SimulationConnection extends ConnectionBase {
     }
 
     async getDataBlockInfo() {
-        // Try to get DB info from WASM exports
-        const exports = this.plc?.wasm_exports
-        if (exports && typeof exports.db_getSlotCount === 'function') {
-            const slots = exports.db_getSlotCount()
-            const active = exports.db_getActiveCount()
-            const table_offset = typeof exports.db_getTableOffset === 'function' ? exports.db_getTableOffset() : 0
-            const free_space = typeof exports.db_getFreeSpace === 'function' ? exports.db_getFreeSpace() : 0
-            const lowest_address = typeof exports.db_getLowestAddress === 'function' ? exports.db_getLowestAddress() : 0
-            const entries = []
-            for (let i = 0; i < slots; i++) {
-                const db = exports.db_getEntryDB(i)
-                if (db === 0) continue
-                const offset = exports.db_getEntryOffset(i)
-                const size = exports.db_getEntrySize(i)
-                entries.push({ db, offset, size })
+        // Use high-level DB API when available
+        if (typeof this.plc.dbGetSlotCount === 'function') {
+            try {
+                const slots = this.plc.dbGetSlotCount()
+                const active = this.plc.dbGetActiveCount()
+                const table_offset = this.plc.dbGetTableOffset()
+                const free_space = this.plc.dbGetFreeSpace()
+                const lowest_address = this.plc.dbGetLowestAddress()
+                const activeEntries = this.plc.dbGetActiveEntries()
+                const entries = activeEntries.map(e => ({ db: e.db_number, offset: e.offset, size: e.size }))
+                return { slots, active, table_offset, free_space, lowest_address, entries }
+            } catch (e) {
+                console.warn('[SimulationConnection] DB high-level API error, falling back:', e)
             }
-            return { slots, active, table_offset, free_space, lowest_address, entries }
         }
         // Fallback: no DB support in this WASM build
         return { slots: 0, active: 0, table_offset: 0, free_space: 0, lowest_address: 0, entries: [] }
+    }
+
+    /**
+     * Declare a DataBlock in the simulator runtime
+     * @param {number} dbNumber - DB number (1-based)
+     * @param {number} size - Size in bytes
+     * @returns {Promise<number>} Slot index on success, -1 on failure
+     */
+    async declareDataBlock(dbNumber, size) {
+        if (typeof this.plc.dbDeclare !== 'function') throw new Error('dbDeclare not available')
+        return this.plc.dbDeclare(dbNumber, size)
+    }
+
+    /**
+     * Remove a DataBlock from the simulator runtime
+     * @param {number} dbNumber - DB number to remove
+     * @returns {Promise<boolean>} True on success
+     */
+    async removeDataBlock(dbNumber) {
+        if (typeof this.plc.dbRemove !== 'function') throw new Error('dbRemove not available')
+        return this.plc.dbRemove(dbNumber)
+    }
+
+    /**
+     * Compact all DataBlocks (pack them tightly against the lookup table)
+     * @returns {Promise<number>} New lowest allocated address
+     */
+    async compactDataBlocks() {
+        if (typeof this.plc.dbCompact !== 'function') throw new Error('dbCompact not available')
+        return this.plc.dbCompact()
+    }
+
+    /**
+     * Clear all DataBlock entries
+     * @returns {Promise<void>}
+     */
+    async formatDataBlocks() {
+        if (typeof this.plc.dbFormat !== 'function') throw new Error('dbFormat not available')
+        this.plc.dbFormat()
+    }
+
+    /**
+     * Read an entire DataBlock's raw data
+     * @param {number} dbNumber - DB number to read
+     * @returns {Promise<{ data: Uint8Array, offset: number, size: number }>}
+     */
+    async readDataBlock(dbNumber) {
+        if (typeof this.plc.dbReadAll !== 'function') throw new Error('dbReadAll not available')
+        return this.plc.dbReadAll(dbNumber)
+    }
+
+    /**
+     * Read a typed value from a DataBlock
+     * @param {number} dbNumber - DB number
+     * @param {number} dbOffset - Byte offset within the DB
+     * @param {'u8'|'i8'|'u16'|'i16'|'u32'|'i32'|'f32'|'f64'} type - Data type
+     * @returns {Promise<number>}
+     */
+    async readDataBlockValue(dbNumber, dbOffset, type = 'u8') {
+        if (typeof this.plc.dbRead !== 'function') throw new Error('dbRead not available')
+        return this.plc.dbRead(dbNumber, dbOffset, type)
+    }
+
+    /**
+     * Write a typed value to a DataBlock
+     * @param {number} dbNumber - DB number
+     * @param {number} dbOffset - Byte offset within the DB
+     * @param {number} value - Value to write
+     * @param {'u8'|'i8'|'u16'|'i16'|'u32'|'i32'|'f32'|'f64'} type - Data type
+     * @returns {Promise<void>}
+     */
+    async writeDataBlockValue(dbNumber, dbOffset, value, type = 'u8') {
+        if (typeof this.plc.dbWrite !== 'function') throw new Error('dbWrite not available')
+        this.plc.dbWrite(dbNumber, dbOffset, value, type)
+    }
+
+    /**
+     * Read a named field from a DataBlock using compiler metadata
+     * @param {number} dbNumber - DB number
+     * @param {string} fieldName - Field name
+     * @returns {Promise<number>}
+     */
+    async readDataBlockField(dbNumber, fieldName) {
+        if (typeof this.plc.dbReadField !== 'function') throw new Error('dbReadField not available')
+        return this.plc.dbReadField(dbNumber, fieldName)
+    }
+
+    /**
+     * Write a named field to a DataBlock using compiler metadata
+     * @param {number} dbNumber - DB number
+     * @param {string} fieldName - Field name
+     * @param {number} value - Value to write
+     * @returns {Promise<void>}
+     */
+    async writeDataBlockField(dbNumber, fieldName, value) {
+        if (typeof this.plc.dbWriteField !== 'function') throw new Error('dbWriteField not available')
+        this.plc.dbWriteField(dbNumber, fieldName, value)
+    }
+
+    /**
+     * Read all fields of a DataBlock as key-value pairs
+     * @param {number} dbNumber - DB number
+     * @returns {Promise<Record<string, number>>}
+     */
+    async readDataBlockFields(dbNumber) {
+        if (typeof this.plc.dbReadFields !== 'function') throw new Error('dbReadFields not available')
+        return this.plc.dbReadFields(dbNumber)
+    }
+
+    /**
+     * Write multiple fields to a DataBlock
+     * @param {number} dbNumber - DB number
+     * @param {Record<string, number>} values - Field name -> value map
+     * @returns {Promise<void>}
+     */
+    async writeDataBlockFields(dbNumber, values) {
+        if (typeof this.plc.dbWriteFields !== 'function') throw new Error('dbWriteFields not available')
+        this.plc.dbWriteFields(dbNumber, values)
+    }
+
+    /**
+     * Get all compiler-declared DataBlock definitions (available after compilation)
+     * @returns {Promise<Array<{ db_number: number, alias: string, totalSize: number, computedOffset: number, fields: Array<{ name: string, typeName: string, typeSize: number, offset: number, hasDefault: boolean, defaultValue: number }> }>>}
+     */
+    async getDataBlockDeclarations() {
+        if (typeof this.plc.dbGetAllDecls !== 'function') throw new Error('dbGetAllDecls not available')
+        return this.plc.dbGetAllDecls()
     }
 
     async getHealth() {

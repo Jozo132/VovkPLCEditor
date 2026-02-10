@@ -4,7 +4,7 @@
 - **NEVER run frontend build commands** (`npm run build` in frontend folder, or any esbuild/webpack commands for frontend)
 - The user manually handles frontend builds
 - Not even `npm run update`
-- Don't modify any files in the `lib/VovkPLCRuntime/` folder - this is an external git library, if something in there is wrong either suggest edits if needed but don't apply any changes to them
+- Don't modify any files in the `lib/VovkPLCRuntime/` folder - this is an external git library, if something in there is wrong either suggest edits if needed but don't apply any changes to them. The same goes for the `frontend/src/wasm/` folder which contains the copy of the WASM build of the runtime 
 
 ## Project Context
 - This is a PLC (Programmable Logic Controller) program editor for the VovkPLC Runtime which is basically a stack based VM where from within it has immutable program memory and mutable data memory which runs on both embedded devices (Arduino compatible), in browsers (WASM), and on desktop (Node.js)
