@@ -229,6 +229,17 @@ export default class DataBlockUI {
         if (dbsWindow && typeof dbsWindow.renderTable === 'function') {
             dbsWindow.renderTable()
         }
+        this._scheduleLint()
+    }
+
+    _scheduleLint() {
+        if (this._lintTimer) clearTimeout(this._lintTimer)
+        this._lintTimer = setTimeout(() => {
+            this._lintTimer = null
+            if (typeof this.master?.lintProject === 'function') {
+                this.master.lintProject()
+            }
+        }, 500)
     }
 
     _calcDBSize(db) {
@@ -375,8 +386,14 @@ export default class DataBlockUI {
         const nameTd = this._createInputCell(field.name || '', (val) => {
             field.name = val.trim()
             this._onDataChanged()
+            this._validateDuplicateNames(db)
         }, cellLocked || isLive)
+        nameTd.classList.add('db-name-cell')
+        nameTd.dataset.dbId = String(db.id)
         tr.appendChild(nameTd)
+
+        // Mark duplicate names
+        this._markDuplicateNameCell(db, field, nameTd)
 
         // Type cell – locked when monitoring
         const typeTd = this._createSelectCell(field.type || 'byte', DB_FIELD_TYPES, (val) => {
@@ -463,6 +480,10 @@ export default class DataBlockUI {
     _createSelectCell(value, options, onChange, readonly = false) {
         const td = document.createElement('td')
         const select = document.createElement('select')
+        select.classList.add('db-cell-select')
+        setTimeout(() => {
+            select.classList.add('val-' + String(value).toLowerCase())
+        }, 0)
         for (const opt of options) {
             const option = document.createElement('option')
             option.value = opt
@@ -474,7 +495,11 @@ export default class DataBlockUI {
             select.disabled = true
             select.style.opacity = '0.5'
         }
-        select.addEventListener('change', () => onChange(select.value))
+        select.addEventListener('change', () => {
+            select.className = 'db-cell-select'
+            select.classList.add('val-' + String(select.value).toLowerCase())
+            onChange(select.value)
+        })
         td.appendChild(select)
         return td
     }
@@ -518,6 +543,29 @@ export default class DataBlockUI {
                 if (input) input.focus()
             }
         }, 0)
+    }
+
+    /** Check if a single name cell should be marked as duplicate at render time */
+    _markDuplicateNameCell(db, field, nameTd) {
+        if (!field.name) return
+        const lowerName = field.name.toLowerCase()
+        const count = db.fields.filter(f => f.name && f.name.toLowerCase() === lowerName).length
+        if (count > 1) nameTd.classList.add('db-name-duplicate')
+    }
+
+    /** Re-validate all name cells for a given DB (called on name change) */
+    _validateDuplicateNames(db) {
+        const dbId = String(db.id)
+        const nameCells = this.tbody.querySelectorAll(`.db-name-cell[data-db-id="${dbId}"]`)
+        const names = db.fields.map(f => (f.name || '').toLowerCase())
+        nameCells.forEach((cell, idx) => {
+            const name = names[idx]
+            if (name && names.filter(n => n === name).length > 1) {
+                cell.classList.add('db-name-duplicate')
+            } else {
+                cell.classList.remove('db-name-duplicate')
+            }
+        })
     }
 
     _confirmDeleteField(db, fieldIdx) {

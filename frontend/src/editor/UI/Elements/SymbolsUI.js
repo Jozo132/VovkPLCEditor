@@ -314,12 +314,14 @@ export default class SymbolsUI {
                 this.master.project.symbols = this.master.project.symbols.filter(s => !toDelete.includes(s))
                 this.deselectAll()
                 this.renderTable()
+                this._scheduleLint()
             })
         } else {
             // No references — delete directly
             this.master.project.symbols = this.master.project.symbols.filter(s => !toDelete.includes(s))
             this.deselectAll()
             this.renderTable()
+            this._scheduleLint()
         }
     }
     
@@ -387,6 +389,7 @@ export default class SymbolsUI {
             }
 
             this.reload()
+            this._scheduleLint()
         } catch (err) {
             console.error('Failed to paste symbols: ', err)
         }
@@ -717,6 +720,7 @@ export default class SymbolsUI {
         if (!symbol.name) {
             this.master.project.symbols.splice(index, 1)
             this.renderTable()
+            this._scheduleLint()
             return
         }
         const refs = this.master.scanReferences(symbol.name)
@@ -742,10 +746,12 @@ export default class SymbolsUI {
                 if (result !== 'delete') return
                 this.master.project.symbols.splice(index, 1)
                 this.renderTable()
+                this._scheduleLint()
             })
         } else {
             this.master.project.symbols.splice(index, 1)
             this.renderTable()
+            this._scheduleLint()
         }
     }
 
@@ -822,6 +828,16 @@ export default class SymbolsUI {
         }
     }
 
+    _scheduleLint() {
+        if (this._lintTimer) clearTimeout(this._lintTimer)
+        this._lintTimer = setTimeout(() => {
+            this._lintTimer = null
+            if (typeof this.master?.lintProject === 'function') {
+                this.master.lintProject()
+            }
+        }, 500)
+    }
+
     createCell(type, value, onChange, options = [], inputType = 'text', readonly = false) {
         const td = document.createElement('td')
         
@@ -842,7 +858,10 @@ export default class SymbolsUI {
             }
             
             if (!readonly) {
-                input.addEventListener('change', (e) => onChange(e.target.value, e.target))
+                input.addEventListener('change', (e) => {
+                    onChange(e.target.value, e.target)
+                    this._scheduleLint()
+                })
             }
 
             input.addEventListener('focus', () => {
@@ -895,6 +914,7 @@ export default class SymbolsUI {
                     select.className = 'symbol-cell-select'
                     select.classList.add('val-' + String(val).toLowerCase())
                     onChange(val)
+                    this._scheduleLint()
                 })
             }
 

@@ -664,10 +664,44 @@ export default class NavigationTreeManager {
         }
         if (action === 'delete') {
             if (isRoot) throw new Error(`Cannot delete root <${type}>"${name}"`)
+
+            // Collect all items that will be deleted
+            const affectedItems = this.root.filter(f => {
+                if (f.fixed && f.full_path !== full_path) return false
+                return f.full_path === full_path || f.full_path.startsWith(full_path + '/')
+            })
+            // Also check datablocks that match this path
+            const affectedDBs = (this.#editor.project.datablocks || []).filter(db => {
+                const dbPath = db.path || '/'
+                const dbName = db.name || `DB${db.id}`
+                const dbFullPath = dbPath === '/' ? `/project/${dbName}` : `/project${dbPath}/${dbName}`
+                return dbFullPath === full_path || dbFullPath.startsWith(full_path + '/')
+            })
+
+            let desc = `<b>${full_path}</b><br><br>`
+            const childFiles = affectedItems.filter(f => f.type === 'file')
+            const childFolders = affectedItems.filter(f => f.type === 'folder' && f.full_path !== full_path)
+            if (childFiles.length > 0 || affectedDBs.length > 0 || childFolders.length > 0) {
+                desc += `The following items will be permanently deleted:<br>`
+                desc += '<div style="max-height:200px;overflow-y:auto;font-size:12px;background:#1a1a1a;padding:6px 8px;border-radius:4px;margin:6px 0 8px;">' 
+                for (const f of childFolders) {
+                    desc += `<div style="padding:2px 0;border-bottom:1px solid #333;color:#cc8;">📁 ${f.full_path}</div>`
+                }
+                for (const f of childFiles) {
+                    const n = f.item?.name || f.full_path.split('/').pop() || f.full_path
+                    desc += `<div style="padding:2px 0;border-bottom:1px solid #333;color:#aaa;">📄 ${n}</div>`
+                }
+                for (const db of affectedDBs) {
+                    desc += `<div style="padding:2px 0;border-bottom:1px solid #333;color:#8ad;">🗃️ DB${db.id} (${db.name || 'unnamed'})</div>`
+                }
+                desc += '</div>'
+            }
+            desc += `Are you sure you want to delete ${type} "${item.name}"?<br>This action cannot be undone.`
+
             const confirm = await Popup.confirm({
                 titleClass: `plc-icon ${getIconType('delete')}`,
                 title: 'Delete item',
-                description: `<b>${full_path}</b>\n\nAre you sure you want to delete ${type} "${item.name}"?\nThis action cannot be undone.`,
+                description: desc,
                 confirm_button_color: '#F00C',
                 confirm_text_color: '#FFF',
                 confirm_text: 'Delete',
@@ -687,27 +721,73 @@ export default class NavigationTreeManager {
             this.createTreeItem({ path, recursive: true, redraw: true })
         }
         if (action === 'add_datablock') {
-            const path = await Popup.createItem('datablock', full_path, (path) => {
-                if (path.endsWith('/main')) return false
-                const exists = this.root.find(f => f.full_path === path)
-                if (exists) return false
-                return true
-            })
-            if (!path) return
-            const parts = path.split('/')
-            const dbName = parts.pop() || ''
-            const dir = parts.join('/')
-            if (!dbName) throw new Error('DataBlock name not found')
-            // Find next available DB id
-            const project = this.#editor.project_manager.project
+            // Find next available DB id early so we can show it in the popup
+            const project = this.#editor.project
             const existingIds = (project.datablocks || []).map(db => db.id)
             let newId = 1
             while (existingIds.includes(newId)) newId++
-            const db = { id: newId, name: dbName, path: dir, fields: [] }
+
+            const default_name = 'New DataBlock'
+            const res = await Popup.form({
+                title: 'Create DataBlock',
+                description: `Enter new DataBlock name <span style="display:inline-flex;align-items:center;font-size:11px;font-weight:600;font-family:Consolas,monospace;color:#C586C0;background:rgba(197,134,192,0.12);border:1px solid rgba(197,134,192,0.3);border-radius:3px;padding:0 4px;margin-left:6px;line-height:18px;white-space:nowrap;vertical-align:middle;">DB${newId}</span>`,
+                backdrop: false,
+                confirmCloseText: 'Are you sure?',
+                inputs: [
+                    { type: 'text', name: 'preview', label: '', value: `${full_path}/${default_name}`, readonly: true },
+                    {
+                        type: 'text',
+                        name: 'name',
+                        value: default_name,
+                        onChange: data => {
+                            data.name.value = data.name.value.replaceAll('  ', ' ')
+                            data.name.value = data.name.value.replaceAll(/[^a-zA-Z0-9-_ ]/g, '')
+                            while (data.name.value.startsWith(' ')) data.name.value = data.name.value.substring(1)
+                            data.preview.value = `${full_path}/${data.name.value.trim()}`
+                        },
+                    },
+                ],
+                verify: values => {
+                    const nameVal = values.name
+                    const previewVal = values.preview
+                    if (!nameVal.value.trim()) return nameVal.setError('Name is empty')
+                    if (previewVal.value.endsWith('/main')) return nameVal.setError('Name already exists')
+                    const exists = this.root.find(f => f.full_path === previewVal.value)
+                    if (exists) return nameVal.setError('Name already exists')
+                    return true
+                },
+                buttons: [
+                    { text: 'Create', value: 'confirm' },
+                    { text: 'Cancel', value: 'cancel' },
+                ],
+            })
+            if (!res) return
+            const path = res.preview
+            const parts = path.split('/')
+            const dbName = parts.pop() || ''
+            if (!dbName) throw new Error('DataBlock name not found')
+            // Convert tree path (e.g. "project/sub") to internal DB path ("/" or "/sub")
+            const treeDirParts = parts.slice(1) // strip root "project" segment
+            const dbPath = treeDirParts.length > 0 ? '/' + treeDirParts.join('/') : '/'
+            const db = { id: newId, name: dbName, path: dbPath, fields: [] }
             project.datablocks = project.datablocks || []
             project.datablocks.push(db)
-            this.draw_navigation_tree()
-            this.#editor.project_manager.saveProject()
+            // Add the datablock item to the tree
+            const dbFullPath = '/' + path
+            const dbTreePath = dbPath === '/' ? '/project' : `/project${dbPath}`
+            const dbItem = {
+                id: `db:${db.id}`,
+                type: /** @type {'datablock'} */ ('datablock'),
+                name: dbName,
+                path: dbTreePath,
+                full_path: dbFullPath,
+                comment: '',
+                blocks: [],
+            }
+            this.createTreeItem({ item: dbItem, recursive: true, redraw: true })
+            if (this.#editor.project_manager?.checkAndSave) {
+                this.#editor.project_manager.checkAndSave()
+            }
         }
         if (action === 'add_program') {
             const path = await Popup.createItem('program', full_path, (path) => { // Returns full path
@@ -991,18 +1071,42 @@ export default class NavigationTreeManager {
         if (exists) deleteFile(exists) // Delete the file if it exists
 
         this.root = this.root.filter(f => {
-            if (f.fixed) return true // Do not delete fixed items
-            if (f.full_path.startsWith(path)) {
-                deleteFile(f) // Delete the item
-                return false // Delete all items that start with the path
+            if (f.full_path === path || f.full_path.startsWith(path + '/')) {
+                deleteFile(f)
+                return false
             }
             return true // Keep all other items
         })
         this.#editor.project.files = this.#editor.project.files.filter(f => {
-            if (f.full_path.startsWith(path)) return false // Delete all files that start with the path
-            return true // Keep all other files
-        }) // Delete all files that start with the path
+            if (f.full_path === path || f.full_path.startsWith(path + '/')) return false
+            return true
+        })
+
+        // Remove datablocks whose tree path matches the deleted path
+        const datablocks = this.#editor.project.datablocks || []
+        const dbsToRemove = []
+        this.#editor.project.datablocks = datablocks.filter(db => {
+            const dbPath = db.path || '/'
+            const dbName = db.name || `DB${db.id}`
+            const dbFullPath = dbPath === '/' ? `/project/${dbName}` : `/project${dbPath}/${dbName}`
+            if (dbFullPath === path || dbFullPath.startsWith(path + '/')) {
+                dbsToRemove.push(db)
+                return false
+            }
+            return true
+        })
+        // Close any open DB windows for removed datablocks
+        for (const db of dbsToRemove) {
+            const windowId = `db:${db.id}`
+            if (this.#editor.window_manager) {
+                this.#editor.window_manager.closeProgram(windowId)
+            }
+        }
+
         this.draw_navigation_tree()
+        if (this.#editor.project_manager?.checkAndSave) {
+            this.#editor.project_manager.checkAndSave()
+        }
     }
 
     collapseItems() {

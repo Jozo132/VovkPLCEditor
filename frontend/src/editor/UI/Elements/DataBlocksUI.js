@@ -453,8 +453,14 @@ export default class DataBlocksUI {
         const nameTd = this._createInputCell(field.name || '', (val) => {
             field.name = val.trim()
             this._onDataChanged()
+            this._validateDuplicateNames(db)
         }, cellLocked || isLive)
+        nameTd.classList.add('db-name-cell')
+        nameTd.dataset.dbId = String(db.id)
         tr.appendChild(nameTd)
+
+        // Mark duplicate names
+        this._markDuplicateNameCell(db, field, nameTd)
 
         // Type cell – locked when monitoring
         const typeTd = this._createSelectCell(field.type || 'byte', DB_FIELD_TYPES, (val) => {
@@ -738,6 +744,29 @@ export default class DataBlocksUI {
         })
     }
 
+    /** Check if a single name cell should be marked as duplicate at render time */
+    _markDuplicateNameCell(db, field, nameTd) {
+        if (!field.name) return
+        const lowerName = field.name.toLowerCase()
+        const count = db.fields.filter(f => f.name && f.name.toLowerCase() === lowerName).length
+        if (count > 1) nameTd.classList.add('db-name-duplicate')
+    }
+
+    /** Re-validate all name cells for a given DB (called on name change) */
+    _validateDuplicateNames(db) {
+        const dbId = String(db.id)
+        const nameCells = this.tbody.querySelectorAll(`.db-name-cell[data-db-id="${dbId}"]`)
+        const names = db.fields.map(f => (f.name || '').toLowerCase())
+        nameCells.forEach((cell, idx) => {
+            const name = names[idx]
+            if (name && names.filter(n => n === name).length > 1) {
+                cell.classList.add('db-name-duplicate')
+            } else {
+                cell.classList.remove('db-name-duplicate')
+            }
+        })
+    }
+
     _confirmDeleteField(db, fieldIdx) {
         const field = db.fields[fieldIdx]
         if (!field) return
@@ -807,6 +836,17 @@ export default class DataBlocksUI {
             this.master.project_manager.checkAndSave()
         }
         this._registerMonitorRanges()
+        this._scheduleLint()
+    }
+
+    _scheduleLint() {
+        if (this._lintTimer) clearTimeout(this._lintTimer)
+        this._lintTimer = setTimeout(() => {
+            this._lintTimer = null
+            if (typeof this.master?.lintProject === 'function') {
+                this.master.lintProject()
+            }
+        }, 500)
     }
 
     // ── Live Monitoring ──

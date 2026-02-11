@@ -723,6 +723,16 @@ export class VovkPLCEditor {
                 }
             })
         }
+        // Sanitize datablock paths: strip legacy "project" prefix
+        if (project.datablocks && project.datablocks.length) {
+            for (const db of project.datablocks) {
+                if (!db.path) { db.path = '/'; continue }
+                // Strip leading slash for comparison, then remove "project" prefix
+                let p = db.path.startsWith('/') ? db.path.substring(1) : db.path
+                if (p === 'project') { db.path = '/'; continue }
+                if (p.startsWith('project/')) { db.path = '/' + p.substring('project/'.length); continue }
+            }
+        }
 
         /** @param { PLC_Program } program */
         const checkProgram = program => {
@@ -1991,6 +2001,37 @@ export class VovkPLCEditor {
                 if (problems && problems.length) {
                     console.log(`Project lint found ${problems.length} problems:`, problems)
                     for (const problem of problems) {
+                        // Handle datablock-level problems (e.g. duplicate field names)
+                        if (problem.block === 'DATABLOCKS' && problem.db !== undefined) {
+                            // Extract field name from message like "Duplicate field name in DB1: field8"
+                            const colonIdx = (problem.message || '').lastIndexOf(': ')
+                            const fieldName = colonIdx >= 0 ? (problem.message || '').slice(colonIdx + 2).trim() : ''
+                            const dbNumber = problem.db
+                            const dbObj = (this.project?.datablocks || []).find(d => d.id === dbNumber)
+                            const dbLabel = dbObj?.name ? `DB${dbNumber} (${dbObj.name})` : `DB${dbNumber}`
+
+                            problemsList.push({
+                                type: problem.type || 'error',
+                                message: problem.message || 'Lint error',
+                                token: problem.token || '',
+                                line: problem.line || 1,
+                                column: problem.column || 1,
+                                start: 0,
+                                end: 0,
+                                blockId: `db:${dbNumber}`,
+                                blockName: dbLabel,
+                                blockType: 'datablock',
+                                dbNumber,
+                                dbFieldName: fieldName,
+                                language: '',
+                                languageStack: [],
+                                programName: 'Datablocks',
+                                programPath: '/Datablocks',
+                                programId: '',
+                            })
+                            continue
+                        }
+
                         // Find the matching block by name
                         const blockName = problem.block || ''
                         const programName = problem.program || ''

@@ -756,6 +756,14 @@ export default class WindowManager {
                         }
 
                         const run = async () => {
+                            // Handle datablock problems — navigate to the DB field
+                            if (problem.blockType === 'datablock' && typeof problem.dbNumber === 'number') {
+                                if (focus) {
+                                    this.focusDataBlockField(problem.dbNumber, problem.dbFieldName || '')
+                                }
+                                return
+                            }
+
                             // For ladder blocks, we use token to find cell position
                             const isLadderBlock = problem.blockType === 'ladder'
 

@@ -251,6 +251,15 @@
     color: #e74c3c !important;
 }
 
+/* Duplicate field name error highlight */
+.db-name-cell.db-name-duplicate {
+    background: rgba(220, 53, 69, 0.15) !important;
+}
+.db-name-cell.db-name-duplicate input {
+    color: #f44 !important;
+    border-color: #dc3545 !important;
+}
+
 /* Toolbar bottom panel */
 .datablocks-bottom-panel {
     border-top: 1px solid #333;
