@@ -57,6 +57,126 @@ const SYSTEM_SYMBOLS = /** @type {PLC_Symbol[]} */ ([
 
 const LOCAL_STORAGE_KEY = 'vovk_plc_project_autosave'
 
+/** @param {string} str */
+const _needsQuotes = (str) => str && str.includes(' ')
+/** @param {string} str */
+const _quote = (str) => _needsQuotes(str) ? `"${str}"` : str
+
+/**
+ * Parse a PROGRAM header: name [PATH=path] [: comment]
+ * Supports quoted names and paths.
+ * @param {string} str
+ * @returns {{ name: string, path: string, comment: string }}
+ */
+const _parseProgramHeader = (str) => {
+    let pos = 0
+    let name = '', path = '', comment = ''
+
+    // Skip leading whitespace
+    while (pos < str.length && str[pos] === ' ') pos++
+
+    // Parse name (possibly quoted)
+    if (str[pos] === '"') {
+        const end = str.indexOf('"', pos + 1)
+        if (end !== -1) { name = str.substring(pos + 1, end); pos = end + 1 }
+    } else {
+        let end = pos
+        while (end < str.length && str[end] !== ' ' && str[end] !== ':') end++
+        name = str.substring(pos, end)
+        pos = end
+    }
+
+    // Skip whitespace
+    while (pos < str.length && str[pos] === ' ') pos++
+
+    // Parse optional PATH=
+    if (str.substring(pos).startsWith('PATH=')) {
+        pos += 5
+        if (str[pos] === '"') {
+            const end = str.indexOf('"', pos + 1)
+            if (end !== -1) { path = str.substring(pos + 1, end); pos = end + 1 }
+        } else {
+            let end = pos
+            while (end < str.length && str[end] !== ' ' && str[end] !== ':') end++
+            path = str.substring(pos, end)
+            pos = end
+        }
+    }
+
+    // Skip whitespace
+    while (pos < str.length && str[pos] === ' ') pos++
+
+    // Parse optional : comment
+    if (str[pos] === ':') {
+        comment = str.substring(pos + 1).trim()
+    }
+
+    return { name, path, comment }
+}
+
+/**
+ * Parse a DB header line: DB<N> ["Alias"] [PATH=<dir>] [ADDRESS=<addr>] [{ [: comment]]
+ * Supports both old format (no braces) and new format (with braces).
+ * @param {string} line
+ * @returns {{ id: number, name: string, path: string, address: number, comment: string, hasBrace: boolean } | null}
+ */
+const _parseDBHeader = (line) => {
+    const result = { id: 0, name: '', path: '/', address: 0, comment: '', hasBrace: false }
+
+    const dbMatch = line.match(/^DB(\d+)/)
+    if (!dbMatch) return null
+    result.id = parseInt(dbMatch[1], 10)
+    let pos = dbMatch[0].length
+
+    // Skip whitespace
+    while (pos < line.length && line[pos] === ' ') pos++
+
+    // Parse optional "Alias"
+    if (pos < line.length && line[pos] === '"') {
+        const end = line.indexOf('"', pos + 1)
+        if (end !== -1) {
+            result.name = line.substring(pos + 1, end)
+            pos = end + 1
+        }
+    }
+    if (!result.name) result.name = `DataBlock${result.id}`
+
+    // Parse remaining: PATH=, ADDRESS=, {, : comment
+    while (pos < line.length) {
+        while (pos < line.length && line[pos] === ' ') pos++
+        if (pos >= line.length) break
+
+        const rest = line.substring(pos)
+        if (rest.startsWith('PATH=')) {
+            pos += 5
+            if (line[pos] === '"') {
+                const end = line.indexOf('"', pos + 1)
+                if (end !== -1) { result.path = line.substring(pos + 1, end); pos = end + 1 }
+            } else {
+                let end = pos
+                while (end < line.length && line[end] !== ' ' && line[end] !== '{' && line[end] !== ':') end++
+                result.path = line.substring(pos, end)
+                pos = end
+            }
+        } else if (rest.startsWith('ADDRESS=')) {
+            pos += 8
+            let end = pos
+            while (end < line.length && /\d/.test(line[end])) end++
+            result.address = parseInt(line.substring(pos, end), 10) || 0
+            pos = end
+        } else if (line[pos] === '{') {
+            result.hasBrace = true
+            pos++
+        } else if (line[pos] === ':') {
+            result.comment = line.substring(pos + 1).trim()
+            break
+        } else {
+            pos++
+        }
+    }
+    return result
+}
+
 
 export default class ProjectManager {
   #editor
@@ -311,8 +431,8 @@ export default class ProjectManager {
             // Restore Tabs
             if (open_tabs && Array.isArray(open_tabs)) {
                 open_tabs.forEach(id => {
-                    // Special windows (symbols, setup, memory, datablocks) that don't live in the project tree
-                    const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory' || id === 'datablocks'
+                    // Special windows (symbols, setup, memory, datablocks, db:N) that don't live in the project tree
+                    const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory' || id === 'datablocks' || id.startsWith('db:')
                     
                     // Check if file still exists in project (or is a special window)
                     // The openTab method needs the file to exist in the tree/project structure
@@ -506,8 +626,8 @@ export default class ProjectManager {
         if (openTabIds.length > 0) {
             lines.push('TABS')
             for (const tabId of openTabIds) {
-                // Special windows keep their name, program tabs use full_path
-                if (specialWindows.includes(tabId)) {
+                // Special windows and db:N keep their name, program tabs use full_path
+                if (specialWindows.includes(tabId) || tabId.startsWith('db:')) {
                     lines.push(`    ${tabId}`)
                 } else {
                     const program = this.#editor.findProgram(tabId)
@@ -526,7 +646,7 @@ export default class ProjectManager {
     // Active tab - convert ID to full_path for portability
     const activeTab = tabManager?.active
     if (activeTab) {
-        if (specialWindows.includes(activeTab)) {
+        if (specialWindows.includes(activeTab) || activeTab.startsWith('db:')) {
             lines.push(`ACTIVE_TAB ${activeTab}`)
         } else {
             const program = this.#editor.findProgram(activeTab)
@@ -618,16 +738,18 @@ export default class ProjectManager {
     if (datablocks.length > 0) {
         lines.push('DATABLOCKS')
         for (const db of datablocks) {
-            const nameStr = db.name ? ` "${db.name}"` : ''
+            const nameStr = db.name ? ` ${_quote(db.name)}` : ''
+            const dbPath = db.path || '/'
+            const pathStr = dbPath !== '/' ? ` PATH=${_quote(dbPath)}` : ''
             const commentStr = db.comment ? ` : ${db.comment}` : ''
-            lines.push(`    DB${db.id}${nameStr}${commentStr}`)
+            lines.push(`    DB${db.id}${nameStr}${pathStr} {${commentStr}`)
             for (const field of (db.fields || [])) {
                 const typeStr = (field.type || 'byte').toUpperCase()
                 const defStr = field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== 0 ? ` = ${field.defaultValue}` : ''
                 const fComment = field.comment ? ` : ${field.comment}` : ''
-                lines.push(`        ${field.name} : ${typeStr}${defStr}${fComment}`)
+                lines.push(`        ${field.name}: ${typeStr}${defStr}${fComment}`)
             }
-            lines.push(`    END_DB`)
+            lines.push(`    }`)
         }
         lines.push('END_DATABLOCKS')
         lines.push('')
@@ -644,11 +766,15 @@ export default class ProjectManager {
     }
     
     for (const file of files) {
-        let filePath = file.full_path || file.path || file.name || 'main'
-        if (filePath.startsWith('/')) filePath = filePath.substring(1)
-        
+        const name = file.name || 'main'
+        const programPath = file.path || '/'
         const fileComment = file.comment ? ` : ${file.comment}` : ''
-        lines.push(`FILE ${filePath}${fileComment}`)
+
+        if (name === 'main') {
+            lines.push(`PROGRAM ${_quote(name)}${fileComment}`)
+        } else {
+            lines.push(`PROGRAM ${_quote(name)} PATH=${_quote(programPath)}${fileComment}`)
+        }
         
         const blocks = file.blocks || []
         for (const block of blocks) {
@@ -700,7 +826,7 @@ export default class ProjectManager {
             lines.push(`    END_BLOCK`)
         }
         
-        lines.push(`END_FILE`)
+        lines.push(`END_PROGRAM`)
         lines.push('')
     }
 
@@ -856,56 +982,61 @@ export default class ProjectManager {
                 if (dbLine === 'END_DATABLOCKS') break
                 if (!dbLine) continue
 
-                // Format: DB<id> "name" ADDRESS=<addr> : comment
-                const dbMatch = dbLine.match(/^DB(\d+)\s*(?:"([^"]*)")?\s*(?:ADDRESS=(\d+))?\s*(?::\s*(.*))?$/)
-                if (dbMatch) {
-                    const dbId = parseInt(dbMatch[1], 10)
-                    const dbName = dbMatch[2] || `DataBlock${dbId}`
-                    const dbAddress = parseInt(dbMatch[3], 10) || 0
-                    const dbComment = (dbMatch[4] || '').trim()
-
+                // Parse DB header: DB<N> ["Alias"] [PATH=<dir>] [ADDRESS=<addr>] [{ [: comment]]
+                // Supports both old format (END_DB) and new format ({ ... })
+                const parsed = _parseDBHeader(dbLine)
+                if (parsed) {
+                    /** @type {{ id: number, name: string, path: string, address: number, fields: import('../utils/types.js').PLC_DataBlockField[], comment: string }} */
                     const db = {
-                        id: dbId,
-                        name: dbName,
-                        address: dbAddress,
+                        id: parsed.id,
+                        name: parsed.name,
+                        path: parsed.path,
+                        address: parsed.address,
                         fields: [],
-                        comment: dbComment,
+                        comment: parsed.comment,
                     }
 
-                    // Parse fields until END_DB
+                    // Parse fields until END_DB or }
                     while ((line = readLine()) !== null) {
                         const fieldLine = line.trim()
-                        if (fieldLine === 'END_DB') break
+                        if (fieldLine === 'END_DB' || fieldLine === '}') break
                         if (!fieldLine) continue
 
-                        // Format: name : TYPE = defaultValue : comment
-                        const parts = fieldLine.split(':').map(p => p.trim())
-                        if (parts.length >= 2) {
-                            const fieldName = parts[0]
-                            let typeAndDefault = parts[1]
-                            const fieldComment = parts.length > 2 ? parts.slice(2).join(':').trim() : ''
+                        // Format: name: TYPE = defaultValue : comment  (new)
+                        // Format: name : TYPE = defaultValue : comment (old)
+                        const colonIdx = fieldLine.indexOf(':')
+                        if (colonIdx === -1) continue
 
-                            let defaultValue = 0
-                            let fieldType = 'byte'
+                        const fieldName = fieldLine.substring(0, colonIdx).trim()
+                        const afterName = fieldLine.substring(colonIdx + 1).trim()
 
-                            // Check for default value: TYPE = value
-                            const eqMatch = typeAndDefault.match(/^(\S+)\s*=\s*(.+)$/)
-                            if (eqMatch) {
-                                fieldType = (typeMap[eqMatch[1].toUpperCase()] || eqMatch[1].toLowerCase())
-                                const defStr = eqMatch[2].trim()
-                                const num = parseFloat(defStr)
-                                defaultValue = isNaN(num) ? defStr : num
-                            } else {
-                                fieldType = (typeMap[typeAndDefault.toUpperCase()] || typeAndDefault.toLowerCase())
-                            }
+                        // Split remaining by ':' for comment
+                        const parts = afterName.split(':').map(p => p.trim())
+                        let typeAndDefault = parts[0]
+                        const fieldComment = parts.length > 1 ? parts.slice(1).join(':').trim() : ''
 
-                            db.fields.push({
-                                name: fieldName,
-                                type: fieldType,
-                                defaultValue,
-                                comment: fieldComment,
-                            })
+                        /** @type {number | string} */
+                        let defaultValue = 0
+                        /** @type {import('../utils/types.js').PLC_Symbol_Type} */
+                        let fieldType = 'byte'
+
+                        // Check for default value: TYPE = value
+                        const eqMatch = typeAndDefault.match(/^(\S+)\s*=\s*(.+)$/)
+                        if (eqMatch) {
+                            fieldType = (typeMap[eqMatch[1].toUpperCase()] || eqMatch[1].toLowerCase())
+                            const defStr = eqMatch[2].trim()
+                            const num = parseFloat(defStr)
+                            defaultValue = isNaN(num) ? defStr : num
+                        } else {
+                            fieldType = (typeMap[typeAndDefault.toUpperCase()] || typeAndDefault.toLowerCase())
                         }
+
+                        db.fields.push({
+                            name: fieldName,
+                            type: fieldType,
+                            defaultValue,
+                            comment: fieldComment,
+                        })
                     }
 
                     project.datablocks.push(db)
@@ -914,17 +1045,38 @@ export default class ProjectManager {
         } else if (trimmed.startsWith('FILE ') || trimmed.startsWith('PROGRAM ')) {
             // Parse file/program section
             const isProgram = trimmed.startsWith('PROGRAM ')
-            const headerParts = trimmed.substring(isProgram ? 'PROGRAM '.length : 'FILE '.length).split(':').map(p => p.trim())
-            const filePath = headerParts[0]
-            const fileComment = headerParts.length > 1 ? headerParts.slice(1).join(':').trim() : ''
-            
+
+            let programName, programPath, fileComment
+
+            if (isProgram) {
+                // New format: PROGRAM <name> [PATH=<path>] [: comment]
+                const header = _parseProgramHeader(trimmed.substring('PROGRAM '.length))
+                programName = header.name
+                programPath = header.path || '/'
+                fileComment = header.comment
+            } else {
+                // Legacy format: FILE path/to/prog : comment
+                const headerParts = trimmed.substring('FILE '.length).split(':').map(p => p.trim())
+                const filePath = headerParts[0]
+                programName = filePath.split('/').pop() || filePath
+                const pathSegments = filePath.split('/').slice(0, -1).join('/')
+                programPath = pathSegments ? '/' + pathSegments : '/'
+                fileComment = headerParts.length > 1 ? headerParts.slice(1).join(':').trim() : ''
+            }
+
+            // Clean up path
+            if (!programPath.startsWith('/')) programPath = '/' + programPath
+            if (programPath !== '/' && programPath.endsWith('/')) programPath = programPath.slice(0, -1)
+
+            const fullPath = programPath === '/' ? `/${programName}` : `${programPath}/${programName}`
+
             /** @type {PLC_Program} */
             const file = {
                 id: null,
                 type: /** @type {'program'} */ ('program'),
-                name: filePath.split('/').pop() || filePath,
-                path: '/' + filePath.split('/').slice(0, -1).join('/'),
-                full_path: '/' + filePath,
+                name: programName,
+                path: programPath,
+                full_path: fullPath,
                 comment: fileComment,
                 blocks: []
             }
@@ -1178,6 +1330,26 @@ export default class ProjectManager {
         lines.push('')
     }
 
+    // Data Blocks section
+    const datablocks = project.datablocks || []
+    if (datablocks.length > 0) {
+        lines.push('DATABLOCKS')
+        for (const db of datablocks) {
+            const nameStr = db.name ? ` ${_quote(db.name)}` : ''
+            const dbPath = db.path || '/'
+            const pathStr = dbPath !== '/' ? ` PATH=${_quote(dbPath)}` : ''
+            lines.push(`    DB${db.id}${nameStr}${pathStr} {`)
+            for (const field of (db.fields || [])) {
+                const typeStr = (field.type || 'byte').toUpperCase()
+                const defStr = field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== 0 ? ` = ${field.defaultValue}` : ''
+                lines.push(`        ${field.name}: ${typeStr}${defStr}`)
+            }
+            lines.push(`    }`)
+        }
+        lines.push('END_DATABLOCKS')
+        lines.push('')
+    }
+
     // Program files - get from tree manager for up-to-date block references
     const treeRoot = this.#editor.window_manager?.tree_manager?.root
     let files = []
@@ -1188,11 +1360,14 @@ export default class ProjectManager {
         files = (project.files || []).filter(file => file.type === 'program')
     }
     for (const file of files) {
-        
-        let filePath = file.full_path || file.path || file.name || 'main'
-        // Remove leading slash if present (FILE paths should not start with /)
-        if (filePath.startsWith('/')) filePath = filePath.substring(1)
-        lines.push(`FILE ${filePath}`)
+        const name = file.name || 'main'
+        const programPath = file.path || '/'
+
+        if (name === 'main') {
+            lines.push(`PROGRAM ${_quote(name)}`)
+        } else {
+            lines.push(`PROGRAM ${_quote(name)} PATH=${_quote(programPath)}`)
+        }
         
         const blocks = file.blocks || []
         for (const block of blocks) {
@@ -1250,7 +1425,7 @@ export default class ProjectManager {
             lines.push(`    END_BLOCK`)
         }
         
-        lines.push(`END_FILE`)
+        lines.push(`END_PROGRAM`)
         lines.push('')
     }
 

@@ -20,19 +20,32 @@ export default class TabManager {
     }
 
     _createTabElement(id) {
-        // Special windows (symbols, setup, memory) that don't live in the project tree
-        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory'
+        // Special windows (symbols, setup, memory, datablocks, db:N) that don't live in the project tree
+        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory' || id === 'datablocks' || id.startsWith('db:')
         let program = this.#editor.findProgram(id);
         
         // For special windows not in tree, create a virtual program entry
         if (!program && isSpecialWindow) {
+            let name = id
+            let comment = 'Memory Map'
+            let type = id
+            if (id === 'setup') { comment = 'Device Configuration' }
+            else if (id === 'symbols') { comment = 'Symbols Table' }
+            else if (id === 'datablocks') { comment = 'Data Blocks' }
+            else if (id.startsWith('db:')) {
+                const dbNum = parseInt(id.split(':')[1])
+                const db = (this.#editor.project?.datablocks || []).find(d => d.id === dbNum)
+                name = db ? (db.name || `DB${dbNum}`) : `DB${dbNum}`
+                comment = 'Data Block'
+                type = 'datablock'
+            }
             program = { 
                 id, 
-                type: id, 
-                name: id, 
+                type, 
+                name, 
                 path: '/', 
                 full_path: `/${id}`, 
-                comment: id === 'setup' ? 'Device Configuration' : id === 'symbols' ? 'Symbols Table' : 'Memory Map',
+                comment,
                 blocks: [] 
             }
         }
@@ -99,19 +112,30 @@ export default class TabManager {
             return
         }
 
-        // Special windows (symbols, setup, memory) that don't live in the project tree
-        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory'
+        // Special windows (symbols, setup, memory, datablocks, db:N) that don't live in the project tree
+        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory' || id === 'datablocks' || id.startsWith('db:')
         let program = this.#editor.findProgram(id);
         
         // For special windows not in tree, create a virtual program entry
         if (!program && isSpecialWindow) {
+            let name = id
+            let comment = 'Memory Map'
+            if (id === 'setup') { comment = 'Device Configuration' }
+            else if (id === 'symbols') { comment = 'Symbols Table' }
+            else if (id === 'datablocks') { comment = 'Data Blocks' }
+            else if (id.startsWith('db:')) {
+                const dbNum = parseInt(id.split(':')[1])
+                const db = (this.#editor.project?.datablocks || []).find(d => d.id === dbNum)
+                name = db ? (db.name || `DB${dbNum}`) : `DB${dbNum}`
+                comment = 'Data Block'
+            }
             program = { 
                 id, 
-                type: id, 
-                name: id, 
+                type: id.startsWith('db:') ? 'datablock' : id, 
+                name, 
                 path: '/', 
                 full_path: `/${id}`, 
-                comment: id === 'setup' ? 'Device Configuration' : id === 'symbols' ? 'Symbols Table' : 'Memory Map',
+                comment,
                 blocks: [] 
             }
         }

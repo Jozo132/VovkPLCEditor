@@ -3093,6 +3093,12 @@ export const ladderRenderer = {
     const { div, props } = block
     const ladderId = block.id
 
+    // If the block isn't rendered yet (no div), just store diagnostics and return
+    if (!div) {
+      // Diagnostics are already stored on block.props.diagnostics by _applyLintDiagnostics
+      return
+    }
+
     const scale = 1.4
     const ladder_block_width = editor.properties.ladder_block_width || 120
     const ladder_block_height = editor.properties.ladder_block_height || 80

@@ -36,6 +36,12 @@
     margin-left: 6px;
     font-weight: 500;
 }
+.datablocks-table tbody tr.db-section-header .db-path {
+    color: #888;
+    margin-left: 6px;
+    font-weight: 400;
+    font-size: 11px;
+}
 .datablocks-table tbody tr.db-section-header .db-address {
     color: #888;
     margin-left: 8px;

@@ -27,7 +27,7 @@ const folder_item_html = ({ minimized, draggable, selected }) => /*HTML*/`
 
 /** @type { (params: { draggable: boolean, selected: boolean, type: string }) => string } */
 const custom_item_html = ({ draggable, selected, type }) => {
-    const typename = ['folder', 'program', 'symbols', 'setup', 'memory', 'datablocks'].includes(type) ? type : 'custom'
+    const typename = ['folder', 'program', 'symbols', 'setup', 'memory', 'datablocks', 'datablock'].includes(type) ? type : 'custom'
     return /*HTML*/`
         <div class="plc-navigation-item ${selected ? 'selected' : ''}">
             <div class="plc-navigation-${typename}" tabindex="0" draggable="${draggable}">
@@ -459,7 +459,7 @@ export default class NavigationTreeManager {
                 if (is_fixed) return ctx_fixed_folder
                 return ctx_edit_folder
             }
-            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-symbols' || className === 'plc-navigation-datablocks') {
+            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-symbols' || className === 'plc-navigation-datablocks' || className === 'plc-navigation-datablock') {
                 if (connected) return ctx_online_program
                 if (full_path === '/main') return ctx_main_program
                 if (is_fixed) return ctx_fixed_program
@@ -499,6 +499,11 @@ export default class NavigationTreeManager {
         })
         editor.context_manager.addListener({
             className: 'plc-navigation-datablocks',
+            onOpen: on_context_open_navigation_tree,
+            onClose: on_context_close_navigation_tree,
+        })
+        editor.context_manager.addListener({
+            className: 'plc-navigation-datablock',
             onOpen: on_context_open_navigation_tree,
             onClose: on_context_close_navigation_tree,
         })
@@ -778,6 +783,24 @@ export default class NavigationTreeManager {
             empty_folders.forEach(path => this.createTreeItem({ path, recursive: true, redraw: false }))
             // Filter out setup and memory from project files (moved to Settings menu)
             files.filter(f => f.type !== 'setup' && f.full_path !== '/setup' && f.type !== 'memory' && f.full_path !== '/memory').forEach(item => this.createTreeItem({ item, recursive: true, redraw: false }))
+
+            // Add individual DataBlock items to the tree based on their path
+            const datablocks = editor.project.datablocks || []
+            for (const db of datablocks) {
+                const dbPath = db.path || '/'
+                const dbName = db.name || `DB${db.id}`
+                const dbFullPath = dbPath === '/' ? `/project/${dbName}` : `/project${dbPath}/${dbName}`
+                const dbItem = {
+                    id: `db:${db.id}`,
+                    type: /** @type {'datablock'} */ ('datablock'),
+                    name: dbName,
+                    path: dbPath === '/' ? '/project' : `/project${dbPath}`,
+                    full_path: dbFullPath,
+                    comment: db.comment || '',
+                    blocks: [],
+                }
+                this.createTreeItem({ item: dbItem, recursive: true, fixed: true, redraw: false })
+            }
         }
 
         // Evaluate each item in the root and set the depth
@@ -858,6 +881,7 @@ export default class NavigationTreeManager {
                 'plc-navigation-symbols',
                 'plc-navigation-setup',
                 'plc-navigation-datablocks',
+                'plc-navigation-datablock',
                 'plc-navigation-tree',
             ]
             const isMatch = matches.some(match => className === match)
@@ -897,8 +921,8 @@ export default class NavigationTreeManager {
     }
 
     highlightItem = (filter) => {
-        // Special windows (symbols, setup, memory) may not be in the tree
-        const isSpecialWindow = filter === 'symbols' || filter === 'setup' || filter === 'memory' || filter === 'datablocks'
+        // Special windows (symbols, setup, memory, datablocks, db:N) may not be in the tree
+        const isSpecialWindow = filter === 'symbols' || filter === 'setup' || filter === 'memory' || filter === 'datablocks' || (typeof filter === 'string' && filter.startsWith('db:'))
         const rootItem = this.findItem(filter)
         if (!rootItem) {
             // Don't log error for special windows that aren't in tree (like setup)

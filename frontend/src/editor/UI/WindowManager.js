@@ -12,9 +12,10 @@ import SymbolsUI from './Elements/SymbolsUI.js'
 import SetupUI from './Elements/SetupUI.js'
 import MemoryUI from './Elements/MemoryUI.js'
 import DataBlocksUI from './Elements/DataBlocksUI.js'
+import DataBlockUI from './Elements/DataBlockUI.js'
 import {CustomDropdown} from './Elements/CustomDropdown.js'
 
-/** @typedef { EditorUI | SymbolsUI | SetupUI | DataBlocksUI } WindowType */
+/** @typedef { EditorUI | SymbolsUI | SetupUI | DataBlocksUI | DataBlockUI } WindowType */
 
 export default class WindowManager {
     /** @type {'edit' | 'online'} */
@@ -4403,7 +4404,7 @@ export default class WindowManager {
                     // Tabs are stored as full_path (e.g. "main") or special window names (e.g. "symbols")
                     const specialWindows = ['symbols', 'setup', 'memory', 'datablocks']
                     const resolveTabId = (tabPath) => {
-                        if (specialWindows.includes(tabPath)) return tabPath
+                        if (specialWindows.includes(tabPath) || tabPath.startsWith('db:')) return tabPath
                         // Find program by full_path
                         const fullPath = tabPath.startsWith('/') ? tabPath : '/' + tabPath
                         const program = project.files?.find(f => f.full_path === fullPath)
@@ -4892,6 +4893,9 @@ export default class WindowManager {
             editorUI = new MemoryUI(this.#editor)
         } else if (id === 'datablocks') {
             editorUI = new DataBlocksUI(this.#editor)
+        } else if (id.startsWith('db:')) {
+            const dbNumber = parseInt(id.split(':')[1])
+            editorUI = new DataBlockUI(this.#editor, dbNumber)
         } else {
             editorUI = new EditorUI(this.#editor, id)
         }
@@ -4925,7 +4929,7 @@ export default class WindowManager {
         const exists = this.windows.get(id)
         exists?.close()
         this.windows.delete(id)
-        if (id === 'symbols' || id === 'datablocks') {
+        if (id === 'symbols' || id === 'datablocks' || id.startsWith('db:')) {
             this.updateLiveMonitorState()
         }
 
@@ -5570,8 +5574,8 @@ export default class WindowManager {
 
     /** @param {string} id */
     restoreLazyTab(id) {
-        // Special windows (symbols, setup, memory, datablocks) that don't live in the project tree
-        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory' || id === 'datablocks'
+        // Special windows (symbols, setup, memory, datablocks, db:N) that don't live in the project tree
+        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory' || id === 'datablocks' || id.startsWith('db:')
         const prog = this.#editor.findProgram(id)
         if (!prog && !isSpecialWindow) return
         this.tab_manager.addLazyTab(id)
@@ -5582,8 +5586,8 @@ export default class WindowManager {
         const editor = this.#editor
         if (!id) throw new Error('Program ID not found')
 
-        // Special windows (symbols, setup, memory, datablocks) that don't live in the project tree
-        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory' || id === 'datablocks'
+        // Special windows (symbols, setup, memory, datablocks, db:N) that don't live in the project tree
+        const isSpecialWindow = id === 'symbols' || id === 'setup' || id === 'memory' || id === 'datablocks' || id.startsWith('db:')
 
         if (isSpecialWindow) {
             if (typeof editor._pushWindowHistory === 'function') {
@@ -5596,13 +5600,24 @@ export default class WindowManager {
 
         // For special windows not in tree, create a virtual program entry
         if (!existingProgram && isSpecialWindow) {
+            let name = id
+            let comment = 'Memory Map'
+            if (id === 'setup') { name = 'setup'; comment = 'Device Configuration' }
+            else if (id === 'symbols') { name = 'symbols'; comment = 'Symbols Table' }
+            else if (id === 'datablocks') { name = 'datablocks'; comment = 'Data Blocks' }
+            else if (id.startsWith('db:')) {
+                const dbNum = parseInt(id.split(':')[1])
+                const db = (editor.project?.datablocks || []).find(d => d.id === dbNum)
+                name = db ? (db.name || `DB${dbNum}`) : `DB${dbNum}`
+                comment = 'Data Block'
+            }
             existingProgram = {
                 id,
-                type: id,
-                name: id,
+                type: id.startsWith('db:') ? 'datablock' : id,
+                name,
                 path: '/',
                 full_path: `/${id}`,
-                comment: id === 'setup' ? 'Device Configuration' : id === 'symbols' ? 'Symbols Table' : id === 'datablocks' ? 'Data Blocks' : 'Memory Map',
+                comment,
                 blocks: [],
             }
         }

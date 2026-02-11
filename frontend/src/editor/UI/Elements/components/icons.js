@@ -340,6 +340,19 @@ await icon_dealer.importIcon({ type: 'symbols', name: 'plc-icon-symbols', image:
 await icon_dealer.importIcon({ type: 'setup', name: 'plc-icon-setup', image: `url('${ImageRenderer.renderSVG(setup_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'memory', name: 'plc-icon-memory', image: `url('${ImageRenderer.renderSVG(memory_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'datablocks', name: 'plc-icon-datablocks', image: `url('${ImageRenderer.renderSVG(datablocks_icon_source)}')` })
+const datablock_icon_source = {
+    width: 24,
+    height: 24,
+    data: `
+        <ellipse cx="12" cy="6" rx="8" ry="3" fill="#C586C0" opacity="0.25"/>
+        <ellipse cx="12" cy="6" rx="8" ry="3" fill="none" stroke="#C586C0" stroke-width="1.4"/>
+        <path d="M4 6 v12" stroke="#C586C0" stroke-width="1.4" fill="none"/>
+        <path d="M20 6 v12" stroke="#C586C0" stroke-width="1.4" fill="none"/>
+        <ellipse cx="12" cy="18" rx="8" ry="3" fill="#C586C0" opacity="0.15"/>
+        <path d="M4 18 a8 3 0 0 0 16 0" stroke="#C586C0" stroke-width="1.4" fill="none"/>
+    `
+}
+await icon_dealer.importIcon({ type: 'datablock', name: 'plc-icon-datablock', image: `url('${ImageRenderer.renderSVG(datablock_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'add', name: 'plc-icon-add', image: `url('${ImageRenderer.renderSVG(plus_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'delete', name: 'plc-icon-delete', image: `url('${ImageRenderer.renderSVG(delete_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'download', name: 'plc-icon-download', image: `url('${ImageRenderer.renderSVG(download_icon_source)}')` })

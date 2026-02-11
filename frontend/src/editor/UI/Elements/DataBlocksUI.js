@@ -317,10 +317,12 @@ export default class DataBlocksUI {
         const sizeStr = totalSize > 0 ? `${totalSize}B` : ''
         const allocStatus = deviceEntry ? '' : ' <span class="db-not-allocated">(not allocated)</span>'
 
+        const pathStr = db.path && db.path !== '/' ? `<span class="db-path">${this._escapeHTML(db.path)}/</span>` : ''
+
         headerTd.innerHTML = /*HTML*/`
             <span class="section-chevron">${chevron}</span>
             <span class="db-title">DB${db.id}</span>
-            <span class="db-name">${this._escapeHTML(db.name || '')}</span>
+            ${pathStr}<span class="db-name">${this._escapeHTML(db.name || '')}</span>
             <span class="db-address">${addressStr} ${sizeStr}${allocStatus}</span>
             <span class="section-count">(${db.fields.length} field${db.fields.length !== 1 ? 's' : ''})</span>
             <span class="db-header-actions">
@@ -550,6 +552,7 @@ export default class DataBlocksUI {
         const newDB = {
             id: this._nextDBId(),
             name: `DataBlock${dbs.length + 1}`,
+            path: '/',
             fields: [],
             comment: '',
         }
@@ -603,10 +606,11 @@ export default class DataBlocksUI {
     _renameDB(db) {
         if (this.locked) return
         Popup.form({
-            title: 'Rename Data Block',
-            description: `Rename DB${db.id}`,
+            title: 'Edit Data Block',
+            description: `Edit DB${db.id}`,
             inputs: [
                 { type: 'text', name: 'name', label: 'Name', value: db.name || '' },
+                { type: 'text', name: 'path', label: 'Path', value: db.path || '/' },
             ],
             buttons: [
                 { text: 'Save', value: 'save', background: '#007bff', color: 'white' },
@@ -615,6 +619,12 @@ export default class DataBlocksUI {
         }).then(result => {
             if (!result || result === 'cancel') return
             if (result.name !== undefined) db.name = result.name
+            if (result.path !== undefined) {
+                let p = result.path.trim() || '/'
+                if (p !== '/' && !p.startsWith('/')) p = '/' + p
+                if (p !== '/' && p.endsWith('/')) p = p.slice(0, -1)
+                db.path = p
+            }
             this._onDataChanged()
             this.renderTable()
         })

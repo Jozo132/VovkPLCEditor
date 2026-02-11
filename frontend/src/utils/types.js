@@ -59,6 +59,7 @@ export let PLC_DataBlockField
  * @typedef {{
  *     id: number,
  *     name: string,
+ *     path?: string,
  *     address?: number,
  *     fields: PLC_DataBlockField[],
  *     comment?: string,

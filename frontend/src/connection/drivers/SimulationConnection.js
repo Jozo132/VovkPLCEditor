@@ -2,7 +2,7 @@ import ConnectionBase from "../ConnectionBase.js";
 import { PLCEditor } from "../../utils/types.js";
 import { ensureOffsets } from "../../utils/offsets.js";
 
-/** @typedef { import('../../wasm/VovkPLC.js').VovkPLC_class } VovkPLC_class */
+/** @typedef { import('../../wasm/VovkPLC.js').default } VovkPLC_class */
 
 export default class SimulationConnection extends ConnectionBase {
     deviceInfo = null
