@@ -4673,9 +4673,9 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         // Live mode toggle options (only if there's a symbol)
         if (live && typeof symbol !== 'undefined') {
           menuItems.push(
-            { type: 'item', name: 'toggle', label: 'Toggle' },
-            { type: 'item', name: 'set_on', label: 'Set ON' },
-            { type: 'item', name: 'set_off', label: 'Set OFF' },
+            { type: 'item', name: 'toggle', label: 'Toggle', className: `plc-icon ${getIconType('ladder-toggle')}` },
+            { type: 'item', name: 'set_on', label: 'Set ON', className: `plc-icon ${getIconType('ladder-toggle')}` },
+            { type: 'item', name: 'set_off', label: 'Set OFF', className: `plc-icon ${getIconType('ladder-toggle')}` },
             { type: 'separator' }
           )
         }
@@ -4687,63 +4687,63 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
         if (edit && !blockAtPosition) {
           menuItems.push(
             {
-              type: 'submenu', name: 'insert', label: 'Insert', items: [
+              type: 'submenu', name: 'insert', label: 'Insert', className: `plc-icon ${getIconType('ladder-insert')}`, items: [
                 {
                   type: 'submenu', name: 'insert_contacts', label: 'Contacts', className: `plc-icon ${getIconType('ladder-contact')}`, items: [
-                    { type: 'item', name: 'insert_contact', label: 'Contact (NO)' },
-                    { type: 'item', name: 'insert_contact_nc', label: 'Contact (NC)' },
-                    { type: 'item', name: 'insert_contact_rising', label: 'Rising Edge (P)' },
-                    { type: 'item', name: 'insert_contact_falling', label: 'Falling Edge (N)' },
+                    { type: 'item', name: 'insert_contact', label: 'Contact (NO)', className: `plc-icon ${getIconType('ladder-contact-no')}` },
+                    { type: 'item', name: 'insert_contact_nc', label: 'Contact (NC)', className: `plc-icon ${getIconType('ladder-contact-nc')}` },
+                    { type: 'item', name: 'insert_contact_rising', label: 'Rising Edge (P)', className: `plc-icon ${getIconType('ladder-contact-rising')}` },
+                    { type: 'item', name: 'insert_contact_falling', label: 'Falling Edge (N)', className: `plc-icon ${getIconType('ladder-contact-falling')}` },
                   ]
                 },
                 {
                   type: 'submenu', name: 'insert_coils', label: 'Coils', className: `plc-icon ${getIconType('ladder-coil')}`, items: [
-                    { type: 'item', name: 'insert_coil', label: 'Coil (=)' },
-                    { type: 'item', name: 'insert_coil_inverted', label: 'Inverted Coil (/)' },
-                    { type: 'item', name: 'insert_coil_set', label: 'Set Coil (S)' },
-                    { type: 'item', name: 'insert_coil_reset', label: 'Reset Coil (R)' },
+                    { type: 'item', name: 'insert_coil', label: 'Coil (=)', className: `plc-icon ${getIconType('ladder-coil-assign')}` },
+                    { type: 'item', name: 'insert_coil_inverted', label: 'Inverted Coil (/)', className: `plc-icon ${getIconType('ladder-coil-inverted')}` },
+                    { type: 'item', name: 'insert_coil_set', label: 'Set Coil (S)', className: `plc-icon ${getIconType('ladder-coil-set')}` },
+                    { type: 'item', name: 'insert_coil_reset', label: 'Reset Coil (R)', className: `plc-icon ${getIconType('ladder-coil-reset')}` },
                   ]
                 },
                 {
                   type: 'submenu', name: 'insert_timers', label: 'Timers', className: `plc-icon ${getIconType('ladder-timer')}`, items: [
-                    { type: 'item', name: 'insert_timer_ton', label: 'TON (On Delay)' },
-                    { type: 'item', name: 'insert_timer_tof', label: 'TOF (Off Delay)' },
-                    { type: 'item', name: 'insert_timer_tp', label: 'TP (Pulse)' },
+                    { type: 'item', name: 'insert_timer_ton', label: 'TON (On Delay)', className: `plc-icon ${getIconType('ladder-timer-ton')}` },
+                    { type: 'item', name: 'insert_timer_tof', label: 'TOF (Off Delay)', className: `plc-icon ${getIconType('ladder-timer-tof')}` },
+                    { type: 'item', name: 'insert_timer_tp', label: 'TP (Pulse)', className: `plc-icon ${getIconType('ladder-timer-tp')}` },
                   ]
                 },
                 {
                   type: 'submenu', name: 'insert_counters', label: 'Counters', className: `plc-icon ${getIconType('ladder-counter')}`, items: [
-                    { type: 'item', name: 'insert_counter_u', label: 'CTU (Count Up)' },
-                    { type: 'item', name: 'insert_counter_d', label: 'CTD (Count Down)' },
+                    { type: 'item', name: 'insert_counter_u', label: 'CTU (Count Up)', className: `plc-icon ${getIconType('ladder-counter-ctu')}` },
+                    { type: 'item', name: 'insert_counter_d', label: 'CTD (Count Down)', className: `plc-icon ${getIconType('ladder-counter-ctd')}` },
                   ]
                 },
                 {
                   type: 'submenu', name: 'insert_math', label: 'Math Operations', className: `plc-icon ${getIconType('ladder-math')}`, items: [
-                    { type: 'item', name: 'insert_fb_add', label: 'ADD (Addition)' },
-                    { type: 'item', name: 'insert_fb_sub', label: 'SUB (Subtraction)' },
-                    { type: 'item', name: 'insert_fb_mul', label: 'MUL (Multiply)' },
-                    { type: 'item', name: 'insert_fb_div', label: 'DIV (Divide)' },
-                    { type: 'item', name: 'insert_fb_mod', label: 'MOD (Modulo)' },
+                    { type: 'item', name: 'insert_fb_add', label: 'ADD (Addition)', className: `plc-icon ${getIconType('ladder-fb-add')}` },
+                    { type: 'item', name: 'insert_fb_sub', label: 'SUB (Subtraction)', className: `plc-icon ${getIconType('ladder-fb-sub')}` },
+                    { type: 'item', name: 'insert_fb_mul', label: 'MUL (Multiply)', className: `plc-icon ${getIconType('ladder-fb-mul')}` },
+                    { type: 'item', name: 'insert_fb_div', label: 'DIV (Divide)', className: `plc-icon ${getIconType('ladder-fb-div')}` },
+                    { type: 'item', name: 'insert_fb_mod', label: 'MOD (Modulo)', className: `plc-icon ${getIconType('ladder-fb-mod')}` },
                     { type: 'separator' },
-                    { type: 'item', name: 'insert_fb_neg', label: 'NEG (Negate)' },
-                    { type: 'item', name: 'insert_fb_abs', label: 'ABS (Absolute)' },
-                    { type: 'item', name: 'insert_fb_inc', label: 'INC (Increment)' },
-                    { type: 'item', name: 'insert_fb_dec', label: 'DEC (Decrement)' },
+                    { type: 'item', name: 'insert_fb_neg', label: 'NEG (Negate)', className: `plc-icon ${getIconType('ladder-fb-neg')}` },
+                    { type: 'item', name: 'insert_fb_abs', label: 'ABS (Absolute)', className: `plc-icon ${getIconType('ladder-fb-abs')}` },
+                    { type: 'item', name: 'insert_fb_inc', label: 'INC (Increment)', className: `plc-icon ${getIconType('ladder-fb-inc')}` },
+                    { type: 'item', name: 'insert_fb_dec', label: 'DEC (Decrement)', className: `plc-icon ${getIconType('ladder-fb-dec')}` },
                   ]
                 },
                 {
                   type: 'submenu', name: 'insert_compare', label: 'Compare Operations', className: `plc-icon ${getIconType('ladder-compare')}`, items: [
-                    { type: 'item', name: 'insert_fb_cmp_eq', label: 'EQ (Equal)' },
-                    { type: 'item', name: 'insert_fb_cmp_neq', label: 'NEQ (Not Equal)' },
-                    { type: 'item', name: 'insert_fb_cmp_gt', label: 'GT (Greater Than)' },
-                    { type: 'item', name: 'insert_fb_cmp_lt', label: 'LT (Less Than)' },
-                    { type: 'item', name: 'insert_fb_cmp_gte', label: 'GTE (Greater or Equal)' },
-                    { type: 'item', name: 'insert_fb_cmp_lte', label: 'LTE (Less or Equal)' },
+                    { type: 'item', name: 'insert_fb_cmp_eq', label: 'EQ (Equal)', className: `plc-icon ${getIconType('ladder-cmp-eq')}` },
+                    { type: 'item', name: 'insert_fb_cmp_neq', label: 'NEQ (Not Equal)', className: `plc-icon ${getIconType('ladder-cmp-neq')}` },
+                    { type: 'item', name: 'insert_fb_cmp_gt', label: 'GT (Greater Than)', className: `plc-icon ${getIconType('ladder-cmp-gt')}` },
+                    { type: 'item', name: 'insert_fb_cmp_lt', label: 'LT (Less Than)', className: `plc-icon ${getIconType('ladder-cmp-lt')}` },
+                    { type: 'item', name: 'insert_fb_cmp_gte', label: 'GTE (Greater or Equal)', className: `plc-icon ${getIconType('ladder-cmp-gte')}` },
+                    { type: 'item', name: 'insert_fb_cmp_lte', label: 'LTE (Less or Equal)', className: `plc-icon ${getIconType('ladder-cmp-lte')}` },
                   ]
                 },
                 {
                   type: 'submenu', name: 'insert_move', label: 'Move/Transfer', className: `plc-icon ${getIconType('ladder-move')}`, items: [
-                    { type: 'item', name: 'insert_fb_move', label: 'MOVE (Transfer)' },
+                    { type: 'item', name: 'insert_fb_move', label: 'MOVE (Transfer)', className: `plc-icon ${getIconType('ladder-fb-move')}` },
                   ]
                 },
               ]
@@ -4867,7 +4867,7 @@ function initializeEventHandlers(editor, ladder, canvas, style) {
 
         menuItems.push(
           { type: 'separator' },
-          { type: 'item', name: 'properties', label: 'Properties' }
+          { type: 'item', name: 'properties', label: 'Properties', className: `plc-icon ${getIconType('ladder-properties')}` }
         )
 
         return menuItems

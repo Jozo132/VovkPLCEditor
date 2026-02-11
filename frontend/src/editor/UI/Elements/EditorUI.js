@@ -96,10 +96,10 @@ export default class EditorUI {
                 items.push(
                     { type: 'separator' },
                     { type: 'item', name: 'edit', label: 'Edit' },
-                    { type: 'item', name: 'delete', label: 'Delete', disabled: isMonitoring },
+                    { type: 'item', name: 'delete', label: 'Delete', className: `plc-icon ${getIconType('delete')}`, disabled: isMonitoring },
                     { type: 'separator' },
-                    { type: 'item', name: 'copy', label: 'Copy' },
-                    { type: 'item', name: 'paste', label: 'Paste', disabled: isMonitoring },
+                    { type: 'item', name: 'copy', label: 'Copy', className: `plc-icon ${getIconType('copy')}` },
+                    { type: 'item', name: 'paste', label: 'Paste', className: `plc-icon ${getIconType('paste')}`, disabled: isMonitoring },
                 )
 
                 // Add "View Logic as ..." options for compilable blocks

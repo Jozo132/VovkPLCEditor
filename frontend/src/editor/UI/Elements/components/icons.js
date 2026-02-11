@@ -310,6 +310,277 @@ const ladder_move_icon_source = {
     `
 }
 
+// ── Contact variants ──
+const ladder_contact_no_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <line stroke="#3AD" stroke-width="2" x1="2" y1="12" x2="7" y2="12"/>
+        <line stroke="#3AD" stroke-width="2" x1="7" y1="6" x2="7" y2="18"/>
+        <line stroke="#3AD" stroke-width="2" x1="17" y1="6" x2="17" y2="18"/>
+        <line stroke="#3AD" stroke-width="2" x1="17" y1="12" x2="22" y2="12"/>
+    `
+}
+const ladder_contact_nc_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <line stroke="#3AD" stroke-width="2" x1="2" y1="12" x2="7" y2="12"/>
+        <line stroke="#3AD" stroke-width="2" x1="7" y1="6" x2="7" y2="18"/>
+        <line stroke="#3AD" stroke-width="2" x1="17" y1="6" x2="17" y2="18"/>
+        <line stroke="#3AD" stroke-width="2" x1="17" y1="12" x2="22" y2="12"/>
+        <line stroke="#3AD" stroke-width="1.5" x1="10" y1="17" x2="14" y2="7"/>
+    `
+}
+const ladder_contact_rising_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <line stroke="#3AD" stroke-width="2" x1="2" y1="12" x2="7" y2="12"/>
+        <line stroke="#3AD" stroke-width="2" x1="7" y1="6" x2="7" y2="18"/>
+        <line stroke="#3AD" stroke-width="2" x1="17" y1="6" x2="17" y2="18"/>
+        <line stroke="#3AD" stroke-width="2" x1="17" y1="12" x2="22" y2="12"/>
+        <text x="12" y="15" text-anchor="middle" fill="#3AD" font-size="9" font-weight="bold" font-family="sans-serif">P</text>
+    `
+}
+const ladder_contact_falling_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <line stroke="#3AD" stroke-width="2" x1="2" y1="12" x2="7" y2="12"/>
+        <line stroke="#3AD" stroke-width="2" x1="7" y1="6" x2="7" y2="18"/>
+        <line stroke="#3AD" stroke-width="2" x1="17" y1="6" x2="17" y2="18"/>
+        <line stroke="#3AD" stroke-width="2" x1="17" y1="12" x2="22" y2="12"/>
+        <text x="12" y="15" text-anchor="middle" fill="#3AD" font-size="9" font-weight="bold" font-family="sans-serif">N</text>
+    `
+}
+
+// ── Coil variants ──
+const ladder_coil_assign_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <line stroke="#F93" stroke-width="2" x1="2" y1="12" x2="7" y2="12"/>
+        <circle fill="none" stroke="#F93" stroke-width="2" cx="12" cy="12" r="5"/>
+        <line stroke="#F93" stroke-width="2" x1="17" y1="12" x2="22" y2="12"/>
+    `
+}
+const ladder_coil_inverted_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <line stroke="#F93" stroke-width="2" x1="2" y1="12" x2="7" y2="12"/>
+        <circle fill="none" stroke="#F93" stroke-width="2" cx="12" cy="12" r="5"/>
+        <line stroke="#F93" stroke-width="2" x1="17" y1="12" x2="22" y2="12"/>
+        <line stroke="#F93" stroke-width="1.5" x1="10" y1="16" x2="14" y2="8"/>
+    `
+}
+const ladder_coil_set_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <line stroke="#F93" stroke-width="2" x1="2" y1="12" x2="7" y2="12"/>
+        <circle fill="none" stroke="#F93" stroke-width="2" cx="12" cy="12" r="5"/>
+        <line stroke="#F93" stroke-width="2" x1="17" y1="12" x2="22" y2="12"/>
+        <text x="12" y="15" text-anchor="middle" fill="#F93" font-size="9" font-weight="bold" font-family="sans-serif">S</text>
+    `
+}
+const ladder_coil_reset_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <line stroke="#F93" stroke-width="2" x1="2" y1="12" x2="7" y2="12"/>
+        <circle fill="none" stroke="#F93" stroke-width="2" cx="12" cy="12" r="5"/>
+        <line stroke="#F93" stroke-width="2" x1="17" y1="12" x2="22" y2="12"/>
+        <text x="12" y="15" text-anchor="middle" fill="#F93" font-size="9" font-weight="bold" font-family="sans-serif">R</text>
+    `
+}
+
+// ── Timer variants ──
+const ladder_timer_ton_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#9C7" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <text x="12" y="15" text-anchor="middle" fill="#9C7" font-size="8" font-weight="bold" font-family="Consolas, monospace">TON</text>
+    `
+}
+const ladder_timer_tof_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#9C7" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <text x="12" y="15" text-anchor="middle" fill="#9C7" font-size="8" font-weight="bold" font-family="Consolas, monospace">TOF</text>
+    `
+}
+const ladder_timer_tp_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#9C7" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <text x="12" y="15" text-anchor="middle" fill="#9C7" font-size="9" font-weight="bold" font-family="Consolas, monospace">TP</text>
+    `
+}
+
+// ── Counter variants ──
+const ladder_counter_ctu_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#C7A" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <text x="12" y="15" text-anchor="middle" fill="#C7A" font-size="8" font-weight="bold" font-family="Consolas, monospace">CTU</text>
+    `
+}
+const ladder_counter_ctd_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#C7A" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <text x="12" y="15" text-anchor="middle" fill="#C7A" font-size="8" font-weight="bold" font-family="Consolas, monospace">CTD</text>
+    `
+}
+
+// ── Math operation variants ──
+const ladder_fb_add_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#7CF" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <line stroke="#7CF" stroke-width="2" x1="8" y1="12" x2="16" y2="12"/>
+        <line stroke="#7CF" stroke-width="2" x1="12" y1="8" x2="12" y2="16"/>
+    `
+}
+const ladder_fb_sub_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#7CF" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <line stroke="#7CF" stroke-width="2" x1="8" y1="12" x2="16" y2="12"/>
+    `
+}
+const ladder_fb_mul_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#7CF" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <line stroke="#7CF" stroke-width="2" x1="8" y1="8" x2="16" y2="16"/>
+        <line stroke="#7CF" stroke-width="2" x1="16" y1="8" x2="8" y2="16"/>
+    `
+}
+const ladder_fb_div_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#7CF" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <line stroke="#7CF" stroke-width="2" x1="8" y1="14" x2="16" y2="14"/>
+        <circle fill="#7CF" cx="12" cy="10" r="1.5"/>
+        <circle fill="#7CF" cx="12" cy="18" r="1.5"/>
+    `
+}
+const ladder_fb_mod_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#7CF" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <text x="12" y="16" text-anchor="middle" fill="#7CF" font-size="11" font-weight="bold" font-family="sans-serif">%</text>
+    `
+}
+const ladder_fb_neg_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#7CF" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <text x="12" y="11" text-anchor="middle" fill="#7CF" font-size="9" font-weight="bold" font-family="Consolas, monospace">+</text>
+        <line x1="8" y1="13" x2="16" y2="13" stroke="#7CF" stroke-width="1"/>
+        <text x="12" y="20" text-anchor="middle" fill="#7CF" font-size="10" font-weight="bold" font-family="Consolas, monospace">&#x2212;</text>
+    `
+}
+const ladder_fb_abs_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#7CF" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <text x="12" y="15" text-anchor="middle" fill="#7CF" font-size="8" font-weight="bold" font-family="Consolas, monospace">ABS</text>
+    `
+}
+const ladder_fb_inc_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#7CF" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <text x="12" y="15" text-anchor="middle" fill="#7CF" font-size="9" font-weight="bold" font-family="Consolas, monospace">++</text>
+    `
+}
+const ladder_fb_dec_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#7CF" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <text x="12" y="16" text-anchor="middle" fill="#7CF" font-size="12" font-weight="bold" font-family="Consolas, monospace">--</text>
+    `
+}
+
+// ── Compare operation variants ──
+const ladder_cmp_eq_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#FA7" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <line stroke="#FA7" stroke-width="2" x1="8" y1="10" x2="16" y2="10"/>
+        <line stroke="#FA7" stroke-width="2" x1="8" y1="14" x2="16" y2="14"/>
+    `
+}
+const ladder_cmp_neq_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#FA7" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <line stroke="#FA7" stroke-width="2" x1="8" y1="10" x2="16" y2="10"/>
+        <line stroke="#FA7" stroke-width="2" x1="8" y1="14" x2="16" y2="14"/>
+        <line stroke="#FA7" stroke-width="1.5" x1="10" y1="17" x2="14" y2="7"/>
+    `
+}
+const ladder_cmp_gt_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#FA7" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <polyline fill="none" stroke="#FA7" stroke-width="2" points="9,8 15,12 9,16"/>
+    `
+}
+const ladder_cmp_lt_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#FA7" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <polyline fill="none" stroke="#FA7" stroke-width="2" points="15,8 9,12 15,16"/>
+    `
+}
+const ladder_cmp_gte_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#FA7" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <polyline fill="none" stroke="#FA7" stroke-width="2" points="9,7 15,11 9,15"/>
+        <line stroke="#FA7" stroke-width="1.5" x1="9" y1="18" x2="15" y2="18"/>
+    `
+}
+const ladder_cmp_lte_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#FA7" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <polyline fill="none" stroke="#FA7" stroke-width="2" points="15,7 9,11 15,15"/>
+        <line stroke="#FA7" stroke-width="1.5" x1="9" y1="18" x2="15" y2="18"/>
+    `
+}
+
+// ── Move variant ──
+const ladder_fb_move_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#A9F" stroke-width="1.5" x="3" y="3" width="18" height="18" rx="2"/>
+        <line stroke="#A9F" stroke-width="2" x1="8" y1="12" x2="16" y2="12"/>
+        <polyline fill="none" stroke="#A9F" stroke-width="2" points="13,9 16,12 13,15"/>
+    `
+}
+
+// ── Misc context menu icons ──
+const ladder_insert_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <line stroke="#ddd" stroke-width="2" x1="12" y1="5" x2="12" y2="19"/>
+        <line stroke="#ddd" stroke-width="2" x1="5" y1="12" x2="19" y2="12"/>
+    `
+}
+const ladder_properties_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <circle fill="none" stroke="#ddd" stroke-width="2" cx="12" cy="12" r="8"/>
+        <line stroke="#ddd" stroke-width="2" x1="12" y1="8" x2="12" y2="13"/>
+        <circle fill="#ddd" cx="12" cy="16" r="1.2"/>
+    `
+}
+const ladder_toggle_icon_source = {
+    width: 24, height: 24,
+    data: `
+        <rect fill="none" stroke="#4EC9B0" stroke-width="1.5" x="3" y="7" width="18" height="10" rx="5"/>
+        <circle fill="#4EC9B0" cx="16" cy="12" r="3.5"/>
+    `
+}
+
 // Project Properties icon - document with lines
 const project_properties_icon_source = {
     width: 24,
@@ -392,6 +663,46 @@ await icon_dealer.importIcon({ type: 'ladder-counter', name: 'plc-icon-ladder-co
 await icon_dealer.importIcon({ type: 'ladder-math', name: 'plc-icon-ladder-math', image: `url('${ImageRenderer.renderSVG(ladder_math_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'ladder-compare', name: 'plc-icon-ladder-compare', image: `url('${ImageRenderer.renderSVG(ladder_compare_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'ladder-move', name: 'plc-icon-ladder-move', image: `url('${ImageRenderer.renderSVG(ladder_move_icon_source)}')` })
+// Contact variants
+await icon_dealer.importIcon({ type: 'ladder-contact-no', name: 'plc-icon-ladder-contact-no', image: `url('${ImageRenderer.renderSVG(ladder_contact_no_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-contact-nc', name: 'plc-icon-ladder-contact-nc', image: `url('${ImageRenderer.renderSVG(ladder_contact_nc_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-contact-rising', name: 'plc-icon-ladder-contact-rising', image: `url('${ImageRenderer.renderSVG(ladder_contact_rising_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-contact-falling', name: 'plc-icon-ladder-contact-falling', image: `url('${ImageRenderer.renderSVG(ladder_contact_falling_icon_source)}')` })
+// Coil variants
+await icon_dealer.importIcon({ type: 'ladder-coil-assign', name: 'plc-icon-ladder-coil-assign', image: `url('${ImageRenderer.renderSVG(ladder_coil_assign_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-coil-inverted', name: 'plc-icon-ladder-coil-inverted', image: `url('${ImageRenderer.renderSVG(ladder_coil_inverted_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-coil-set', name: 'plc-icon-ladder-coil-set', image: `url('${ImageRenderer.renderSVG(ladder_coil_set_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-coil-reset', name: 'plc-icon-ladder-coil-reset', image: `url('${ImageRenderer.renderSVG(ladder_coil_reset_icon_source)}')` })
+// Timer variants
+await icon_dealer.importIcon({ type: 'ladder-timer-ton', name: 'plc-icon-ladder-timer-ton', image: `url('${ImageRenderer.renderSVG(ladder_timer_ton_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-timer-tof', name: 'plc-icon-ladder-timer-tof', image: `url('${ImageRenderer.renderSVG(ladder_timer_tof_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-timer-tp', name: 'plc-icon-ladder-timer-tp', image: `url('${ImageRenderer.renderSVG(ladder_timer_tp_icon_source)}')` })
+// Counter variants
+await icon_dealer.importIcon({ type: 'ladder-counter-ctu', name: 'plc-icon-ladder-counter-ctu', image: `url('${ImageRenderer.renderSVG(ladder_counter_ctu_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-counter-ctd', name: 'plc-icon-ladder-counter-ctd', image: `url('${ImageRenderer.renderSVG(ladder_counter_ctd_icon_source)}')` })
+// Math variants
+await icon_dealer.importIcon({ type: 'ladder-fb-add', name: 'plc-icon-ladder-fb-add', image: `url('${ImageRenderer.renderSVG(ladder_fb_add_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-fb-sub', name: 'plc-icon-ladder-fb-sub', image: `url('${ImageRenderer.renderSVG(ladder_fb_sub_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-fb-mul', name: 'plc-icon-ladder-fb-mul', image: `url('${ImageRenderer.renderSVG(ladder_fb_mul_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-fb-div', name: 'plc-icon-ladder-fb-div', image: `url('${ImageRenderer.renderSVG(ladder_fb_div_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-fb-mod', name: 'plc-icon-ladder-fb-mod', image: `url('${ImageRenderer.renderSVG(ladder_fb_mod_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-fb-neg', name: 'plc-icon-ladder-fb-neg', image: `url('${ImageRenderer.renderSVG(ladder_fb_neg_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-fb-abs', name: 'plc-icon-ladder-fb-abs', image: `url('${ImageRenderer.renderSVG(ladder_fb_abs_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-fb-inc', name: 'plc-icon-ladder-fb-inc', image: `url('${ImageRenderer.renderSVG(ladder_fb_inc_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-fb-dec', name: 'plc-icon-ladder-fb-dec', image: `url('${ImageRenderer.renderSVG(ladder_fb_dec_icon_source)}')` })
+// Compare variants
+await icon_dealer.importIcon({ type: 'ladder-cmp-eq', name: 'plc-icon-ladder-cmp-eq', image: `url('${ImageRenderer.renderSVG(ladder_cmp_eq_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-cmp-neq', name: 'plc-icon-ladder-cmp-neq', image: `url('${ImageRenderer.renderSVG(ladder_cmp_neq_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-cmp-gt', name: 'plc-icon-ladder-cmp-gt', image: `url('${ImageRenderer.renderSVG(ladder_cmp_gt_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-cmp-lt', name: 'plc-icon-ladder-cmp-lt', image: `url('${ImageRenderer.renderSVG(ladder_cmp_lt_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-cmp-gte', name: 'plc-icon-ladder-cmp-gte', image: `url('${ImageRenderer.renderSVG(ladder_cmp_gte_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-cmp-lte', name: 'plc-icon-ladder-cmp-lte', image: `url('${ImageRenderer.renderSVG(ladder_cmp_lte_icon_source)}')` })
+// Move variant
+await icon_dealer.importIcon({ type: 'ladder-fb-move', name: 'plc-icon-ladder-fb-move', image: `url('${ImageRenderer.renderSVG(ladder_fb_move_icon_source)}')` })
+// Misc context menu
+await icon_dealer.importIcon({ type: 'ladder-insert', name: 'plc-icon-ladder-insert', image: `url('${ImageRenderer.renderSVG(ladder_insert_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-properties', name: 'plc-icon-ladder-properties', image: `url('${ImageRenderer.renderSVG(ladder_properties_icon_source)}')` })
+await icon_dealer.importIcon({ type: 'ladder-toggle', name: 'plc-icon-ladder-toggle', image: `url('${ImageRenderer.renderSVG(ladder_toggle_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'project-properties', name: 'plc-icon-project-properties', image: `url('${ImageRenderer.renderSVG(project_properties_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'cut', name: 'plc-icon-cut', image: `url('${ImageRenderer.renderSVG(cut_icon_source)}')` })
 await icon_dealer.importIcon({ type: 'copy', name: 'plc-icon-copy', image: `url('${ImageRenderer.renderSVG(copy_icon_source)}')` })
