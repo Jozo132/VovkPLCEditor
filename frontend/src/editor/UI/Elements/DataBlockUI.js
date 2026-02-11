@@ -34,6 +34,8 @@ export default class DataBlockUI {
     _live_color_on = '#1fba5f'
     _live_color_off = 'rgba(200, 200, 200, 0.5)'
     _fetcherId = ''
+    _autoConfirmWrite = false
+    _inlineInput = null
 
     /** Device-reported DB entries: Map<db_number, { offset: number, size: number }> */
     _deviceDBEntries = new Map()
@@ -174,9 +176,7 @@ export default class DataBlockUI {
                     else if (action === 'add-field-above' && fieldIdx >= 0) this.addField(db, fieldIdx)
                     else if (action === 'add-field-below' && fieldIdx >= 0) this.addField(db, fieldIdx + 1)
                     else if (action === 'delete-field' && fieldIdx >= 0) {
-                        db.fields.splice(fieldIdx, 1)
-                        this._onDataChanged()
-                        this.renderTable()
+                        this._confirmDeleteField(db, fieldIdx)
                     }
                     else if (action === 'move-up' && fieldIdx > 0) {
                         const [moved] = db.fields.splice(fieldIdx, 1)
@@ -418,9 +418,7 @@ export default class DataBlockUI {
             delBtn.textContent = '✕'
             delBtn.title = 'Delete field'
             delBtn.addEventListener('click', () => {
-                db.fields.splice(fieldIdx, 1)
-                this._onDataChanged()
-                this.renderTable()
+                this._confirmDeleteField(db, fieldIdx)
             })
             delTd.appendChild(delBtn)
         }
@@ -510,6 +508,55 @@ export default class DataBlockUI {
         }, 0)
     }
 
+    _confirmDeleteField(db, fieldIdx) {
+        const field = db.fields[fieldIdx]
+        if (!field) return
+        const fieldRef = `DB${db.id}.${field.name}`
+        // Scan for references using both the full qualified name and just the field name
+        const refs = [
+            ...this.master.scanReferences(fieldRef),
+            ...(field.name ? this.master.scanReferences(field.name) : []),
+        ]
+        // Deduplicate by program+block+line
+        const seen = new Set()
+        const uniqueRefs = refs.filter(r => {
+            const key = `${r.program}|${r.block}|${r.line || ''}|${r.x || ''}|${r.y || ''}`
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+        })
+
+        if (uniqueRefs.length > 0) {
+            let desc = `Field <b>"${fieldRef}"</b> is referenced in <b>${uniqueRefs.length}</b> place${uniqueRefs.length > 1 ? 's' : ''}:<br><br>`
+            desc += '<div style="max-height:200px;overflow-y:auto;font-size:12px;background:#1a1a1a;padding:6px 8px;border-radius:4px;margin-bottom:8px;">'
+            for (const ref of uniqueRefs.slice(0, 50)) {
+                const loc = ref.line ? `line ${ref.line}` : ref.x !== undefined ? `${ref.x},${ref.y}` : ''
+                desc += `<div style="padding:2px 0;border-bottom:1px solid #333;"><span style="color:#aaa;">${ref.program}</span> / <span style="color:#888;">${ref.block}</span>${loc ? ` : <span style="color:#666;">${loc}</span>` : ''}<br><code style="color:#555;font-size:11px;">${ref.preview}</code></div>`
+            }
+            if (uniqueRefs.length > 50) desc += `<div style="color:#888;padding-top:4px;">...and ${uniqueRefs.length - 50} more</div>`
+            desc += '</div>'
+
+            Popup.form({
+                title: 'Delete Field',
+                description: desc,
+                inputs: [],
+                buttons: [
+                    { text: 'Delete Anyway', value: 'delete', background: '#d33', color: 'white' },
+                    { text: 'Cancel', value: 'cancel' },
+                ],
+            }).then(result => {
+                if (result !== 'delete') return
+                db.fields.splice(fieldIdx, 1)
+                this._onDataChanged()
+                this.renderTable()
+            })
+        } else {
+            db.fields.splice(fieldIdx, 1)
+            this._onDataChanged()
+            this.renderTable()
+        }
+    }
+
     // ── Live monitoring ──
 
     _applyLiveCellState(td, live) {
@@ -583,48 +630,111 @@ export default class DataBlockUI {
                 const newVal = currentVal ? 0 : 1
                 await connection.writeMemoryAreaMasked(absAddress, [newVal], [1])
             } else {
-                // Show popup to enter new value
+                // Show inline input overlay
+                const td = this._live_cells.get(liveKey)
+                if (!td) return
+
+                // Close any existing inline input
+                this._closeInlineInput()
+
                 const live = this.live_values.get(liveKey)
                 const currentText = (typeof live === 'object' ? live?.text : String(live ?? 0)) || '0'
 
-                const result = await Popup.form({
-                    title: `Edit ${field.name}`,
-                    description: `Enter new value for DB${db.id}.${field.name} (${type})`,
-                    inputs: [
-                        { type: 'text', name: 'value', label: 'Value', value: currentText }
-                    ],
-                    buttons: [
-                        { text: 'Write', value: 'confirm', background: '#007bff', color: 'white' },
-                        { text: 'Cancel', value: 'cancel' }
-                    ]
-                })
+                // Create inline input
+                const input = document.createElement('input')
+                input.type = 'text'
+                input.className = 'db-live-inline-input'
+                input.value = currentText
+                input.style.cssText = 'width:100%;box-sizing:border-box;font-size:inherit;padding:2px 4px;background:#1a1a1a;color:#fff;border:1px solid #4daafc;outline:none;'
 
-                if (!result || result === 'cancel' || typeof result.value === 'undefined') return
+                td.textContent = ''
+                td.appendChild(input)
+                this._inlineInput = { input, td, liveKey, field, db, type, absAddress, isLittleEndian }
+                input.focus()
+                input.select()
 
-                const num = Number(result.value)
-                if (Number.isNaN(num)) return
+                const commitWrite = async (val) => {
+                    const num = Number(val)
+                    if (Number.isNaN(num)) {
+                        this._closeInlineInput()
+                        return
+                    }
 
-                const size = TYPE_SIZES[type] || 1
-                const buffer = new ArrayBuffer(size)
-                const view = new DataView(buffer)
+                    if (!this._autoConfirmWrite) {
+                        // Show confirmation popup
+                        const result = await Popup.form({
+                            title: 'Confirm Write',
+                            description: `Write value <b>${num}</b> to <b>DB${db.id}.${field.name}</b> (${type})?`,
+                            inputs: [
+                                { type: 'checkbox', name: 'autoConfirm', label: 'Auto-confirm writes for this session', value: false }
+                            ],
+                            buttons: [
+                                { text: 'Write', value: 'confirm', background: '#007bff', color: 'white' },
+                                { text: 'Cancel', value: 'cancel' }
+                            ]
+                        })
 
-                switch (type) {
-                    case 'byte': case 'u8': view.setUint8(0, num & 0xFF); break
-                    case 'i8': view.setInt8(0, num); break
-                    case 'u16': view.setUint16(0, num, isLittleEndian); break
-                    case 'i16': view.setInt16(0, num, isLittleEndian); break
-                    case 'u32': view.setUint32(0, num >>> 0, isLittleEndian); break
-                    case 'i32': view.setInt32(0, num, isLittleEndian); break
-                    case 'f32': view.setFloat32(0, num, isLittleEndian); break
-                    default: view.setUint8(0, num & 0xFF)
+                        if (!result || result === 'cancel') {
+                            this._closeInlineInput()
+                            return
+                        }
+
+                        if (result.autoConfirm) {
+                            this._autoConfirmWrite = true
+                        }
+                    }
+
+                    const size = TYPE_SIZES[type] || 1
+                    const buffer = new ArrayBuffer(size)
+                    const view = new DataView(buffer)
+
+                    switch (type) {
+                        case 'byte': case 'u8': view.setUint8(0, num & 0xFF); break
+                        case 'i8': view.setInt8(0, num); break
+                        case 'u16': view.setUint16(0, num, isLittleEndian); break
+                        case 'i16': view.setInt16(0, num, isLittleEndian); break
+                        case 'u32': view.setUint32(0, num >>> 0, isLittleEndian); break
+                        case 'i32': view.setInt32(0, num, isLittleEndian); break
+                        case 'f32': view.setFloat32(0, num, isLittleEndian); break
+                        default: view.setUint8(0, num & 0xFF)
+                    }
+
+                    const data = Array.from(new Uint8Array(buffer))
+                    await connection.writeMemoryArea(absAddress, data)
+                    this._closeInlineInput()
                 }
 
-                const data = Array.from(new Uint8Array(buffer))
-                await connection.writeMemoryArea(absAddress, data)
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault()
+                        commitWrite(input.value)
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault()
+                        this._closeInlineInput()
+                    }
+                })
+
+                input.addEventListener('blur', () => {
+                    // Delay to allow Enter keydown to fire first
+                    setTimeout(() => {
+                        if (this._inlineInput?.input === input) {
+                            this._closeInlineInput()
+                        }
+                    }, 100)
+                })
             }
         } catch (err) {
             console.error(`[DataBlockUI] Failed to write DB${db.id}.${field.name}:`, err)
         }
+    }
+
+    _closeInlineInput() {
+        if (!this._inlineInput) return
+        const { td, liveKey } = this._inlineInput
+        this._inlineInput = null
+        // Re-apply live cell state
+        const liveData = this.live_values.get(liveKey)
+        this._applyLiveCellState(td, liveData)
     }
 
     _registerMonitorRanges() {
@@ -717,5 +827,25 @@ export default class DataBlockUI {
         }
         this.renderTable()
         if (!this.hidden) this._registerMonitorRanges()
+    }
+
+    focusField(fieldName) {
+        if (!fieldName || !this.tbody) return false
+        const db = this._getDB()
+        if (!db) return false
+        const fieldIdx = db.fields.findIndex(f => f.name === fieldName)
+        if (fieldIdx < 0) return false
+        const rows = Array.from(this.tbody.querySelectorAll('tr.db-field-row'))
+        const row = rows[fieldIdx]
+        if (row) {
+            const old = this.tbody.querySelector('tr.active-row')
+            if (old) old.classList.remove('active-row')
+            row.classList.add('active-row')
+            row.scrollIntoView({ block: 'center' })
+            const input = row.querySelector('input')
+            if (input && !this.locked) input.focus()
+            return true
+        }
+        return false
     }
 }

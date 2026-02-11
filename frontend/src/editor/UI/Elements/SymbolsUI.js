@@ -277,15 +277,50 @@ export default class SymbolsUI {
         if (this.locked) return
         if (this.selectedSymbols.size === 0) return
         
-        // delete only non-readonly symbols
-        this.master.project.symbols = this.master.project.symbols.filter(s => {
-            if (this.selectedSymbols.has(s)) {
-                return !!s.readonly
+        // Collect non-readonly symbols to delete
+        const toDelete = [...this.selectedSymbols].filter(s => !s.readonly)
+        if (toDelete.length === 0) return
+
+        // Scan for references across all program blocks
+        const allRefs = []
+        for (const sym of toDelete) {
+            if (!sym.name) continue
+            const refs = this.master.scanReferences(sym.name)
+            for (const ref of refs) allRefs.push({ symbol: sym.name, ...ref })
+        }
+
+        if (allRefs.length > 0) {
+            // Build description with usage list
+            const names = toDelete.map(s => s.name).join(', ')
+            let desc = `<b>${toDelete.length}</b> symbol${toDelete.length > 1 ? 's' : ''} (${names}) ${toDelete.length > 1 ? 'are' : 'is'} referenced in <b>${allRefs.length}</b> place${allRefs.length > 1 ? 's' : ''}:<br><br>`
+            desc += '<div style="max-height:200px;overflow-y:auto;font-size:12px;background:#1a1a1a;padding:6px 8px;border-radius:4px;margin-bottom:8px;">'
+            for (const ref of allRefs.slice(0, 50)) {
+                const loc = ref.line ? `line ${ref.line}` : ref.x !== undefined ? `${ref.x},${ref.y}` : ''
+                desc += `<div style="padding:2px 0;border-bottom:1px solid #333;"><span style="color:#4daafc;">${ref.symbol}</span> &rarr; <span style="color:#aaa;">${ref.program}</span> / <span style="color:#888;">${ref.block}</span>${loc ? ` : <span style="color:#666;">${loc}</span>` : ''}<br><code style="color:#555;font-size:11px;">${ref.preview}</code></div>`
             }
-            return true
-        })
-        this.deselectAll()
-        this.renderTable()
+            if (allRefs.length > 50) desc += `<div style="color:#888;padding-top:4px;">...and ${allRefs.length - 50} more</div>`
+            desc += '</div>'
+
+            Popup.form({
+                title: 'Delete Symbols',
+                description: desc,
+                inputs: [],
+                buttons: [
+                    { text: 'Delete Anyway', value: 'delete', background: '#d33', color: 'white' },
+                    { text: 'Cancel', value: 'cancel' },
+                ],
+            }).then(result => {
+                if (result !== 'delete') return
+                this.master.project.symbols = this.master.project.symbols.filter(s => !toDelete.includes(s))
+                this.deselectAll()
+                this.renderTable()
+            })
+        } else {
+            // No references — delete directly
+            this.master.project.symbols = this.master.project.symbols.filter(s => !toDelete.includes(s))
+            this.deselectAll()
+            this.renderTable()
+        }
     }
     
     deselectAll() {
@@ -651,8 +686,7 @@ export default class SymbolsUI {
             btnDel.innerText = 'x'
             btnDel.classList.add('symbol-delete-btn')
             btnDel.addEventListener('click', () => {
-                this.master.project.symbols.splice(index, 1)
-                this.renderTable()
+                this._confirmDeleteSymbol(symbol, index)
             })
             tdDel.appendChild(btnDel)
         }
@@ -677,6 +711,42 @@ export default class SymbolsUI {
             if (input && !this.locked) input.focus()
         }
         return true
+    }
+
+    _confirmDeleteSymbol(symbol, index) {
+        if (!symbol.name) {
+            this.master.project.symbols.splice(index, 1)
+            this.renderTable()
+            return
+        }
+        const refs = this.master.scanReferences(symbol.name)
+        if (refs.length > 0) {
+            let desc = `Symbol <b>"${symbol.name}"</b> is referenced in <b>${refs.length}</b> place${refs.length > 1 ? 's' : ''}:<br><br>`
+            desc += '<div style="max-height:200px;overflow-y:auto;font-size:12px;background:#1a1a1a;padding:6px 8px;border-radius:4px;margin-bottom:8px;">'
+            for (const ref of refs.slice(0, 50)) {
+                const loc = ref.line ? `line ${ref.line}` : ref.x !== undefined ? `${ref.x},${ref.y}` : ''
+                desc += `<div style="padding:2px 0;border-bottom:1px solid #333;"><span style="color:#aaa;">${ref.program}</span> / <span style="color:#888;">${ref.block}</span>${loc ? ` : <span style="color:#666;">${loc}</span>` : ''}<br><code style="color:#555;font-size:11px;">${ref.preview}</code></div>`
+            }
+            if (refs.length > 50) desc += `<div style="color:#888;padding-top:4px;">...and ${refs.length - 50} more</div>`
+            desc += '</div>'
+
+            Popup.form({
+                title: 'Delete Symbol',
+                description: desc,
+                inputs: [],
+                buttons: [
+                    { text: 'Delete Anyway', value: 'delete', background: '#d33', color: 'white' },
+                    { text: 'Cancel', value: 'cancel' },
+                ],
+            }).then(result => {
+                if (result !== 'delete') return
+                this.master.project.symbols.splice(index, 1)
+                this.renderTable()
+            })
+        } else {
+            this.master.project.symbols.splice(index, 1)
+            this.renderTable()
+        }
     }
 
     getLiveValueText(symbol) {

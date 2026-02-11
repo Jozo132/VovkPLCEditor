@@ -2346,6 +2346,19 @@ export default class WindowManager {
         return false
     }
 
+    focusDataBlockField(dbId, fieldName) {
+        if (typeof dbId !== 'number' || !fieldName) return false
+        const windowId = `db:${dbId}`
+        this.openProgram(windowId)
+        const dbUI = this.windows.get(windowId)
+        if (dbUI && typeof dbUI.focusField === 'function') {
+            // Small delay to let the window render
+            setTimeout(() => dbUI.focusField(fieldName), 50)
+            return true
+        }
+        return false
+    }
+
     // Console Helpler
     consoleAutoOpened = false
 

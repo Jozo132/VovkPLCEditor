@@ -1448,10 +1448,31 @@ export class CanvasCodeEditor {
     // CTRL+HOVER LINK HIGHLIGHT (GO TO DEFINITION)
     // ==========================================================================
     
-    /** Resolve a word to a navigable definition target (label or symbol) */
+    /** Resolve a word to a navigable definition target (label, symbol, or datablock field) */
     _resolveDefinition(wordInfo) {
         if (!wordInfo || !wordInfo.word) return null
         
+        // Check for DB field reference: look at the broader context around the word
+        // Pattern: DB<n>.<fieldName>
+        const line = this._lines[wordInfo.line] || ''
+        // Try to extract a DB<n>.fieldName pattern that contains the current word
+        const dbFieldRe = /\bDB(\d+)\.([A-Za-z_]\w*)\b/g
+        let dbMatch
+        while ((dbMatch = dbFieldRe.exec(line))) {
+            const matchStart = dbMatch.index
+            const matchEnd = matchStart + dbMatch[0].length
+            // Check if our word overlaps with this match
+            if (wordInfo.startCol < matchEnd && wordInfo.endCol > matchStart) {
+                return {
+                    type: 'datablock',
+                    dbId: parseInt(dbMatch[1]),
+                    fieldName: dbMatch[2],
+                    fullRef: dbMatch[0],
+                    wordInfo: { ...wordInfo, startCol: matchStart, endCol: matchEnd, word: dbMatch[0] }
+                }
+            }
+        }
+
         // Check label definitions (e.g. "myLabel:" in source)
         const text = this._getText()
         const re = /^\s*([A-Za-z_]\w*):/gm
@@ -1487,9 +1508,12 @@ export class CanvasCodeEditor {
         const target = this._resolveDefinition(wordInfo)
         if (!target) { this._clearLinkHover(); return }
         
+        // Use the target's wordInfo if available (e.g. for DB references that span across '.')
+        const highlightWord = target.wordInfo || wordInfo
+        
         // Compute the offset range of the word for rendering the underline
-        const startOffset = this._getOffset(wordInfo.line, wordInfo.startCol)
-        const endOffset = this._getOffset(wordInfo.line, wordInfo.endCol)
+        const startOffset = this._getOffset(highlightWord.line, highlightWord.startCol)
+        const endOffset = this._getOffset(highlightWord.line, highlightWord.endCol)
         
         this._linkHoverTarget = target
         this._linkHighlightRange = { start: startOffset, end: endOffset }
@@ -1527,6 +1551,10 @@ export class CanvasCodeEditor {
         } else if (target.type === 'symbol') {
             if (typeof this._onGoToDefinition === 'function') {
                 this._onGoToDefinition({ type: 'symbol', name: target.name, blockId: this._blockId })
+            }
+        } else if (target.type === 'datablock') {
+            if (typeof this._onGoToDefinition === 'function') {
+                this._onGoToDefinition({ type: 'datablock', dbId: target.dbId, fieldName: target.fieldName, blockId: this._blockId })
             }
         }
     }

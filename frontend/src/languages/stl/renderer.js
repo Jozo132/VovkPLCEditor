@@ -831,6 +831,8 @@ export const stlRenderer = {
                 onGoToDefinition: payload => {
                     if (payload?.type === 'symbol' && editor.window_manager?.focusSymbolByName) {
                         editor.window_manager.focusSymbolByName(payload.name)
+                    } else if (payload?.type === 'datablock' && editor.window_manager?.focusDataBlockField) {
+                        editor.window_manager.focusDataBlockField(payload.dbId, payload.fieldName)
                     }
                 },
                 onRenameSymbol: (symbolName, event) => {

@@ -928,6 +928,66 @@ export class VovkPLCEditor {
         return { success: true, replacements }
     }
 
+    /**
+     * Scan the entire project for references to a given name (symbol or DB field).
+     * Returns a list of locations where the name is used.
+     * @param {string} searchName - The name to search for (e.g. "mySymbol", "DB1.fieldName")
+     * @returns {{ program: string, block: string, blockType: string, line?: number, col?: number, x?: number, y?: number, preview: string }[]}
+     */
+    scanReferences(searchName) {
+        if (!searchName || !this.project) return []
+        const results = []
+        const escaped = searchName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const re = new RegExp(`\\b${escaped}\\b`, 'g')
+
+        const files = this.project.files || []
+        for (const file of files) {
+            if (file.type !== 'program' || !Array.isArray(file.blocks)) continue
+            for (const block of file.blocks) {
+                const blockName = block.name || block.id || '(unnamed)'
+                // Text-based languages (STL, ST, PLCScript, ASM)
+                if (block.code) {
+                    const lines = block.code.split('\n')
+                    for (let i = 0; i < lines.length; i++) {
+                        let match
+                        re.lastIndex = 0
+                        while ((match = re.exec(lines[i])) !== null) {
+                            const preview = lines[i].trim()
+                            results.push({
+                                program: file.name || file.id,
+                                block: blockName,
+                                blockType: block.type || 'unknown',
+                                line: i + 1,
+                                col: match.index,
+                                preview: preview.length > 60 ? preview.slice(0, 57) + '...' : preview,
+                            })
+                        }
+                    }
+                }
+                // Ladder blocks store symbol refs in nodes
+                if (Array.isArray(block.nodes)) {
+                    for (const node of block.nodes) {
+                        const fields = ['symbol', 'in1', 'in2', 'out']
+                        for (const f of fields) {
+                            if (node[f] && re.test(node[f])) {
+                                re.lastIndex = 0
+                                results.push({
+                                    program: file.name || file.id,
+                                    block: blockName,
+                                    blockType: 'ladder',
+                                    x: node.x,
+                                    y: node.y,
+                                    preview: `${node.type || 'node'} [${f}=${node[f]}]`,
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return results
+    }
+
     _extractAsmAddressRefsFromCode(code, offsets) {
         const normalizedOffsets = offsets || ensureOffsets(this.project?.offsets || {})
         const refs = []

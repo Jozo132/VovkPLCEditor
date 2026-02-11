@@ -558,6 +558,29 @@ export class MiniCodeEditor {
 
         const resolveDefinition = wordInfo => {
             if (!wordInfo || !wordInfo.word) return null
+
+            // Check for DB field reference: DB<n>.<fieldName>
+            const text = ta.value
+            const lineStart = text.lastIndexOf('\n', wordInfo.start - 1) + 1
+            const lineEnd = text.indexOf('\n', wordInfo.start)
+            const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd)
+            const colOffset = wordInfo.start - lineStart
+            const dbFieldRe = /\bDB(\d+)\.([A-Za-z_]\w*)\b/g
+            let dbMatch
+            while ((dbMatch = dbFieldRe.exec(line))) {
+                const matchStart = dbMatch.index
+                const matchEnd = matchStart + dbMatch[0].length
+                if (colOffset < matchEnd && colOffset + wordInfo.word.length >= matchStart) {
+                    return {
+                        type: 'datablock',
+                        dbId: parseInt(dbMatch[1]),
+                        fieldName: dbMatch[2],
+                        fullRef: dbMatch[0],
+                        range: { word: dbMatch[0], start: lineStart + matchStart, end: lineStart + matchEnd }
+                    }
+                }
+            }
+
             const labelDefs = getLabelDefinitions()
             if (labelDefs.has(wordInfo.word)) {
                 return { type: 'label', name: wordInfo.word, index: labelDefs.get(wordInfo.word), range: wordInfo }
@@ -614,6 +637,10 @@ export class MiniCodeEditor {
             } else if (target.type === 'symbol') {
                 if (typeof o.onGoToDefinition === 'function') {
                     o.onGoToDefinition({ type: 'symbol', name: target.name, blockId: o.blockId })
+                }
+            } else if (target.type === 'datablock') {
+                if (typeof o.onGoToDefinition === 'function') {
+                    o.onGoToDefinition({ type: 'datablock', dbId: target.dbId, fieldName: target.fieldName, blockId: o.blockId })
                 }
             }
         }

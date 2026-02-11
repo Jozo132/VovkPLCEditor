@@ -362,33 +362,44 @@ export class Popup {
 
         inputs.forEach(input => {
             const {type, label, name, value, margin, readonly, onChange} = input
-            if (!['text', 'textarea', 'number', 'integer', 'select'].includes(type)) throw new Error(`Invalid input type: ${type}`)
+            if (!['text', 'textarea', 'number', 'integer', 'select', 'checkbox'].includes(type)) throw new Error(`Invalid input type: ${type}`)
             if (!input.name) throw new Error(`Input name is required`)
             if (input.value && typeof input.value !== 'string' && type === 'text') throw new Error(`Invalid input value: ${input.value}`)
             if (input.value && typeof input.value !== 'string' && type === 'textarea') throw new Error(`Invalid input value: ${input.value}`)
             if (input.value && typeof input.value !== 'string' && type === 'select') throw new Error(`Invalid input value: ${input.value}`)
             if (input.value && typeof input.value !== 'number' && (type === 'number' || type === 'integer')) throw new Error(`Invalid input value: ${input.value}`)
+            if (type === 'checkbox' && input.value !== undefined && typeof input.value !== 'boolean') throw new Error(`Invalid checkbox value: ${input.value}`)
             const placeholder = (type === 'text' || type === 'textarea') ? input.placeholder || '' : ''
 
             let typeName = type
             if (type === 'integer') typeName = 'number'
 
-            const label_element = readonly ? ElementSynthesis(/*HTML*/ `<div></div>`) : ElementSynthesis(/*HTML*/ `<label for="${name}">${typeof label !== 'undefined' ? label : label || toCapitalCase(name)}</label>`)
-            
+            let label_element
             let input_element
-            if (type === 'select') {
-                const options = input.options || []
-                const optionsHtml = options.map(opt => 
-                    `<option value="${opt.value}"${opt.value === value ? ' selected' : ''}>${opt.label}</option>`
-                ).join('')
-                input_element = ElementSynthesis(/*HTML*/ `<select id="${name}" name="${name}">${optionsHtml}</select>`)
-            } else if (type === 'textarea') {
-                const rows = input.rows || 4
-                input_element = ElementSynthesis(/*HTML*/ `<textarea id="${name}" name="${name}" rows="${rows}" placeholder="${placeholder}">${value || ''}</textarea>`)
-            } else if (readonly) {
-                input_element = ElementSynthesis(/*HTML*/ `<div class="readonly" id="${name}" name="${name}" readonly style="background: none;" tabindex="-1" disabled></div>`)
+            if (type === 'checkbox') {
+                // Checkbox has label inline (after checkbox)
+                const checked = value === true ? ' checked' : ''
+                input_element = ElementSynthesis(/*HTML*/ `<input type="checkbox" id="${name}" name="${name}"${checked}>`)
+                label_element = ElementSynthesis(/*HTML*/ `<label for="${name}" style="display:inline;margin-left:6px;cursor:pointer;">${typeof label !== 'undefined' ? label : toCapitalCase(name)}</label>`)
             } else {
-                input_element = ElementSynthesis(/*HTML*/ `<input type="${typeName}" id="${name}" name="${name}" value="${value || ''}" placeholder="${placeholder}" autocomplete="off">`)
+                label_element = readonly ? ElementSynthesis(/*HTML*/ `<div></div>`) : ElementSynthesis(/*HTML*/ `<label for="${name}">${typeof label !== 'undefined' ? label : label || toCapitalCase(name)}</label>`)
+            }
+            
+            if (type !== 'checkbox') {
+                if (type === 'select') {
+                    const options = input.options || []
+                    const optionsHtml = options.map(opt => 
+                        `<option value="${opt.value}"${opt.value === value ? ' selected' : ''}>${opt.label}</option>`
+                    ).join('')
+                    input_element = ElementSynthesis(/*HTML*/ `<select id="${name}" name="${name}">${optionsHtml}</select>`)
+                } else if (type === 'textarea') {
+                    const rows = input.rows || 4
+                    input_element = ElementSynthesis(/*HTML*/ `<textarea id="${name}" name="${name}" rows="${rows}" placeholder="${placeholder}">${value || ''}</textarea>`)
+                } else if (readonly) {
+                    input_element = ElementSynthesis(/*HTML*/ `<div class="readonly" id="${name}" name="${name}" readonly style="background: none;" tabindex="-1" disabled></div>`)
+                } else {
+                    input_element = ElementSynthesis(/*HTML*/ `<input type="${typeName}" id="${name}" name="${name}" value="${value || ''}" placeholder="${placeholder}" autocomplete="off">`)
+                }
             }
             
             // Autocomplete support for text inputs
@@ -528,9 +539,10 @@ export class Popup {
                 // @ts-ignore
                 input_element.innerHTML = value || ''
             }
+            const isCheckbox = type === 'checkbox'
             states[name] = new Proxy(
                 {
-                    value: input.value || '',
+                    value: isCheckbox ? !!input.value : (input.value || ''),
                     setError: () => {
                         input_element.classList.add('error')
                         return false
@@ -548,7 +560,10 @@ export class Popup {
                         if (prop === 'value') {
                             target.value = value // @ts-ignore
                             if (readonly) input_element.innerText = value
-                            else {
+                            else if (isCheckbox) {
+                                // @ts-ignore
+                                input_element.checked = !!value
+                            } else {
                                 // @ts-ignore
                                 input_element.value = value
                             }
@@ -558,16 +573,19 @@ export class Popup {
                 }
             )
             const onInput = e => {
-                const value = e.target.value
-                // Use proxy value "value_in" to set the value in the state without triggering element value change
-                if (type === 'number') {
-                    states[name].value_in = parseFloat(value)
+                let val
+                if (isCheckbox) {
+                    val = e.target.checked
+                } else if (type === 'number') {
+                    val = parseFloat(e.target.value)
                 } else if (type === 'integer') {
-                    states[name].value_in = parseInt(value, 10)
+                    val = parseInt(e.target.value, 10)
                 } else {
                     // text and select both use string values
-                    states[name].value_in = value
+                    val = e.target.value
                 }
+                // Use proxy value "value_in" to set the value in the state without triggering element value change
+                states[name].value_in = val
                 if (onChange) onChange(states)
             }
             if (!readonly) {
@@ -581,9 +599,17 @@ export class Popup {
                     }
                 })
             }
-            if (label_element) form.appendChild(label_element)
-            // Append wrapper if autocomplete is enabled, otherwise just the input
-            form.appendChild(autocompleteWrapper || input_element)
+            // Checkbox: inline layout (checkbox + label side by side)
+            if (isCheckbox) {
+                const wrapper = ElementSynthesis(`<div style="display:flex;align-items:center;margin:8px 0;"></div>`)
+                wrapper.appendChild(input_element)
+                if (label_element) wrapper.appendChild(label_element)
+                form.appendChild(wrapper)
+            } else {
+                if (label_element) form.appendChild(label_element)
+                // Append wrapper if autocomplete is enabled, otherwise just the input
+                form.appendChild(autocompleteWrapper || input_element)
+            }
         })
 
         const selected = await Popup.promise(options)
