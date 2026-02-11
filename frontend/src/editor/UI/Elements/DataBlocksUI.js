@@ -134,27 +134,26 @@ export default class DataBlocksUI {
                     /** @type {import('../../../utils/types.js').MenuElement[]} */
                     const items = []
 
+                    const isLive = this.monitoringActive && !!this.master?.device_manager?.connected
+
                     if (tr && tr.classList.contains('db-field-row')) {
                         const dbId = parseInt(tr.dataset.dbId)
-                        items.push({ type: 'item', name: 'add-field-above', label: 'Add Field Above', className: `plc-icon ${getIconType('add')}` })
-                        items.push({ type: 'item', name: 'add-field-below', label: 'Add Field Below', className: `plc-icon ${getIconType('add')}` })
+                        items.push({ type: 'item', name: 'add-field-above', label: 'Add Field Above', className: `plc-icon ${getIconType('add')}`, disabled: isLive })
+                        items.push({ type: 'item', name: 'add-field-below', label: 'Add Field Below', className: `plc-icon ${getIconType('add')}`, disabled: isLive })
                         items.push({ type: 'separator' })
-                        items.push({ type: 'item', name: 'move-up', label: 'Move Up' })
-                        items.push({ type: 'item', name: 'move-down', label: 'Move Down' })
+                        items.push({ type: 'item', name: 'move-up', label: 'Move Up', disabled: isLive })
+                        items.push({ type: 'item', name: 'move-down', label: 'Move Down', disabled: isLive })
                         items.push({ type: 'separator' })
-                        items.push({ type: 'item', name: 'delete-field', label: 'Delete Field', className: `plc-icon ${getIconType('delete')}` })
+                        items.push({ type: 'item', name: 'delete-field', label: 'Delete Field', className: `plc-icon ${getIconType('delete')}`, disabled: isLive })
                     } else if (tr && tr.classList.contains('db-section-header')) {
                         const dbId = parseInt(tr.dataset.dbId)
-                        items.push({ type: 'item', name: 'add-field', label: 'Add Field', className: `plc-icon ${getIconType('add')}` })
+                        items.push({ type: 'item', name: 'add-field', label: 'Add Field', className: `plc-icon ${getIconType('add')}`, disabled: isLive })
                         items.push({ type: 'separator' })
-                        items.push({ type: 'item', name: 'rename-db', label: 'Rename Data Block' })
-                        items.push({ type: 'item', name: 'delete-db', label: 'Delete Data Block', className: `plc-icon ${getIconType('delete')}` })
+                        items.push({ type: 'item', name: 'rename-db', label: 'Rename Data Block', disabled: isLive })
+                        items.push({ type: 'item', name: 'delete-db', label: 'Delete Data Block', className: `plc-icon ${getIconType('delete')}`, disabled: isLive })
                     } else {
-                        items.push({ type: 'item', name: 'add-db', label: 'Add Data Block', className: `plc-icon ${getIconType('add')}` })
+                        items.push({ type: 'item', name: 'add-db', label: 'Add Data Block', className: `plc-icon ${getIconType('add')}`, disabled: isLive })
                     }
-
-                    items.push({ type: 'separator' })
-                    items.push({ type: 'item', label: 'Toggle Monitor', name: 'monitor_toggle' })
 
                     this._ctx_tr = tr
                     return items
@@ -163,7 +162,6 @@ export default class DataBlocksUI {
                     const tr = this._ctx_tr
                     if (!tr) {
                         if (key === 'add-db') this.addDataBlock()
-                        if (key === 'monitor_toggle') this.master.window_manager.toggleMonitoringActive()
                         return
                     }
 
@@ -191,7 +189,6 @@ export default class DataBlocksUI {
                     if (key === 'rename-db' && db) this._renameDB(db)
                     if (key === 'delete-db' && db) this._deleteDB(db)
                     if (key === 'add-db') this.addDataBlock()
-                    if (key === 'monitor_toggle') this.master.window_manager.toggleMonitoringActive()
                 }
             })
         }

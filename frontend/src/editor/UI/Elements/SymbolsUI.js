@@ -173,27 +173,28 @@ export default class SymbolsUI {
                     
                     const items = []
                     
+                    const isLive = this.monitoringActive && !!this.master?.device_manager?.connected
+
                     if (symbol) {
-                        items.push({ type: 'item', name: 'add-above', label: 'Add Symbol Above', className: `plc-icon ${getIconType('add')}` })
-                        items.push({ type: 'item', name: 'add-below', label: 'Add Symbol Below', className: `plc-icon ${getIconType('add')}` })
+                        items.push({ type: 'item', name: 'add-above', label: 'Add Symbol Above', className: `plc-icon ${getIconType('add')}`, disabled: isLive })
+                        items.push({ type: 'item', name: 'add-below', label: 'Add Symbol Below', className: `plc-icon ${getIconType('add')}`, disabled: isLive })
                         items.push({ type: 'separator' })
                     } else {
-                        items.push({ type: 'item', label: 'Add Symbol', name: 'add' })
+                        items.push({ type: 'item', label: 'Add Symbol', name: 'add', disabled: isLive })
                     }
                     
                     if (hasSelection) {
                          items.push({ type: 'item', name: 'copy', label: `Copy (${selectedCount})` })
-                         items.push({ type: 'item', name: 'delete', label: 'Delete', className: `plc-icon ${getIconType('delete')}` })
+                         items.push({ type: 'item', name: 'delete', label: 'Delete', className: `plc-icon ${getIconType('delete')}`, disabled: isLive })
                     }
                     
                     items.push({ type: 'separator' })
-                    items.push({ type: 'item', name: 'paste', label: 'Paste' })
+                    items.push({ type: 'item', name: 'paste', label: 'Paste', disabled: isLive })
                     items.push({ type: 'separator' })
                     if (symbol && !symbol.readonly && !symbol.device) {
-                        items.push({ type: 'item', label: 'Rename Symbol', name: 'rename', icon: 'edit' })
+                        items.push({ type: 'item', label: 'Rename Symbol', name: 'rename', icon: 'edit', disabled: isLive })
                         items.push({ type: 'separator' })
                     }
-                    items.push({ type: 'item', label: 'Toggle Monitor', name: 'monitor_toggle' })
                     
                     this._ctx_menu_idx = index
                     this._ctx_menu_symbol = symbol
@@ -220,8 +221,6 @@ export default class SymbolsUI {
                     if (key === 'delete') {
                          if (this.selectedSymbols.size > 0) this.deleteSelected()
                     }
-                    
-                    if (key === 'monitor_toggle') this.master.window_manager.toggleMonitoringActive()
                     
                     if (key === 'rename' && symbol && !symbol.readonly && !symbol.device) {
                         const oldName = symbol.name

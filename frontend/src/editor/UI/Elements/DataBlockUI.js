@@ -147,20 +147,19 @@ export default class DataBlockUI {
                     /** @type {import('../../../utils/types.js').MenuElement[]} */
                     const items = []
 
-                    if (tr && tr.classList.contains('db-field-row')) {
-                        items.push({ type: 'item', name: 'add-field-above', label: 'Add Field Above', className: `plc-icon ${getIconType('add')}` })
-                        items.push({ type: 'item', name: 'add-field-below', label: 'Add Field Below', className: `plc-icon ${getIconType('add')}` })
-                        items.push({ type: 'separator' })
-                        items.push({ type: 'item', name: 'move-up', label: 'Move Up' })
-                        items.push({ type: 'item', name: 'move-down', label: 'Move Down' })
-                        items.push({ type: 'separator' })
-                        items.push({ type: 'item', name: 'delete-field', label: 'Delete Field', className: `plc-icon ${getIconType('delete')}` })
-                    } else {
-                        items.push({ type: 'item', name: 'add-field', label: 'Add Field', className: `plc-icon ${getIconType('add')}` })
-                    }
+                    const isLive = this.monitoringActive && !!this.master?.device_manager?.connected
 
-                    items.push({ type: 'separator' })
-                    items.push({ type: 'item', label: 'Toggle Monitor', name: 'monitor_toggle' })
+                    if (tr && tr.classList.contains('db-field-row')) {
+                        items.push({ type: 'item', name: 'add-field-above', label: 'Add Field Above', className: `plc-icon ${getIconType('add')}`, disabled: isLive })
+                        items.push({ type: 'item', name: 'add-field-below', label: 'Add Field Below', className: `plc-icon ${getIconType('add')}`, disabled: isLive })
+                        items.push({ type: 'separator' })
+                        items.push({ type: 'item', name: 'move-up', label: 'Move Up', disabled: isLive })
+                        items.push({ type: 'item', name: 'move-down', label: 'Move Down', disabled: isLive })
+                        items.push({ type: 'separator' })
+                        items.push({ type: 'item', name: 'delete-field', label: 'Delete Field', className: `plc-icon ${getIconType('delete')}`, disabled: isLive })
+                    } else {
+                        items.push({ type: 'item', name: 'add-field', label: 'Add Field', className: `plc-icon ${getIconType('add')}`, disabled: isLive })
+                    }
 
                     this._ctx_tr = tr
                     return items
@@ -191,9 +190,7 @@ export default class DataBlockUI {
                         this._onDataChanged()
                         this.renderTable()
                     }
-                    else if (action === 'monitor_toggle') {
-                        this.master?.window_manager?.toggleMonitoringActive?.()
-                    }
+
                 }
             })
         }
