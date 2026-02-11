@@ -148,6 +148,14 @@
 /* Type Colors */
 .db-cell-select {
     font-weight: 500;
+    padding: 1px 2px;
+    height: 20px;
+    line-height: 18px;
+}
+.db-cell-select:disabled {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
 }
 .db-cell-select.val-bit,
 .db-cell-select.val-bool { color: #569cd6 !important; }

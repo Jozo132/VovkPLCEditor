@@ -929,6 +929,137 @@ export class VovkPLCEditor {
     }
 
     /**
+     * Rename a datablock field across the entire project: datablock definition, all block code.
+     * @param {number} dbId - The datablock ID (e.g. 1 for DB1)
+     * @param {string} oldName - The current field name
+     * @param {string} newName - The new field name
+     * @returns {{ success: boolean, message?: string, replacements?: number }}
+     */
+    renameDataBlockField(dbId, oldName, newName) {
+        if (typeof dbId !== 'number' || !oldName || !newName || oldName === newName) {
+            return { success: false, message: 'Invalid parameters' }
+        }
+        if (!this.project) return { success: false, message: 'No project loaded' }
+
+        // Validate new name: must be a valid identifier
+        if (!/^[A-Za-z_]\w*$/.test(newName)) {
+            return { success: false, message: 'Invalid field name. Must start with a letter or underscore and contain only letters, digits, and underscores.' }
+        }
+
+        // Find the datablock
+        const datablocks = this.project.datablocks || []
+        const db = datablocks.find(d => d.id === dbId)
+        if (!db) return { success: false, message: `Datablock DB${dbId} not found` }
+
+        // Check for conflicts with existing fields in the same datablock
+        const conflict = (db.fields || []).find(f => f.name === newName)
+        if (conflict) return { success: false, message: `Field "${newName}" already exists in DB${dbId}` }
+
+        // Find the field to rename
+        const field = (db.fields || []).find(f => f.name === oldName)
+        if (!field) return { success: false, message: `Field "${oldName}" not found in DB${dbId}` }
+
+        let replacements = 0
+
+        // Build old and new full reference patterns
+        const dbName = db.name || `DB${dbId}`
+        const oldRefPatterns = [
+            `DB${dbId}.${oldName}`,  // DB1.fieldName
+            `${dbName}.${oldName}`,  // DataBlockName.fieldName
+        ]
+        // Also match just the field name within the DB context (for future-proofing)
+
+        const wordBoundaryReplace = (text, old, replacement) => {
+            const re = new RegExp(`\\b${old.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g')
+            let count = 0
+            const result = text.replace(re, () => { count++; return replacement })
+            return { result, count }
+        }
+
+        // 1. Rename the field in the datablock definition
+        field.name = newName
+        replacements++
+
+        // 2. Replace in all block code across all program files
+        const files = this.project.files || []
+        files.forEach(file => {
+            if (file.type !== 'program' || !Array.isArray(file.blocks)) return
+            file.blocks.forEach(block => {
+                // Text-based languages (STL, ST, PLCScript, ASM)
+                if (block.code) {
+                    let modified = false
+                    let code = block.code
+                    for (const pattern of oldRefPatterns) {
+                        const newRef = pattern.replace(oldName, newName)
+                        const { result, count } = wordBoundaryReplace(code, pattern, newRef)
+                        if (count > 0) {
+                            code = result
+                            replacements += count
+                            modified = true
+                        }
+                    }
+                    if (modified) {
+                        block.code = code
+                        // Invalidate caches
+                        delete block.cached_asm
+                        delete block.cached_checksum
+                        delete block.cached_symbols_checksum
+                        delete block.cached_symbol_refs
+                    }
+                }
+                // Ladder blocks store symbol refs in nodes
+                if (Array.isArray(block.nodes)) {
+                    let modified = false
+                    for (const node of block.nodes) {
+                        for (const pattern of oldRefPatterns) {
+                            const newRef = pattern.replace(oldName, newName)
+                            if (node.symbol === pattern) { node.symbol = newRef; replacements++; modified = true }
+                            if (node.in1 === pattern) { node.in1 = newRef; replacements++; modified = true }
+                            if (node.in2 === pattern) { node.in2 = newRef; replacements++; modified = true }
+                            if (node.out === pattern) { node.out = newRef; replacements++; modified = true }
+                        }
+                        // Clear cached state so it gets re-resolved
+                        if (modified && node.state) node.state = undefined
+                    }
+                    if (modified) {
+                        // Invalidate caches
+                        delete block.cached_asm
+                        delete block.cached_checksum
+                        delete block.cached_symbols_checksum
+                        delete block.cached_symbol_refs
+                    }
+                }
+            })
+        })
+
+        // 3. Refresh datablock UI if open
+        const dbWindow = this.window_manager?.windows?.get(`db:${dbId}`)
+        if (dbWindow && typeof dbWindow.renderTable === 'function') {
+            dbWindow.renderTable()
+        }
+        const dbsWindow = this.window_manager?.windows?.get('datablocks')
+        if (dbsWindow && typeof dbsWindow.renderTable === 'function') {
+            dbsWindow.renderTable()
+        }
+
+        // 4. Save project
+        if (this.project_manager && typeof this.project_manager.checkAndSave === 'function') {
+            this.project_manager.checkAndSave()
+        }
+
+        // 5. Re-render ladder diagrams
+        if (this.ladder_render_registry) {
+            for (const key in this.ladder_render_registry) {
+                if (typeof this.ladder_render_registry[key] === 'function') {
+                    this.ladder_render_registry[key]()
+                }
+            }
+        }
+
+        return { success: true, replacements }
+    }
+
+    /**
      * Scan the entire project for references to a given name (symbol or DB field).
      * Returns a list of locations where the name is used.
      * @param {string} searchName - The name to search for (e.g. "mySymbol", "DB1.fieldName")

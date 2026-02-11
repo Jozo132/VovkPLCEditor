@@ -560,7 +560,13 @@ export class CanvasCodeEditor {
                 this._insertText(text)
             }
         })
-        input.addEventListener('focus', () => { this._needsRender = true; this._startCursorBlink(); this._markActiveEditor() })
+        input.addEventListener('focus', () => {
+            this._needsRender = true
+            this._startCursorBlink()
+            this._markActiveEditor()
+            // Track this CCE as the last focused one for global selected text access
+            window.__vovkActiveCCE = this
+        })
         input.addEventListener('blur', (e) => {
             // Don't clear pill selection when focus moves to the pill input overlay
             if (e.relatedTarget === this._pillInput) return

@@ -158,6 +158,7 @@ export default class DataBlockUI {
                         items.push({ type: 'item', name: 'move-up', label: 'Move Up', disabled: isLive })
                         items.push({ type: 'item', name: 'move-down', label: 'Move Down', disabled: isLive })
                         items.push({ type: 'separator' })
+                        items.push({ type: 'item', name: 'rename-field', label: 'Rename Field', disabled: isLive })
                         items.push({ type: 'item', name: 'delete-field', label: 'Delete Field', className: `plc-icon ${getIconType('delete')}`, disabled: isLive })
                     } else {
                         items.push({ type: 'item', name: 'add-field', label: 'Add Field', className: `plc-icon ${getIconType('add')}`, disabled: isLive })
@@ -177,6 +178,18 @@ export default class DataBlockUI {
                     else if (action === 'add-field-below' && fieldIdx >= 0) this.addField(db, fieldIdx + 1)
                     else if (action === 'delete-field' && fieldIdx >= 0) {
                         this._confirmDeleteField(db, fieldIdx)
+                    }
+                    else if (action === 'rename-field' && fieldIdx >= 0 && db.fields[fieldIdx]) {
+                        const oldName = db.fields[fieldIdx].name
+                        Popup.form({
+                            title: `Rename Field "${oldName}"`,
+                            inputs: [{ type: 'text', name: 'newName', label: 'New Name', value: oldName }],
+                            buttons: [{ text: 'Rename', value: 'confirm' }, { text: 'Cancel', value: 'cancel' }]
+                        }).then(result => {
+                            if (!result || !result.newName || result.newName === oldName) return
+                            this.master.renameDataBlockField(db.id, oldName, result.newName)
+                            this.renderTable()
+                        })
                     }
                     else if (action === 'move-up' && fieldIdx > 0) {
                         const [moved] = db.fields.splice(fieldIdx, 1)
@@ -581,6 +594,8 @@ export default class DataBlockUI {
     updateLiveValues(values) {
         this.live_values = values || new Map()
         for (const [key, td] of this._live_cells) {
+            // Skip updating cell if inline input is active for this cell
+            if (this._inlineInput && this._inlineInput.liveKey === key) continue
             const data = this.live_values.get(key)
             this._applyLiveCellState(td, data)
         }

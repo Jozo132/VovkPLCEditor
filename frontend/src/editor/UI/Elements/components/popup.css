@@ -140,7 +140,7 @@
 .plc-popup-form label {
     /* gap handled by column-gap on grid container */
 }
-.plc-popup-form input {
+.plc-popup-form input:not([type="checkbox"]) {
     font-size: 14px;
     padding: 4px;
     border: 1px solid #444;
@@ -156,12 +156,16 @@
     -ms-autocomplete: off;
     -o-autocomplete: off;
 }
-.plc-popup-form input:focus {
+.plc-popup-form input[type="checkbox"] {
+    width: auto;
+    cursor: pointer;
+}
+.plc-popup-form input:not([type="checkbox"]):focus {
     border-color: #4682B4;
     box-shadow: 0 0 5px rgba(70, 130, 180, 0.5);
 }
 
-.plc-popup-form input.error {
+.plc-popup-form input:not([type="checkbox"]).error {
     border-color: #dc3545;
     box-shadow: 0 0 5px rgba(220, 53, 69, 0.5);
 }

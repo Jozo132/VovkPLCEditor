@@ -146,6 +146,7 @@ export default class DataBlocksUI {
                         items.push({ type: 'item', name: 'move-up', label: 'Move Up', disabled: isLive })
                         items.push({ type: 'item', name: 'move-down', label: 'Move Down', disabled: isLive })
                         items.push({ type: 'separator' })
+                        items.push({ type: 'item', name: 'rename-field', label: 'Rename Field', disabled: isLive })
                         items.push({ type: 'item', name: 'delete-field', label: 'Delete Field', className: `plc-icon ${getIconType('delete')}`, disabled: isLive })
                     } else if (tr && tr.classList.contains('db-section-header')) {
                         const dbId = parseInt(tr.dataset.dbId)
@@ -187,6 +188,18 @@ export default class DataBlocksUI {
                     if (key === 'delete-field' && db) {
                         this._confirmDeleteField(db, fieldIdx)
                     }
+                    if (key === 'rename-field' && db && db.fields[fieldIdx]) {
+                        const oldName = db.fields[fieldIdx].name
+                        Popup.form({
+                            title: `Rename Field "${oldName}"`,
+                            inputs: [{ type: 'text', name: 'newName', label: 'New Name', value: oldName }],
+                            buttons: [{ text: 'Rename', value: 'confirm' }, { text: 'Cancel', value: 'cancel' }]
+                        }).then(result => {
+                            if (!result || !result.newName || result.newName === oldName) return
+                            this.master.renameDataBlockField(dbId, oldName, result.newName)
+                            this.renderTable()
+                        })
+                    }
                     if (key === 'rename-db' && db) this._renameDB(db)
                     if (key === 'delete-db' && db) this._deleteDB(db)
                     if (key === 'add-db') this.addDataBlock()
@@ -207,7 +220,11 @@ export default class DataBlocksUI {
     _nextDBId() {
         const dbs = this._getDataBlocks()
         if (!dbs.length) return 1
-        return Math.max(...dbs.map(d => d.id)) + 1
+        // Find the first free ID (fill gaps)
+        const usedIds = new Set(dbs.map(d => d.id))
+        let id = 1
+        while (usedIds.has(id)) id++
+        return id
     }
 
     // ── Collapsed state persistence ──
@@ -816,6 +833,8 @@ export default class DataBlocksUI {
         this.live_values = values
         if (!this._live_cells || !this._live_cells.size) return
         for (const [name, cell] of this._live_cells.entries()) {
+            // Skip updating cell if inline input is active for this cell
+            if (this._inlineInput && this._inlineInput.liveKey === name) continue
             const live = this.live_values.get(name)
             this._applyLiveCellState(cell, live)
         }

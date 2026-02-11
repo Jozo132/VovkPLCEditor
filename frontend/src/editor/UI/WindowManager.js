@@ -289,6 +289,7 @@ export default class WindowManager {
                                     <span class="plc-console-tab-label">Problems</span>
                                     <span class="plc-console-tab-count" style="display:none;">0</span>
                                 </button>
+                                <button class="plc-console-tab" data-tab="references">References</button>
                             </div>
                             <div style="flex: 1;"></div>
                             <div class="plc-console-actions">
@@ -302,6 +303,9 @@ export default class WindowManager {
                         </div>
                         <div class="plc-console-body problems" style="flex: 1; overflow: auto; padding: 5px 10px; font-family: inherit; color: #ddd; display: none;">
                             <!-- Lint Problems -->
+                        </div>
+                        <div class="plc-console-body references" style="flex: 1; overflow: auto; padding: 5px 10px; font-family: inherit; color: #ddd; display: none;">
+                            <!-- Cross References -->
                         </div>
                     </div>
                 </div>
@@ -382,6 +386,7 @@ export default class WindowManager {
         const consoleResizer = workspace.querySelector('.resizer-console-top')
         const outputBody = workspace.querySelector('.plc-console-body.output')
         const problemsBody = workspace.querySelector('.plc-console-body.problems')
+        const referencesBody = workspace.querySelector('.plc-console-body.references')
 
         const consoleHeaderHeight = Math.max(1, Math.round(consoleHeader.getBoundingClientRect().height || 25))
         consoleBody.style.height = `${consoleHeaderHeight}px` // Start minimized (header visible)
@@ -391,7 +396,7 @@ export default class WindowManager {
         this._consoleState = this._consoleState || {activeTab: 'output', lastHeight: 150, minimized: true}
         const consoleState = this._consoleState
         consoleState.lastHeight = typeof consoleState.lastHeight === 'number' ? consoleState.lastHeight : 150
-        consoleState.activeTab = consoleState.activeTab === 'problems' ? 'problems' : 'output'
+        consoleState.activeTab = ['output', 'problems', 'references'].includes(consoleState.activeTab) ? consoleState.activeTab : 'output'
         consoleState.minimized = typeof consoleState.minimized === 'boolean' ? consoleState.minimized : true
         let activeConsoleTab = consoleState.activeTab
         this._problemsFlat = []
@@ -405,10 +410,11 @@ export default class WindowManager {
         this._hoveredProblemKey = null
 
         const setActiveConsoleTab = tab => {
-            activeConsoleTab = tab === 'problems' ? 'problems' : 'output'
+            activeConsoleTab = ['output', 'problems', 'references'].includes(tab) ? tab : 'output'
             consoleState.activeTab = activeConsoleTab
             if (outputBody) outputBody.style.display = activeConsoleTab === 'output' ? 'block' : 'none'
             if (problemsBody) problemsBody.style.display = activeConsoleTab === 'problems' ? 'block' : 'none'
+            if (referencesBody) referencesBody.style.display = activeConsoleTab === 'references' ? 'block' : 'none'
             if (consoleBody) consoleBody.classList.toggle('tab-problems', activeConsoleTab === 'problems')
             consoleTabs.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.tab === activeConsoleTab)
@@ -1013,6 +1019,9 @@ export default class WindowManager {
                 }
             })
         }
+
+        // Initialize Cross References panel
+        this._initCrossReferencesPanel(referencesBody, setActiveConsoleTab, openConsole)
 
         consoleHeader.style.touchAction = 'none'
         consoleHeader.addEventListener('pointerdown', e => {
@@ -4647,6 +4656,7 @@ export default class WindowManager {
             const c = event.key.toLocaleLowerCase() === 'c'
             const v = event.key.toLocaleLowerCase() === 'v'
             const a = event.key.toLocaleLowerCase() === 'a'
+            const f = event.key.toLocaleLowerCase() === 'f'
             const left = event.key === 'ArrowLeft'
             const right = event.key === 'ArrowRight'
             const up = event.key === 'ArrowUp'
@@ -4661,6 +4671,23 @@ export default class WindowManager {
             // if (ctrl && x) this.cutSelection()
             // if (ctrl && v) this.pasteSelection()
             // if (del) this.deleteSelection()
+
+            // Ctrl+F or Ctrl+Shift+F: Open Cross References with selected text
+            if (ctrl && f) {
+                event.preventDefault()
+                // First check CCE selection (custom canvas editor), then fall back to native selection
+                let selection = ''
+                if (window.__vovkActiveCCE && typeof window.__vovkActiveCCE._getSelectedText === 'function') {
+                    selection = window.__vovkActiveCCE._getSelectedText()?.trim() || ''
+                }
+                if (!selection) {
+                    selection = window.getSelection()?.toString()?.trim() || ''
+                }
+                if (this.openCrossReferences) {
+                    this.openCrossReferences(selection)
+                }
+                return
+            }
 
             const activeElement = document.activeElement
             if (activeElement) {
@@ -6234,5 +6261,448 @@ export default class WindowManager {
     async updatePairedDevicesList() {
         // Legacy method - now redirects to updateDeviceDropdown
         await this.updateDeviceDropdown()
+    }
+
+    /**
+     * Initialize the Cross References panel with search input and results list
+     * @param {HTMLElement} referencesBody - The references body container
+     * @param {(tab: string) => void} setActiveConsoleTab - Function to switch console tabs
+     * @param {(height?: number, opts?: object) => void} openConsole - Function to open console
+     */
+    _initCrossReferencesPanel(referencesBody, setActiveConsoleTab, openConsole) {
+        if (!referencesBody) return
+
+        const editor = this.#editor
+
+        // Create search container
+        const searchContainer = document.createElement('div')
+        searchContainer.className = 'plc-references-search'
+        searchContainer.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #333; margin-bottom: 8px;'
+
+        const searchInput = document.createElement('input')
+        searchInput.type = 'text'
+        searchInput.placeholder = 'Search symbols, datablocks, addresses... (Ctrl+F)'
+        searchInput.className = 'plc-references-input'
+        searchInput.style.cssText = 'flex: 1; background: #3c3c3c; border: 1px solid #555; color: #ddd; padding: 4px 8px; font-size: 12px; border-radius: 3px; outline: none;'
+        searchInput.addEventListener('focus', () => { searchInput.style.borderColor = '#007acc' })
+        searchInput.addEventListener('blur', () => { searchInput.style.borderColor = '#555' })
+
+        const searchBtn = document.createElement('button')
+        searchBtn.textContent = 'Search'
+        searchBtn.style.cssText = 'background: #0e639c; border: none; color: #fff; padding: 4px 12px; font-size: 12px; border-radius: 3px; cursor: pointer;'
+        searchBtn.addEventListener('mouseenter', () => { searchBtn.style.background = '#1177bb' })
+        searchBtn.addEventListener('mouseleave', () => { searchBtn.style.background = '#0e639c' })
+
+        searchContainer.appendChild(searchInput)
+        searchContainer.appendChild(searchBtn)
+
+        // Create results container
+        const resultsContainer = document.createElement('div')
+        resultsContainer.className = 'plc-references-results'
+        resultsContainer.style.cssText = 'flex: 1; overflow: auto;'
+
+        const resultsStatus = document.createElement('div')
+        resultsStatus.className = 'plc-references-status'
+        resultsStatus.style.cssText = 'color: #888; font-style: italic;'
+        resultsStatus.textContent = 'Enter a search term to find references across the project'
+
+        resultsContainer.appendChild(resultsStatus)
+
+        // Create autocomplete dropdown
+        const autocomplete = document.createElement('div')
+        autocomplete.className = 'plc-references-autocomplete'
+        autocomplete.style.cssText = 'position: absolute; background: #252526; border: 1px solid #454545; max-height: 200px; overflow: auto; z-index: 1000; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);'
+
+        referencesBody.style.position = 'relative'
+        referencesBody.style.display = 'flex'
+        referencesBody.style.flexDirection = 'column'
+        referencesBody.appendChild(searchContainer)
+        referencesBody.appendChild(autocomplete)
+        referencesBody.appendChild(resultsContainer)
+
+        // Autocomplete data collection
+        const getAutocompleteItems = () => {
+            const items = []
+            // Add symbols
+            const symbols = editor.project?.symbols || []
+            symbols.forEach(sym => {
+                items.push({ type: 'symbol', name: sym.name, detail: sym.type || 'Symbol' })
+            })
+            // Add datablocks and their fields
+            const datablocks = editor.project?.datablocks || []
+            datablocks.forEach(db => {
+                const dbName = db.name || `DB${db.id}`
+                items.push({ type: 'datablock', name: dbName, detail: `Datablock (DB${db.id})`, dbId: db.id, fields: db.fields })
+                // Also add "DBName." shortcut to trigger field autocomplete
+                items.push({ type: 'db-dot', name: `${dbName}.`, detail: `Browse ${dbName} fields`, dbId: db.id, fields: db.fields })
+                if (Array.isArray(db.fields)) {
+                    db.fields.forEach(field => {
+                        items.push({ type: 'field', name: `${dbName}.${field.name}`, detail: `${field.type || 'Field'} in ${dbName}`, dbId: db.id })
+                    })
+                }
+            })
+            return items
+        }
+
+        let autocompleteItems = []
+        let filteredItems = []  // Currently displayed items
+        let selectedAutocompleteIndex = -1
+
+        const updateAutocomplete = (query) => {
+            autocompleteItems = getAutocompleteItems()
+            const lowerQuery = (query || '').toLowerCase()
+            
+            // Check if query ends with a dot and matches a datablock name
+            filteredItems = []
+            if (lowerQuery.endsWith('.')) {
+                const dbPrefix = lowerQuery.slice(0, -1)
+                // Find the matching datablock
+                const matchingDb = autocompleteItems.find(item => 
+                    item.type === 'datablock' && item.name.toLowerCase() === dbPrefix
+                )
+                if (matchingDb && Array.isArray(matchingDb.fields)) {
+                    // Show only fields of this datablock
+                    filteredItems = matchingDb.fields.map(field => ({
+                        type: 'field',
+                        name: `${matchingDb.name}.${field.name}`,
+                        detail: `${field.type || 'Field'} in ${matchingDb.name}`,
+                        dbId: matchingDb.dbId
+                    })).slice(0, 15)
+                }
+            } else {
+                // Normal filtering
+                filteredItems = query ? autocompleteItems.filter(item => 
+                    item.name.toLowerCase().includes(lowerQuery)
+                ).slice(0, 15) : []
+            }
+
+            autocomplete.innerHTML = ''
+            if (filteredItems.length === 0) {
+                autocomplete.style.display = 'none'
+                return
+            }
+
+            filteredItems.forEach((item, idx) => {
+                const div = document.createElement('div')
+                div.className = 'plc-references-autocomplete-item'
+                div.style.cssText = 'padding: 4px 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;'
+                
+                const nameSpan = document.createElement('span')
+                nameSpan.textContent = item.name
+                nameSpan.style.color = item.type === 'symbol' ? '#4ec9b0' : item.type === 'datablock' ? '#dcdcaa' : item.type === 'db-dot' ? '#dcdcaa' : '#9cdcfe'
+                
+                const detailSpan = document.createElement('span')
+                detailSpan.textContent = item.detail
+                detailSpan.style.cssText = 'color: #808080; font-size: 11px; margin-left: 8px;'
+                
+                div.appendChild(nameSpan)
+                div.appendChild(detailSpan)
+
+                div.addEventListener('mouseenter', () => {
+                    selectedAutocompleteIndex = idx
+                    highlightAutocompleteItem()
+                    div.style.background = '#094771'
+                })
+                div.addEventListener('mouseleave', () => {
+                    div.style.background = ''
+                })
+                div.addEventListener('mousedown', e => {
+                    e.preventDefault()
+                    searchInput.value = item.name
+                    if (item.type === 'db-dot') {
+                        // Don't search, just update autocomplete to show fields
+                        updateAutocomplete(item.name)
+                        searchInput.focus()
+                    } else {
+                        autocomplete.style.display = 'none'
+                        performSearch(item.name)
+                    }
+                })
+                autocomplete.appendChild(div)
+            })
+
+            const rect = searchInput.getBoundingClientRect()
+            const containerRect = referencesBody.getBoundingClientRect()
+            autocomplete.style.left = (rect.left - containerRect.left) + 'px'
+            autocomplete.style.top = (rect.bottom - containerRect.top + 2) + 'px'
+            autocomplete.style.width = rect.width + 'px'
+            autocomplete.style.display = 'block'
+            selectedAutocompleteIndex = -1
+        }
+
+        const highlightAutocompleteItem = () => {
+            const items = autocomplete.querySelectorAll('.plc-references-autocomplete-item')
+            items.forEach((item, idx) => {
+                item.style.background = idx === selectedAutocompleteIndex ? '#094771' : ''
+            })
+        }
+
+        // Search execution
+        const performSearch = (query) => {
+            if (!query || !query.trim()) {
+                resultsContainer.innerHTML = ''
+                resultsStatus.textContent = 'Enter a search term to find references across the project'
+                resultsContainer.appendChild(resultsStatus)
+                return
+            }
+
+            const searchTerm = query.trim()
+            resultsContainer.innerHTML = ''
+
+            // Use editor's scanReferences method
+            const codeRefs = editor.scanReferences(searchTerm)
+
+            // Also search for symbol definitions and datablock field definitions
+            const definitionRefs = []
+
+            // Check symbols for definition
+            const symbols = editor.project?.symbols || []
+            symbols.forEach((sym, idx) => {
+                if (sym.name && sym.name.toLowerCase() === searchTerm.toLowerCase()) {
+                    definitionRefs.push({
+                        type: 'definition',
+                        category: 'symbol',
+                        name: sym.name,
+                        detail: `Symbol definition: ${sym.type || 'unknown'} @ ${sym.address || '?'}`,
+                        navigate: () => this.focusSymbolByName(sym.name)
+                    })
+                }
+            })
+
+            // Check datablocks for definition
+            const datablocks = editor.project?.datablocks || []
+            datablocks.forEach(db => {
+                const dbName = db.name || `DB${db.id}`
+                if (dbName.toLowerCase() === searchTerm.toLowerCase()) {
+                    definitionRefs.push({
+                        type: 'definition',
+                        category: 'datablock',
+                        name: dbName,
+                        detail: `Datablock definition (DB${db.id})`,
+                        navigate: () => this.openProgram(`db:${db.id}`)
+                    })
+                }
+                // Check datablock fields
+                if (Array.isArray(db.fields)) {
+                    db.fields.forEach(field => {
+                        const fullName = `${dbName}.${field.name}`
+                        if (fullName.toLowerCase() === searchTerm.toLowerCase() || 
+                            field.name.toLowerCase() === searchTerm.toLowerCase()) {
+                            definitionRefs.push({
+                                type: 'definition',
+                                category: 'field',
+                                name: fullName,
+                                detail: `Field definition: ${field.type || 'unknown'} in ${dbName}`,
+                                navigate: () => this.focusDataBlockField(db.id, field.name)
+                            })
+                        }
+                    })
+                }
+            })
+
+            const totalCount = definitionRefs.length + codeRefs.length
+            if (totalCount === 0) {
+                resultsStatus.textContent = `No references found for "${searchTerm}"`
+                resultsContainer.appendChild(resultsStatus)
+                return
+            }
+
+            // Show summary
+            const summary = document.createElement('div')
+            summary.style.cssText = 'color: #888; margin-bottom: 8px; font-size: 11px;'
+            summary.textContent = `Found ${totalCount} reference${totalCount !== 1 ? 's' : ''} for "${searchTerm}"`
+            resultsContainer.appendChild(summary)
+
+            // Show definitions first
+            if (definitionRefs.length > 0) {
+                const defHeader = document.createElement('div')
+                defHeader.style.cssText = 'color: #dcdcaa; font-weight: bold; margin: 8px 0 4px; font-size: 12px;'
+                defHeader.textContent = 'Definitions'
+                resultsContainer.appendChild(defHeader)
+
+                definitionRefs.forEach(ref => {
+                    const item = this._createReferenceItem(ref.name, ref.detail, ref.category, ref.navigate)
+                    resultsContainer.appendChild(item)
+                })
+            }
+
+            // Show code references grouped by program
+            if (codeRefs.length > 0) {
+                const codeHeader = document.createElement('div')
+                codeHeader.style.cssText = 'color: #dcdcaa; font-weight: bold; margin: 12px 0 4px; font-size: 12px;'
+                codeHeader.textContent = 'Code References'
+                resultsContainer.appendChild(codeHeader)
+
+                // Group by program
+                const grouped = new Map()
+                codeRefs.forEach(ref => {
+                    const key = ref.program || 'Unknown'
+                    if (!grouped.has(key)) grouped.set(key, [])
+                    grouped.get(key).push(ref)
+                })
+
+                grouped.forEach((refs, programName) => {
+                    const progHeader = document.createElement('div')
+                    progHeader.style.cssText = 'color: #569cd6; margin: 6px 0 2px; font-size: 11px; padding-left: 8px;'
+                    progHeader.textContent = `${programName} (${refs.length})`
+                    resultsContainer.appendChild(progHeader)
+
+                    refs.forEach(ref => {
+                        const location = ref.line ? `Ln ${ref.line}, Col ${ref.col || 1}` : ref.x !== undefined ? `Cell (${ref.x}, ${ref.y})` : ''
+                        const detail = `${ref.block} [${ref.blockType}] ${location}`
+                        const navigate = () => {
+                            // Open the program and navigate to block
+                            const prog = editor.findProgram(ref.program) || (editor.project?.files || []).find(f => f.name === ref.program)
+                            if (prog) {
+                                this.openProgram(prog.id)
+                                // Find the block in the window
+                                setTimeout(() => {
+                                    const win = this.windows.get(prog.id)
+                                    if (win && win.navigateToBlock) {
+                                        win.navigateToBlock(ref.block, ref.line, ref.col, ref.x, ref.y)
+                                    } else if (win && win.focusBlock) {
+                                        win.focusBlock(ref.block, ref.line, ref.col)
+                                    }
+                                }, 100)
+                            }
+                        }
+                        const item = this._createReferenceItem(ref.preview, detail, ref.blockType, navigate)
+                        item.style.paddingLeft = '16px'
+                        resultsContainer.appendChild(item)
+                    })
+                })
+            }
+        }
+
+        // Debounced auto-search
+        let searchDebounceTimer = null
+        const debouncedSearch = () => {
+            if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+            searchDebounceTimer = setTimeout(() => {
+                if (autocomplete.style.display === 'none' || filteredItems.length === 0) {
+                    performSearch(searchInput.value)
+                }
+            }, 200)
+        }
+
+        // Event listeners
+        searchInput.addEventListener('input', () => {
+            updateAutocomplete(searchInput.value)
+            debouncedSearch()
+        })
+
+        searchInput.addEventListener('keydown', e => {
+            const items = autocomplete.querySelectorAll('.plc-references-autocomplete-item')
+            if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                if (autocomplete.style.display !== 'none' && items.length > 0) {
+                    selectedAutocompleteIndex = Math.min(selectedAutocompleteIndex + 1, items.length - 1)
+                    highlightAutocompleteItem()
+                    items[selectedAutocompleteIndex]?.scrollIntoView({ block: 'nearest' })
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                if (autocomplete.style.display !== 'none' && items.length > 0) {
+                    selectedAutocompleteIndex = Math.max(selectedAutocompleteIndex - 1, 0)
+                    highlightAutocompleteItem()
+                    items[selectedAutocompleteIndex]?.scrollIntoView({ block: 'nearest' })
+                }
+            } else if (e.key === 'Enter') {
+                e.preventDefault()
+                if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+                if (autocomplete.style.display !== 'none' && selectedAutocompleteIndex >= 0 && filteredItems[selectedAutocompleteIndex]) {
+                    const selectedItem = filteredItems[selectedAutocompleteIndex]
+                    if (selectedItem) {
+                        searchInput.value = selectedItem.name
+                        if (selectedItem.type === 'db-dot') {
+                            // Don't search, just update autocomplete to show fields
+                            updateAutocomplete(selectedItem.name)
+                        } else {
+                            autocomplete.style.display = 'none'
+                            performSearch(selectedItem.name)
+                        }
+                    }
+                } else {
+                    autocomplete.style.display = 'none'
+                    performSearch(searchInput.value)
+                }
+            } else if (e.key === 'Escape') {
+                autocomplete.style.display = 'none'
+            }
+        })
+
+        searchInput.addEventListener('blur', () => {
+            setTimeout(() => { autocomplete.style.display = 'none' }, 150)
+        })
+
+        searchBtn.addEventListener('click', () => {
+            if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+            autocomplete.style.display = 'none'
+            performSearch(searchInput.value)
+        })
+
+        // Store references to methods for external access
+        this._referencesSearch = searchInput
+        this._performReferencesSearch = performSearch
+        this._setReferencesTab = setActiveConsoleTab
+        this._openReferencesConsole = openConsole
+
+        /**
+         * Open cross references panel with optional pre-filled search
+         * @param {string} [searchTerm] - Optional search term to pre-fill
+         */
+        this.openCrossReferences = (searchTerm) => {
+            setActiveConsoleTab('references')
+            openConsole(250)
+            if (searchTerm) {
+                searchInput.value = searchTerm
+                performSearch(searchTerm)
+            }
+            setTimeout(() => searchInput.focus(), 50)
+        }
+    }
+
+    /**
+     * Create a reference result item element
+     * @param {string} title - Main text
+     * @param {string} detail - Detail text
+     * @param {string} category - Category for coloring
+     * @param {() => void} navigate - Navigation callback
+     */
+    _createReferenceItem(title, detail, category, navigate) {
+        const item = document.createElement('div')
+        item.className = 'plc-reference-item'
+        item.style.cssText = 'padding: 3px 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: flex-start; border-radius: 2px;'
+
+        const titleSpan = document.createElement('span')
+        titleSpan.textContent = title
+        titleSpan.style.cssText = 'flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+        
+        // Color based on category
+        if (category === 'symbol') titleSpan.style.color = '#4ec9b0'
+        else if (category === 'datablock') titleSpan.style.color = '#dcdcaa'
+        else if (category === 'field') titleSpan.style.color = '#9cdcfe'
+        else if (category === 'ladder') titleSpan.style.color = '#ce9178'
+        else titleSpan.style.color = '#d4d4d4'
+
+        const detailSpan = document.createElement('span')
+        detailSpan.textContent = detail
+        detailSpan.style.cssText = 'color: #808080; font-size: 10px; margin-left: 12px; white-space: nowrap;'
+
+        item.appendChild(titleSpan)
+        item.appendChild(detailSpan)
+
+        item.addEventListener('mouseenter', () => { item.style.background = '#094771' })
+        item.addEventListener('mouseleave', () => { item.style.background = '' })
+        item.addEventListener('click', e => {
+            if (e.ctrlKey || e.metaKey) {
+                // Ctrl+Click - navigate but keep focus on references
+                navigate()
+            } else {
+                navigate()
+            }
+        })
+
+        return item
     }
 }
