@@ -1,5 +1,28 @@
 export const debug_components = true
 
+/**
+ * Evaluate a numeric value or formula string. Supports plain numbers and
+ * arithmetic expressions like "2+3", "255/2", "10*1.5", etc.
+ * @param {string} val - The input string (number or formula)
+ * @param {'float'|'int'} [mode='float'] - If 'int', truncates the result to integer
+ * @returns {number} The evaluated number, or NaN if invalid
+ */
+export const evaluateNumericInput = (val, mode = 'float') => {
+    if (typeof val !== 'string') val = String(val ?? '')
+    val = val.trim()
+    if (!val) return NaN
+    let num
+    try {
+        // eslint-disable-next-line no-new-func
+        num = Function('"use strict"; return (' + val + ')')()
+    } catch (_) {
+        num = NaN
+    }
+    if (typeof num !== 'number' || !Number.isFinite(num)) return NaN
+    if (mode === 'int') num = Math.trunc(num)
+    return num
+}
+
 export const generateID = () => {
     return Math.random().toString(36).substring(2, 9)
 }

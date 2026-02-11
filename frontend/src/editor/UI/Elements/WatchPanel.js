@@ -1,4 +1,4 @@
-import { ElementSynthesis, CSSimporter, readTypedValue } from "../../../utils/tools.js"
+import { ElementSynthesis, CSSimporter, readTypedValue, evaluateNumericInput } from "../../../utils/tools.js"
 import { Popup } from "./components/popup.js"
 
 const importCSS = CSSimporter(import.meta.url)
@@ -735,7 +735,8 @@ export default class WatchPanel {
                             
                             await connection.writeMemoryArea(absAddress, Array.from(byteArray))
                         } else {
-                            let num = Number(input)
+                            const isFloatType = entry.type === 'real' || entry.type === 'float' || entry.type === 'f32' || entry.type === 'f64'
+                            let num = evaluateNumericInput(input, isFloatType ? 'float' : 'int')
                             if (!Number.isNaN(num)) {
                                 const size = typeInfo?.size || 1
                                 const type = entry.type

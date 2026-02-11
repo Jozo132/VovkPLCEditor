@@ -1,6 +1,6 @@
 import {PLC_Project, PLCEditor} from '../../utils/types.js'
 import VOVKPLCEDITOR_VERSION_BUILD, {VOVKPLCEDITOR_VERSION} from '../BuildNumber.js'
-import {ElementSynthesisMany, getEventPath, isVisible, readTypedValue} from '../../utils/tools.js'
+import {ElementSynthesisMany, getEventPath, isVisible, readTypedValue, evaluateNumericInput} from '../../utils/tools.js'
 import {ensureOffsets} from '../../utils/offsets.js'
 import {Popup} from './Elements/components/popup.js'
 import NavigationTreeManager from './Elements/NavigationTreeManager.js'
@@ -2986,7 +2986,8 @@ export default class WindowManager {
                     background: '#0078d4',
                     color: 'white',
                     verify: () => {
-                        const val = constant.operand_type === 'f32' || constant.operand_type === 'f64' ? parseFloat(valueInput.value) : parseInt(valueInput.value)
+                        const isFloat = constant.operand_type === 'f32' || constant.operand_type === 'f64'
+                        const val = evaluateNumericInput(valueInput.value, isFloat ? 'float' : 'int')
                         if (!Number.isFinite(val)) {
                             valueInput.style.borderColor = 'red'
                             return false
@@ -3005,7 +3006,8 @@ export default class WindowManager {
 
         if (result !== 'patch') return
 
-        const newValue = constant.operand_type === 'f32' || constant.operand_type === 'f64' ? parseFloat(valueInput.value) : parseInt(valueInput.value)
+        const isFloat = constant.operand_type === 'f32' || constant.operand_type === 'f64'
+        const newValue = evaluateNumericInput(valueInput.value, isFloat ? 'float' : 'int')
 
         const patchResult = await this.patchConstant(constant.bytecode_offset, newValue)
 

@@ -1,4 +1,4 @@
-import { CSSimporter } from "../../../utils/tools.js"
+import { CSSimporter, evaluateNumericInput } from "../../../utils/tools.js"
 import { getIconType } from "./components/icons.js"
 import { Popup } from "./components/popup.js"
 
@@ -424,10 +424,9 @@ export default class DataBlockUI {
         delTd.classList.add('col-mini')
         if (!cellLocked && !isLive) {
             const delBtn = document.createElement('button')
-            delBtn.classList.add('plc-btn')
+            delBtn.classList.add('plc-btn', 'db-field-delete-btn')
             delBtn.style.padding = '0 4px'
             delBtn.style.fontSize = '11px'
-            delBtn.style.color = '#888'
             delBtn.textContent = '✕'
             delBtn.title = 'Delete field'
             delBtn.addEventListener('click', () => {
@@ -669,20 +668,10 @@ export default class DataBlockUI {
                 input.select()
 
                 const commitWrite = async (val) => {
-                    // Try evaluating as a formula first
-                    let num
-                    try {
-                        num = Function('"use strict"; return (' + val + ')')() // eslint-disable-line no-new-func
-                    } catch (_) {
-                        num = NaN
-                    }
-                    if (typeof num !== 'number' || Number.isNaN(num)) {
+                    const num = evaluateNumericInput(val, type === 'f32' ? 'float' : 'int')
+                    if (Number.isNaN(num)) {
                         this._closeInlineInput()
                         return
-                    }
-                    // Cast float results to integer for integer types
-                    if (type !== 'f32' && !Number.isInteger(num)) {
-                        num = Math.trunc(num)
                     }
 
                     if (!this._autoConfirmWrite) {
