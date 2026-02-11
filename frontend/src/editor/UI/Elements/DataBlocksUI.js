@@ -364,7 +364,8 @@ export default class DataBlocksUI {
         if (renameBtn) renameBtn.addEventListener('click', (e) => { e.stopPropagation(); this._renameDB(db) })
         if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this._deleteDB(db) })
 
-        if (this.locked) {
+        const isLiveSec = this.monitoringActive && !!this.master?.device_manager?.connected
+        if (this.locked || isLiveSec) {
             if (addBtn) addBtn.disabled = true
             if (renameBtn) renameBtn.disabled = true
             if (deleteBtn) deleteBtn.disabled = true
@@ -399,6 +400,7 @@ export default class DataBlocksUI {
         tr.dataset.fieldIdx = String(fieldIdx)
 
         const cellLocked = this.locked
+        const isLive = this.monitoringActive && !!this.master?.device_manager?.connected
 
         // Icon cell - offset indicator
         const iconTd = document.createElement('td')
@@ -419,50 +421,58 @@ export default class DataBlocksUI {
         iconTd.title = absAddrStr
         tr.appendChild(iconTd)
 
-        // Name cell
+        // Name cell – locked when monitoring
         const nameTd = this._createInputCell(field.name || '', (val) => {
             field.name = val.trim()
             this._onDataChanged()
-        }, cellLocked)
+        }, cellLocked || isLive)
         tr.appendChild(nameTd)
 
-        // Type cell
+        // Type cell – locked when monitoring
         const typeTd = this._createSelectCell(field.type || 'byte', DB_FIELD_TYPES, (val) => {
             field.type = val
             this._onDataChanged()
             this.renderTable()
-        }, cellLocked)
+        }, cellLocked || isLive)
         tr.appendChild(typeTd)
 
-        // Default value cell
+        // Default value cell – disabled when monitoring
         const defVal = field.defaultValue !== undefined && field.defaultValue !== null ? String(field.defaultValue) : ''
         const defTd = this._createInputCell(defVal, (val) => {
             const num = parseFloat(val)
             field.defaultValue = isNaN(num) ? val : num
             this._onDataChanged()
-        }, cellLocked, 'text')
+        }, cellLocked || isLive, 'text')
+        if (isLive && !cellLocked) {
+            const defInput = defTd.querySelector('input')
+            if (defInput) defInput.classList.add('db-field-disabled')
+        }
         tr.appendChild(defTd)
 
-        // Live value cell
+        // Live value cell – editable when monitoring & connected
         const liveTd = document.createElement('td')
         liveTd.classList.add('db-live-cell')
+        if (isLive) {
+            liveTd.classList.add('live-editable')
+            liveTd.addEventListener('click', () => this._handleLiveCellClick(db, field, fieldOffset))
+        }
         const liveKey = `DB${db.id}.${field.name}`
         this._live_cells.set(liveKey, liveTd)
         const liveData = this.live_values.get(liveKey)
         this._applyLiveCellState(liveTd, liveData)
         tr.appendChild(liveTd)
 
-        // Comment cell
+        // Comment cell – locked when monitoring
         const commentTd = this._createInputCell(field.comment || '', (val) => {
             field.comment = val
             this._onDataChanged()
-        }, cellLocked)
+        }, cellLocked || isLive)
         tr.appendChild(commentTd)
 
-        // Delete cell
+        // Delete cell – hidden when monitoring
         const delTd = document.createElement('td')
         delTd.classList.add('col-mini')
-        if (!cellLocked) {
+        if (!cellLocked && !isLive) {
             const delBtn = document.createElement('button')
             delBtn.classList.add('plc-btn')
             delBtn.style.padding = '0 4px'
@@ -561,6 +571,7 @@ export default class DataBlocksUI {
 
     addDataBlock() {
         if (this.locked) return
+        if (this.monitoringActive && this.master?.device_manager?.connected) return
         const dbs = this._getDataBlocks()
 
         const newDB = {
@@ -577,6 +588,7 @@ export default class DataBlocksUI {
 
     addField(db, index) {
         if (this.locked) return
+        if (this.monitoringActive && this.master?.device_manager?.connected) return
         if (!db) return
 
         // Reference previous field for default type
@@ -619,6 +631,7 @@ export default class DataBlocksUI {
 
     _renameDB(db) {
         if (this.locked) return
+        if (this.monitoringActive && this.master?.device_manager?.connected) return
         Popup.form({
             title: 'Edit Data Block',
             description: `Edit DB${db.id}`,
@@ -646,6 +659,7 @@ export default class DataBlocksUI {
 
     _deleteDB(db) {
         if (this.locked) return
+        if (this.monitoringActive && this.master?.device_manager?.connected) return
         Popup.form({
             title: 'Delete Data Block',
             description: `Are you sure you want to delete DB${db.id} "${db.name}"?`,
@@ -723,12 +737,17 @@ export default class DataBlocksUI {
         this.monitor_buttons.forEach(btn => {
             btn.classList.toggle('active', this.monitoringActive)
         })
-        if (this._live_cells) {
-            for (const [name, cell] of this._live_cells.entries()) {
-                const live = this.live_values.get(name)
-                this._applyLiveCellState(cell, live)
+        // Update add-DB button state
+        if (this.add_button) {
+            const isLive = this.monitoringActive && !!this.master?.device_manager?.connected
+            if (this.locked || isLive) {
+                this.add_button.setAttribute('disabled', 'disabled')
+            } else {
+                this.add_button.removeAttribute('disabled')
             }
         }
+        // Re-render to update editable/disabled states
+        this.renderTable()
         if (this.monitoringActive && !this.hidden) {
             this._registerMonitorRanges()
         } else {
@@ -738,6 +757,72 @@ export default class DataBlocksUI {
 
     updateMonitoringAvailability(available = false) {
         this.monitoringAvailable = !!available
+    }
+
+    async _handleLiveCellClick(db, field, fieldOffset) {
+        const connection = this.master?.device_manager?.connection
+        if (!connection) return
+
+        const deviceEntry = this._deviceDBEntries.get(db.id)
+        const compiledEntry = this._compiledDBEntries.get(db.id)
+        const baseAddr = deviceEntry ? deviceEntry.offset : (compiledEntry ? compiledEntry.computedOffset : null)
+        if (baseAddr === null) return
+
+        const absAddress = baseAddr + fieldOffset
+        const type = field.type || 'byte'
+        const isLittleEndian = this.master?.device_manager?.deviceInfo?.isLittleEndian ?? true
+        const liveKey = `DB${db.id}.${field.name}`
+
+        try {
+            if (type === 'bit') {
+                // Toggle bit directly
+                const live = this.live_values.get(liveKey)
+                const currentVal = (typeof live === 'object' ? live?.value : live) ?? 0
+                const newVal = currentVal ? 0 : 1
+                await connection.writeMemoryAreaMasked(absAddress, [newVal], [1])
+            } else {
+                // Show popup to enter new value
+                const live = this.live_values.get(liveKey)
+                const currentText = (typeof live === 'object' ? live?.text : String(live ?? 0)) || '0'
+
+                const result = await Popup.form({
+                    title: `Edit ${field.name}`,
+                    description: `Enter new value for DB${db.id}.${field.name} (${type})`,
+                    inputs: [
+                        { type: 'text', name: 'value', label: 'Value', value: currentText }
+                    ],
+                    buttons: [
+                        { text: 'Write', value: 'confirm', background: '#007bff', color: 'white' },
+                        { text: 'Cancel', value: 'cancel' }
+                    ]
+                })
+
+                if (!result || result === 'cancel' || typeof result.value === 'undefined') return
+
+                const num = Number(result.value)
+                if (Number.isNaN(num)) return
+
+                const size = TYPE_SIZES[type] || 1
+                const buffer = new ArrayBuffer(size)
+                const view = new DataView(buffer)
+
+                switch (type) {
+                    case 'byte': case 'u8': view.setUint8(0, num & 0xFF); break
+                    case 'i8': view.setInt8(0, num); break
+                    case 'u16': view.setUint16(0, num, isLittleEndian); break
+                    case 'i16': view.setInt16(0, num, isLittleEndian); break
+                    case 'u32': view.setUint32(0, num >>> 0, isLittleEndian); break
+                    case 'i32': view.setInt32(0, num, isLittleEndian); break
+                    case 'f32': view.setFloat32(0, num, isLittleEndian); break
+                    default: view.setUint8(0, num & 0xFF)
+                }
+
+                const data = Array.from(new Uint8Array(buffer))
+                await connection.writeMemoryArea(absAddress, data)
+            }
+        } catch (err) {
+            console.error(`[DataBlocksUI] Failed to write DB${db.id}.${field.name}:`, err)
+        }
     }
 
     _registerMonitorRanges() {

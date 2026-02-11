@@ -1,5 +1,19 @@
 /* DataBlocks UI Styles */
 
+/* Column borders for field rows */
+.datablocks-table tbody tr.db-field-row td {
+    border-right: 1px solid #2a2a2a;
+}
+.datablocks-table tbody tr.db-field-row td:last-child {
+    border-right: none;
+}
+.datablocks-table thead th {
+    border-right: 1px solid #333;
+}
+.datablocks-table thead th:last-child {
+    border-right: none;
+}
+
 /* DB badge in window header */
 .plc-db-badge {
     display: inline-flex;
@@ -162,6 +176,42 @@
 }
 .db-live-cell.live-dimmed {
     color: rgba(200, 200, 200, 0.3);
+}
+.db-live-cell.live-editable {
+    cursor: pointer;
+    user-select: none;
+}
+.db-live-cell.live-editable:hover {
+    background: #2d2d2d;
+    border-radius: 2px;
+}
+.db-live-cell .db-live-input {
+    width: 100%;
+    background: #1e1e1e;
+    color: #e0e0e0;
+    border: 1px solid #007fd4;
+    padding: 1px 4px;
+    margin: 0;
+    border-radius: 2px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    text-align: right;
+    outline: none;
+}
+
+/* Compiled offset indicator */
+.db-compiled-offset {
+    color: #888;
+    font-style: italic;
+    font-size: 9px;
+}
+
+/* Disabled (monitoring active) input styling */
+.datablocks-table input.db-field-disabled,
+.datablocks-table select.db-field-disabled {
+    color: #666 !important;
+    opacity: 0.6;
+    cursor: default;
 }
 
 /* Empty state placeholder */
