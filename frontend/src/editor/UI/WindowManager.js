@@ -150,6 +150,9 @@ export default class WindowManager {
                             <div class="plc-menu-option" data-action="about"><span class="codicon codicon-info" style="margin-right:8px;"></span>About</div>
                             <div class="plc-menu-option" data-action="version-history"><span class="codicon codicon-history" style="margin-right:8px;"></span>Change History</div>
                             <div class="plc-menu-separator"></div>
+                            <div class="plc-menu-option" data-action="report-issue-editor"><span class="codicon codicon-issues" style="margin-right:8px;"></span>Report Editor Issue</div>
+                            <div class="plc-menu-option" data-action="report-issue-runtime"><span class="codicon codicon-issues" style="margin-right:8px;"></span>Report Runtime Issue</div>
+                            <div class="plc-menu-separator"></div>
                             <div class="plc-menu-option" data-action="disclaimer"><span class="codicon codicon-warning" style="margin-right:8px;"></span>Disclaimer</div>
                         </div>
                     </div>
@@ -3366,6 +3369,12 @@ export default class WindowManager {
                     break
                 case 'version-history':
                     this._menuVersionHistory()
+                    break
+                case 'report-issue-editor':
+                    window.open('https://github.com/jozo132/VovkPLCEditor/issues', '_blank')
+                    break
+                case 'report-issue-runtime':
+                    window.open('https://github.com/jozo132/VovkPLCRuntime/issues', '_blank')
                     break
                 case 'disclaimer':
                     this._menuDisclaimer()
