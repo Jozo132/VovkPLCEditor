@@ -53,20 +53,30 @@ export default class Menu {
     } else {
       const div = document.createElement('div')
       div.classList.add('item')
-      if (className) div.classList.add(...className.split(' '))
       if (item.disabled) div.classList.add('disabled')
       
-      // Add icon if provided
-      if (item.icon) {
+      // Icon area (always present for alignment)
+      const iconWrap = document.createElement('span')
+      iconWrap.classList.add('menu-icon')
+      if (className) {
         const icon = document.createElement('span')
-        icon.classList.add('codicon', `codicon-${item.icon}`)
-        icon.style.marginRight = '6px'
-        div.appendChild(icon)
-        const labelSpan = document.createElement('span')
-        labelSpan.innerText = item.label
-        div.appendChild(labelSpan)
-      } else {
-        div.innerText = item.label
+        icon.classList.add(...className.split(' '))
+        iconWrap.appendChild(icon)
+      }
+      div.appendChild(iconWrap)
+
+      // Label
+      const labelSpan = document.createElement('span')
+      labelSpan.classList.add('menu-label')
+      labelSpan.textContent = item.label
+      div.appendChild(labelSpan)
+
+      // Shortcut hint (if provided via icon field as "shortcut:...")
+      if (item.icon && item.icon.startsWith('shortcut:')) {
+        const shortcutSpan = document.createElement('span')
+        shortcutSpan.classList.add('menu-shortcut')
+        shortcutSpan.textContent = item.icon.substring(9)
+        div.appendChild(shortcutSpan)
       }
 
       menu.appendChild(div)
@@ -81,10 +91,15 @@ export default class Menu {
 
       if (item.type === 'submenu') {
         div.classList.add('submenu')
+        
+        // Add submenu arrow indicator
+        const arrow = document.createElement('span')
+        arrow.classList.add('menu-submenu-arrow')
+        arrow.textContent = '\u25B8'
+        div.appendChild(arrow)
 
         const submenu = document.createElement('div')
         submenu.classList.add('menu', 'submenu-container')
-        if (className) submenu.classList.add(...className.split(' '))
         submenu.style.position = 'absolute'
         submenu.style.zIndex = '12'
         submenu.style.display = 'none'

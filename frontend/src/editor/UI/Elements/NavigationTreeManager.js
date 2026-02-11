@@ -389,12 +389,13 @@ export default class NavigationTreeManager {
             {
                 type: 'submenu', name: 'add', label: 'Add item', className: `plc-icon ${getIconType('add')}`, items: [
                     { type: 'item', name: 'add_program', label: 'Program', className: `plc-icon ${getIconType('program')}` },
+                    { type: 'item', name: 'add_datablock', label: 'DataBlock', className: `plc-icon ${getIconType('datablock')}` },
                     { type: 'item', name: 'add_folder', label: 'Folder', className: `plc-icon ${getIconType('folder')}` },
                 ]
             },
             { type: 'separator' },
             { type: 'item', name: 'delete', label: 'Delete', className: `plc-icon ${getIconType('delete')}` },
-            { type: 'item', name: 'rename', label: 'Rename', className: `plc-icon ${getIconType('rename')}` },
+            { type: 'item', name: 'rename', label: 'Rename' },
         ]
         /** @type { MenuElement[] } */
         const ctx_edit_program = [
@@ -430,6 +431,7 @@ export default class NavigationTreeManager {
             {
                 type: 'submenu', name: 'add', label: 'Add item', className: `plc-icon ${getIconType('add')}`, items: [
                     { type: 'item', name: 'add_program', label: 'Program', className: `plc-icon ${getIconType('program')}` },
+                    { type: 'item', name: 'add_datablock', label: 'DataBlock', className: `plc-icon ${getIconType('datablock')}` },
                     { type: 'item', name: 'add_folder', label: 'Folder', className: `plc-icon ${getIconType('folder')}` },
                 ]
             },
@@ -683,6 +685,29 @@ export default class NavigationTreeManager {
             })
             if (!path) return
             this.createTreeItem({ path, recursive: true, redraw: true })
+        }
+        if (action === 'add_datablock') {
+            const path = await Popup.createItem('datablock', full_path, (path) => {
+                if (path.endsWith('/main')) return false
+                const exists = this.root.find(f => f.full_path === path)
+                if (exists) return false
+                return true
+            })
+            if (!path) return
+            const parts = path.split('/')
+            const dbName = parts.pop() || ''
+            const dir = parts.join('/')
+            if (!dbName) throw new Error('DataBlock name not found')
+            // Find next available DB id
+            const project = this.#editor.project_manager.project
+            const existingIds = (project.datablocks || []).map(db => db.id)
+            let newId = 1
+            while (existingIds.includes(newId)) newId++
+            const db = { id: newId, name: dbName, path: dir, fields: [] }
+            project.datablocks = project.datablocks || []
+            project.datablocks.push(db)
+            this.draw_navigation_tree()
+            this.#editor.project_manager.saveProject()
         }
         if (action === 'add_program') {
             const path = await Popup.createItem('program', full_path, (path) => { // Returns full path

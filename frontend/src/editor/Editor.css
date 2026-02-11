@@ -20,7 +20,7 @@ ul {
 }
 
 .items-with-context-menu .item {
-    background: #fff;
+    background: #252526;
     width: 10em;
     height: 20px;
 }
@@ -31,7 +31,7 @@ ul {
 
 .items-with-context-menu .path {
     background: none;
-    color: #333;
+    color: #888;
     width: 100%;
     height: 1.2em;
     font-size: 0.4em;
@@ -39,75 +39,144 @@ ul {
 }
 
 .menu {
-    font-family: Arial, sans-serif;
-    background: white;
-    color: black;
-    border: #ccc solid 1px;
-    border-radius: 2px;
-    box-shadow: .3em .3em .6em #0007;
+    font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background: #252526;
+    color: #ccc;
+    border: 1px solid #454545;
+    border-radius: 5px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
     position: absolute;
     user-select: none;
     flex-direction: column;
     z-index: 11;
+    padding: 4px 0;
+    min-width: 180px;
 }
 
 .menu .item {
     cursor: default;
-    padding-top: 3px;
-    padding-left: 24px;
-    padding-right: 16px;
-    padding-bottom: 3px;
+    display: flex;
     align-items: center;
-    font-size: 14px;
+    font-size: 13px;
+    padding: 0 12px;
+    height: 28px;
+    color: #ccc;
+    position: relative;
 }
 
-.menu .item:first-child {
-    border-top-left-radius: 2px;
-    border-top-right-radius: 2px;
+.menu .item .menu-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    flex-shrink: 0;
 }
-.menu .item:last-child {
-    border-bottom-left-radius: 2px;
-    border-bottom-right-radius: 2px;
+
+.menu .item .menu-icon .plc-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
+}
+
+.menu .item .menu-label {
+    flex: 1;
+    white-space: nowrap;
+}
+
+.menu .item .menu-shortcut {
+    margin-left: 24px;
+    font-size: 12px;
+    color: #888;
+    white-space: nowrap;
+}
+
+.menu .item .menu-submenu-arrow {
+    margin-left: 12px;
+    font-size: 10px;
+    color: #888;
 }
 
 .menu .item:hover {
-    border-radius: 2px;
-    background: #579;
-    color: white;
-    cursor: pointer;
+    background: #094771;
+    color: #fff;
+    border-radius: 0;
+}
+
+.menu .item:first-child {
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+.menu .item:last-child {
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
 }
 
 .menu .item.disabled {
-    color: #333;
-    background: #DDD;
+    color: #5a5a5a;
+    background: transparent;
 }
 
 .menu .item.disabled:hover {
-    color: #333;
+    color: #5a5a5a;
+    background: transparent;
     cursor: default;
 }
 
 .menu hr {
-    margin: 0;
+    margin: 4px 0;
     border: none;
-    border-top: 1px solid #ccc;
+    border-top: 1px solid #454545;
 }
 
 .submenu-container {
+    font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background: #252526;
+    color: #ccc;
+    border: 1px solid #454545;
+    border-radius: 5px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    padding: 4px 0;
+    min-width: 160px;
     display: flex;
-    flex-direction: row;
-    box-shadow: .3em .3em .6em #0007;
-    border: #ccc solid 1px;
-    border-radius: 2px;
-    align-items: left;
+    flex-direction: column;
 }
+
 .submenu-container .item {
-    padding-left: 24px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    height: 28px;
+    font-size: 13px;
+    color: #ccc;
+    cursor: default;
+}
+
+.submenu-container .item:hover {
+    background: #094771;
+    color: #fff;
+}
+
+.submenu-container .item .menu-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.submenu-container .item .menu-icon .plc-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
 }
 
 .menu-items .plc-icon,
 .submenu-container .plc-icon {
-    padding-left: 2px;
+    padding-left: 0;
 }
 
 .thick {
@@ -203,7 +272,8 @@ ul {
     min-width: 200px;
     background-color: #252526;
     border: 1px solid #454545;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    border-radius: 5px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
     z-index: 10000;
     padding: 4px 0;
 }
