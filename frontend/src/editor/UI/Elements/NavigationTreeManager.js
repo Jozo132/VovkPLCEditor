@@ -25,14 +25,15 @@ const folder_item_html = ({ minimized, draggable, selected }) => /*HTML*/`
     </div>
 `
 
-/** @type { (params: { draggable: boolean, selected: boolean, type: string }) => string } */
-const custom_item_html = ({ draggable, selected, type }) => {
+/** @type { (params: { draggable: boolean, selected: boolean, type: string, badge?: string }) => string } */
+const custom_item_html = ({ draggable, selected, type, badge }) => {
     const typename = ['folder', 'program', 'symbols', 'setup', 'memory', 'datablocks', 'datablock'].includes(type) ? type : 'custom'
+    const badgeHtml = badge ? `<span class="plc-tree-badge">${badge}</span>` : ''
     return /*HTML*/`
         <div class="plc-navigation-item ${selected ? 'selected' : ''}">
             <div class="plc-navigation-${typename}" tabindex="0" draggable="${draggable}">
                 <span style="width: 16px; min-width: 16px; height: 16px; margin-right: 2px; display: inline-block;"></span>
-                <span class="plc-title plc-icon ${getIconType(type)}">empty</span>
+                <span class="plc-title plc-icon ${getIconType(type)}">empty</span>${badgeHtml}
             </div>
         </div>
     `
@@ -111,7 +112,8 @@ class PLC_File {
         const type = item.type
         const draggable = true
         const selected = this.navigation.state.selected === this.full_path
-        this.div = ElementSynthesis(custom_item_html({ draggable, selected, type }))
+        const badge = type === 'datablock' && item.id?.startsWith?.('db:') ? `DB${item.id.split(':')[1]}` : undefined
+        this.div = ElementSynthesis(custom_item_html({ draggable, selected, type, badge }))
         const element = this.div.childNodes[0]; if (!element) throw new Error('Inner element not found')
         const title = this.div.querySelector('.plc-title'); if (!title) throw new Error('Title not found')
         this.title = title
