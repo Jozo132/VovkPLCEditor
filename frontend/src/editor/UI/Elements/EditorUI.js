@@ -956,6 +956,52 @@ export default class EditorUI {
         this.master.window_manager.windows.delete(this.id)
     }
 
+    /**
+     * Navigate to a specific block and position within this program window.
+     * For text-based blocks: sets cursor at (line, col)
+     * For ladder blocks: selects cell at (x, y)
+     * @param {string} blockName
+     * @param {number} [line]
+     * @param {number} [col]
+     * @param {number} [x]
+     * @param {number} [y]
+     */
+    navigateToBlock(blockName, line, col, x, y) {
+        if (!this.program || !this.program.blocks) return
+        const block = this.program.blocks.find(b => b.name === blockName)
+        if (!block) return
+
+        // Un-minimize the block if it is minimized
+        if (block.minimized && block.div) {
+            block.minimized = false
+            block.div.classList.remove('minimized')
+            const btn = block.div.querySelector('.minimize')
+            if (btn) btn.innerText = '-'
+        }
+
+        // Scroll the block into view
+        if (block.div) {
+            block.div.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+
+        // Wait a frame for rendering, then navigate
+        requestAnimationFrame(() => {
+            if (block.type === 'ladder' && x !== undefined && y !== undefined) {
+                // Ladder block: select the cell
+                if (block.props && typeof block.props.selectCell === 'function') {
+                    block.props.selectCell(x, y)
+                }
+            } else if (line !== undefined && block.props && block.props.text_editor) {
+                // Text-based block: set cursor position (line is 1-based from refs, CCE is 0-based)
+                const cce = block.props.text_editor
+                const l = Math.max(0, (line || 1) - 1)
+                const c = Math.max(0, (col || 1) - 1)
+                cce.setCursor(l, c)
+                cce.focus()
+            }
+        })
+    }
+
     /** @param { { name?: string, comment?: string } } options */
     updateInfo(options) {
         if (!this.program) throw new Error(`Program not found: ${this.id}`)

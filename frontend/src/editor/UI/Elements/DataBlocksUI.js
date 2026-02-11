@@ -904,7 +904,7 @@ export default class DataBlocksUI {
                 input.type = 'text'
                 input.className = 'db-live-inline-input'
                 input.value = currentText
-                input.style.cssText = 'width:100%;box-sizing:border-box;font-size:inherit;padding:2px 4px;background:#1a1a1a;color:#fff;border:1px solid #4daafc;outline:none;'
+                // Styling handled by CSS class .db-live-inline-input
 
                 td.textContent = ''
                 td.appendChild(input)
@@ -913,10 +913,20 @@ export default class DataBlocksUI {
                 input.select()
 
                 const commitWrite = async (val) => {
-                    const num = Number(val)
-                    if (Number.isNaN(num)) {
+                    // Try evaluating as a formula first
+                    let num
+                    try {
+                        num = Function('"use strict"; return (' + val + ')')() // eslint-disable-line no-new-func
+                    } catch (_) {
+                        num = NaN
+                    }
+                    if (typeof num !== 'number' || Number.isNaN(num)) {
                         this._closeInlineInput()
                         return
+                    }
+                    // Cast float results to integer for integer types
+                    if (type !== 'f32' && !Number.isInteger(num)) {
+                        num = Math.trunc(num)
                     }
 
                     if (!this._autoConfirmWrite) {

@@ -193,18 +193,22 @@
     background: #2d2d2d;
     border-radius: 2px;
 }
-.db-live-cell .db-live-input {
+.db-live-cell .db-live-input,
+.db-live-cell .db-live-inline-input {
     width: 100%;
-    background: #1e1e1e;
-    color: #e0e0e0;
-    border: 1px solid #007fd4;
-    padding: 1px 4px;
-    margin: 0;
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #4daafc;
+    padding: 0 4px;
+    margin: -1px 0;
     border-radius: 2px;
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 12px;
     text-align: right;
     outline: none;
+    box-sizing: border-box;
+    height: 18px;
+    line-height: 16px;
 }
 
 /* Compiled offset indicator */
