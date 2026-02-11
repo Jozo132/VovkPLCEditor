@@ -487,7 +487,7 @@ export default class ProjectManager {
 
   /**
    * Compiles the current project using the VOVKPLCPROJECT format
-   * @returns {Promise<{size: number, output: string, bytecode?: string, problem?: any, compileTime?: number, memory?: any, flash?: any, execution?: any, memoryAreas?: any[]}>}
+   * @returns {Promise<{size: number, output: string, bytecode?: string, problem?: any, compileTime?: number, memory?: any, flash?: any, execution?: any, memoryAreas?: any[], datablockDecls?: any[]}>}
    */
   async compile() {
     // Ensure project state is up to date before compiling
@@ -533,6 +533,17 @@ export default class ProjectManager {
         // Convert memory_map to memoryAreas array for compatibility
         const memoryAreas = Object.entries(memoryMap).map(([name, [start, size]]) => ({ name, start, size }))
 
+        // Extract datablock declarations from the compiler
+        // These contain absolute offsets, field layouts, types and sizes
+        let datablockDecls = []
+        try {
+            if (typeof runtime.dbGetAllDecls === 'function') {
+                datablockDecls = runtime.dbGetAllDecls()
+            }
+        } catch (e) {
+            console.warn('Failed to extract datablock declarations:', e)
+        }
+
         return {
             size: result.output?.flash?.used || 0,
             output: result.bytecode || '',
@@ -541,7 +552,8 @@ export default class ProjectManager {
             memory: result.output?.memory,
             flash: result.output?.flash,
             execution: result.output?.execution,
-            memoryAreas
+            memoryAreas,
+            datablockDecls
         }
     } catch (e) {
         await runtime.setSilent(false)

@@ -35,6 +35,9 @@ export default class DataBlocksUI {
     /** Device-reported DB entries: Map<db_number, { offset: number, size: number }> */
     _deviceDBEntries = new Map()
 
+    /** Compiler-declared DB entries: Map<db_number, { computedOffset: number, totalSize: number, fields: { name: string, typeName: string, typeSize: number, offset: number }[] }> */
+    _compiledDBEntries = new Map()
+
     /** @type { Map<number, boolean> } */
     collapsedDBs = new Map()
 
@@ -107,6 +110,14 @@ export default class DataBlocksUI {
         if (existingDbInfo?.entries) {
             for (const entry of existingDbInfo.entries) {
                 this._deviceDBEntries.set(entry.db, { offset: entry.offset, size: entry.size })
+            }
+        }
+
+        // Pick up existing compiled DB info if available
+        const compiledDBs = this.master?.project?.compiledDatablocks
+        if (compiledDBs?.length) {
+            for (const decl of compiledDBs) {
+                this._compiledDBEntries.set(decl.db_number, decl)
             }
         }
 
@@ -313,9 +324,11 @@ export default class DataBlocksUI {
 
         const totalSize = this._calcDBSize(db)
         const deviceEntry = this._deviceDBEntries.get(db.id)
-        const addressStr = deviceEntry ? `@${deviceEntry.offset}` : ''
+        const compiledEntry = this._compiledDBEntries.get(db.id)
+        const effectiveOffset = deviceEntry ? deviceEntry.offset : (compiledEntry ? compiledEntry.computedOffset : null)
+        const addressStr = effectiveOffset !== null ? `@${effectiveOffset}` : ''
         const sizeStr = totalSize > 0 ? `${totalSize}B` : ''
-        const allocStatus = deviceEntry ? '' : ' <span class="db-not-allocated">(not allocated)</span>'
+        const allocStatus = deviceEntry ? '' : (compiledEntry ? ' <span class="db-compiled-offset">(compiled)</span>' : ' <span class="db-not-allocated">(not allocated)</span>')
 
         const pathStr = db.path && db.path !== '/' ? `<span class="db-path">${this._escapeHTML(db.path)}/</span>` : ''
 
@@ -400,7 +413,11 @@ export default class DataBlocksUI {
         iconTd.style.paddingRight = '4px'
         const absAddr = fieldOffset
         const deviceEntry = this._deviceDBEntries.get(db.id)
-        const absAddrStr = deviceEntry ? `Absolute: @${deviceEntry.offset + fieldOffset}` : 'Not allocated on device'
+        const compiledEntry = this._compiledDBEntries.get(db.id)
+        const effectiveBase = deviceEntry ? deviceEntry.offset : (compiledEntry ? compiledEntry.computedOffset : null)
+        const absAddrStr = effectiveBase !== null
+            ? `Absolute: @${effectiveBase + fieldOffset}${!deviceEntry && compiledEntry ? ' (compiled)' : ''}`
+            : 'Not allocated on device'
         iconTd.textContent = `+${fieldOffset}`
         iconTd.title = absAddrStr
         tr.appendChild(iconTd)
@@ -739,11 +756,12 @@ export default class DataBlocksUI {
             const totalSize = this._calcDBSize(db)
             if (totalSize <= 0) continue
 
-            // Use device-reported absolute address for this DB
+            // Use device-reported absolute address first, fall back to compiled offset
             const deviceEntry = this._deviceDBEntries.get(db.id)
-            if (!deviceEntry) continue // DB not allocated on device, skip monitoring
+            const compiledEntry = this._compiledDBEntries.get(db.id)
+            const baseAddr = deviceEntry ? deviceEntry.offset : (compiledEntry ? compiledEntry.computedOffset : null)
+            if (baseAddr === null) continue // DB not allocated and not compiled, skip monitoring
 
-            const baseAddr = deviceEntry.offset
             fetcher.register(this._fetcherId, baseAddr, totalSize, (data) => {
                 this._processDBData(db, data, baseAddr)
             })
@@ -842,6 +860,26 @@ export default class DataBlocksUI {
         // Re-render to show updated addresses
         this.renderTable()
         // Re-register monitoring ranges with correct addresses
+        if (this.monitoringActive && !this.hidden) {
+            this._registerMonitorRanges()
+        }
+    }
+
+    /**
+     * Receive compiled datablock declarations from the compiler
+     * These contain absolute memory offsets computed during compilation
+     * @param {{ db_number: number, alias: string, totalSize: number, computedOffset: number, fields: { name: string, typeName: string, typeSize: number, offset: number, hasDefault: boolean, defaultValue: number }[] }[]} decls
+     */
+    receiveCompiledDatablocks(decls) {
+        this._compiledDBEntries.clear()
+        if (decls?.length) {
+            for (const decl of decls) {
+                this._compiledDBEntries.set(decl.db_number, decl)
+            }
+        }
+        // Re-render to show updated addresses
+        this.renderTable()
+        // Re-register monitoring ranges with compiled addresses
         if (this.monitoringActive && !this.hidden) {
             this._registerMonitorRanges()
         }

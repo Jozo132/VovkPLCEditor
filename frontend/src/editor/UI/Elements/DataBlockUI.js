@@ -38,6 +38,9 @@ export default class DataBlockUI {
     /** Device-reported DB entries: Map<db_number, { offset: number, size: number }> */
     _deviceDBEntries = new Map()
 
+    /** Compiler-declared DB entries: Map<db_number, { computedOffset: number, totalSize: number, fields: { name: string, typeName: string, typeSize: number, offset: number }[] }> */
+    _compiledDBEntries = new Map()
+
     /** @type {number} */
     dbNumber
 
@@ -123,6 +126,14 @@ export default class DataBlockUI {
         if (existingDbInfo?.entries) {
             for (const entry of existingDbInfo.entries) {
                 this._deviceDBEntries.set(entry.db, { offset: entry.offset, size: entry.size })
+            }
+        }
+
+        // Pick up existing compiled DB info if available
+        const compiledDBs = this.master?.project?.compiledDatablocks
+        if (compiledDBs?.length) {
+            for (const decl of compiledDBs) {
+                this._compiledDBEntries.set(decl.db_number, decl)
             }
         }
 
@@ -307,15 +318,17 @@ export default class DataBlockUI {
         // Summary row
         const totalSize = this._calcDBSize(db)
         const deviceEntry = this._deviceDBEntries.get(db.id)
+        const compiledEntry = this._compiledDBEntries.get(db.id)
+        const effectiveOffset = deviceEntry ? deviceEntry.offset : (compiledEntry ? compiledEntry.computedOffset : null)
         const summaryTr = document.createElement('tr')
         summaryTr.classList.add('db-section-header')
         const summaryTd = document.createElement('td')
         summaryTd.colSpan = 7
         summaryTd.style.borderTop = '1px solid #333'
         summaryTd.style.paddingTop = '6px'
-        const addressStr = deviceEntry ? `@${deviceEntry.offset}` : ''
+        const addressStr = effectiveOffset !== null ? `@${effectiveOffset}` : ''
         const sizeStr = totalSize > 0 ? `${totalSize} bytes` : '0 bytes'
-        const allocStatus = deviceEntry ? '' : ' (not allocated on device)'
+        const allocStatus = deviceEntry ? '' : (compiledEntry ? ' (compiled)' : ' (not allocated on device)')
         summaryTd.innerHTML = `<span style="color: #888; font-size: 11px;">${db.fields.length} field${db.fields.length !== 1 ? 's' : ''} · ${sizeStr} ${addressStr}${allocStatus}</span>`
         summaryTr.appendChild(summaryTd)
         this.tbody.appendChild(summaryTr)
@@ -338,7 +351,11 @@ export default class DataBlockUI {
         iconTd.style.userSelect = 'none'
         iconTd.style.paddingRight = '4px'
         const deviceEntry = this._deviceDBEntries.get(db.id)
-        const absAddrStr = deviceEntry ? `Absolute: @${deviceEntry.offset + fieldOffset}` : 'Not allocated on device'
+        const compiledEntry = this._compiledDBEntries.get(db.id)
+        const effectiveBase = deviceEntry ? deviceEntry.offset : (compiledEntry ? compiledEntry.computedOffset : null)
+        const absAddrStr = effectiveBase !== null
+            ? `Absolute: @${effectiveBase + fieldOffset}${!deviceEntry && compiledEntry ? ' (compiled)' : ''}`
+            : 'Not allocated on device'
         iconTd.textContent = `+${fieldOffset}`
         iconTd.title = absAddrStr
         tr.appendChild(iconTd)
@@ -523,7 +540,9 @@ export default class DataBlockUI {
         const db = this._getDB()
         if (!db) return
         const deviceEntry = this._deviceDBEntries.get(db.id)
-        if (!deviceEntry) return
+        const compiledEntry = this._compiledDBEntries.get(db.id)
+        const baseAddr = deviceEntry ? deviceEntry.offset : (compiledEntry ? compiledEntry.computedOffset : null)
+        if (baseAddr === null) return
 
         const fetcher = this.master?.data_fetcher
         if (!fetcher) return
@@ -533,8 +552,8 @@ export default class DataBlockUI {
 
         const totalSize = this._calcDBSize(db)
         if (totalSize <= 0) return
-        fetcher.register(this._fetcherId, deviceEntry.offset, totalSize, (data) => {
-            this._processDBData(db, data, deviceEntry.offset)
+        fetcher.register(this._fetcherId, baseAddr, totalSize, (data) => {
+            this._processDBData(db, data, baseAddr)
         })
     }
 
@@ -585,6 +604,21 @@ export default class DataBlockUI {
         if (entries) {
             for (const entry of entries) {
                 this._deviceDBEntries.set(entry.db, { offset: entry.offset, size: entry.size })
+            }
+        }
+        this.renderTable()
+        if (!this.hidden) this._registerMonitorRanges()
+    }
+
+    /**
+     * Receive compiled datablock declarations from the compiler
+     * @param {{ db_number: number, alias: string, totalSize: number, computedOffset: number, fields: { name: string, typeName: string, typeSize: number, offset: number, hasDefault: boolean, defaultValue: number }[] }[]} decls
+     */
+    receiveCompiledDatablocks(decls) {
+        this._compiledDBEntries.clear()
+        if (decls?.length) {
+            for (const decl of decls) {
+                this._compiledDBEntries.set(decl.db_number, decl)
             }
         }
         this.renderTable()

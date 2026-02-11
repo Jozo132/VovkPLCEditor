@@ -2513,6 +2513,18 @@ export default class WindowManager {
                 this.logToConsole('----------------------------------------', 'info')
             }
 
+            // Store compiled datablock declarations for live monitoring
+            if (result.datablockDecls && result.datablockDecls.length > 0) {
+                this.#editor.project.compiledDatablocks = result.datablockDecls
+                // Notify all DataBlock windows with compiled offset info
+                this.notifyCompiledDatablocks(result.datablockDecls)
+                if (!suppressInfo) {
+                    this.logToConsole(`  ${result.datablockDecls.length} data block(s) compiled`, 'info')
+                }
+            } else {
+                this.#editor.project.compiledDatablocks = []
+            }
+
             // Auto-scan for patchable constants after successful compilation (always run, even in silent mode)
             if (this.#editor.program_patcher) {
                 try {
@@ -5079,6 +5091,19 @@ export default class WindowManager {
         for (const win of this.windows.values()) {
             if (win && typeof win.receiveDeviceDBInfo === 'function') {
                 win.receiveDeviceDBInfo(dbInfo)
+            }
+        }
+    }
+
+    /**
+     * Forward compiled datablock declarations to any open DataBlocksUI/DataBlockUI windows
+     * These contain the absolute memory offsets computed by the compiler
+     * @param {{ db_number: number, alias: string, totalSize: number, computedOffset: number, fields: { name: string, typeName: string, typeSize: number, offset: number, hasDefault: boolean, defaultValue: number }[] }[]} decls
+     */
+    notifyCompiledDatablocks(decls) {
+        for (const win of this.windows.values()) {
+            if (win && typeof win.receiveCompiledDatablocks === 'function') {
+                win.receiveCompiledDatablocks(decls)
             }
         }
     }

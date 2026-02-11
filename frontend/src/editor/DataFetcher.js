@@ -133,6 +133,8 @@ export default class DataFetcher {
 
     /**
      * Resolve symbol or address string to { address, size, type, bit }
+     * Supports: symbol names, M/X/Y/S/C/T prefixed addresses, absolute numbers,
+     * and DB addresses (DB1.field_name, DB1.0, DB1.offset)
      * @param {string | object} input 
      */
     resolve(input) {
@@ -154,6 +156,12 @@ export default class DataFetcher {
                 symbol = s
             } else {
                 const inputTrimmed = input.trim()
+                
+                // Pattern: DB<n>.<field_name_or_offset> (e.g. DB1.speed, DB1.0, DB1.position)
+                const matchDB = inputTrimmed.match(/^DB(\d+)\.(.+)$/i)
+                if (matchDB) {
+                    return this._resolveDBAddress(parseInt(matchDB[1]), matchDB[2])
+                }
                 
                 // Pattern: Letter + Number (e.g., M100, M100.2)
                 const matchLetter = inputTrimmed.match(/^([cCxXyYsSmM])([0-9]+(?:\.[0-9]+)?)$/)
@@ -230,6 +238,69 @@ export default class DataFetcher {
         } else {
              size = typeSizes[type] || 1
              return { address: baseOffset + Math.floor(addrVal), size, bit: null, type }
+        }
+    }
+
+    /**
+     * Resolve a DataBlock field reference to absolute address info.
+     * Uses compiled datablock declarations (from project.compiledDatablocks) which contain
+     * the absolute memory offsets computed by the compiler.
+     * 
+     * @param {number} dbNumber - DB number (e.g. 1 for DB1)
+     * @param {string} fieldRef - Field name or numeric offset (e.g. "speed", "0", "4")
+     * @returns {{ address: number, size: number, bit: number | null, type: string, dbNumber: number, fieldName: string } | null}
+     */
+    _resolveDBAddress(dbNumber, fieldRef) {
+        const project = this.editor.project
+        if (!project) return null
+
+        // Look up the compiled datablock declarations
+        const decls = project.compiledDatablocks
+        if (!decls || !decls.length) return null
+
+        const decl = decls.find(d => d.db_number === dbNumber)
+        if (!decl) return null
+
+        const baseAddr = decl.computedOffset
+
+        // Try to find field by name first
+        let field = decl.fields.find(f => f.name === fieldRef)
+
+        // If not found by name, try numeric offset
+        if (!field) {
+            const numOffset = parseInt(fieldRef)
+            if (!isNaN(numOffset)) {
+                // Find the field at this offset, or return raw byte access
+                field = decl.fields.find(f => f.offset === numOffset)
+                if (!field) {
+                    // Raw byte access within the DB if offset is in range
+                    if (numOffset >= 0 && numOffset < decl.totalSize) {
+                        return {
+                            address: baseAddr + numOffset,
+                            size: 1,
+                            bit: null,
+                            type: 'byte',
+                            dbNumber,
+                            fieldName: `+${numOffset}`
+                        }
+                    }
+                    return null
+                }
+            }
+        }
+
+        if (!field) return null
+
+        const typeName = (field.typeName || 'byte').toLowerCase()
+        const isBit = typeName === 'bit' || typeName === 'bool'
+
+        return {
+            address: baseAddr + field.offset,
+            size: field.typeSize || 1,
+            bit: isBit ? 0 : null,
+            type: typeName,
+            dbNumber,
+            fieldName: field.name
         }
     }
 

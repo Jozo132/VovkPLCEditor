@@ -83,6 +83,7 @@ export let PLC_DataBlock
 *     symbols: PLC_Symbol[]
 *     device_symbols?: PLC_Symbol[]
 *     datablocks?: PLC_DataBlock[]
+*     compiledDatablocks?: { db_number: number, alias: string, totalSize: number, computedOffset: number, fields: { name: string, typeName: string, typeSize: number, offset: number, hasDefault: boolean, defaultValue: number }[] }[]
 *     folders: string[]
 *     files: PLC_ProjectItem[]
 *     watch?: { name: string, format?: string }[]
