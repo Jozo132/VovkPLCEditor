@@ -141,15 +141,39 @@ const datablocks_icon_source = {
     width: 24,
     height: 24,
     data: `
-        <rect fill="#C586C0" opacity="0.15" x="3" y="2" width="18" height="8" rx="2"/>
-        <rect fill="none" stroke="#C586C0" stroke-width="1.5" x="3" y="2" width="18" height="8" rx="2"/>
-        <rect fill="#C586C0" opacity="0.15" x="3" y="13" width="18" height="8" rx="2"/>
-        <rect fill="none" stroke="#C586C0" stroke-width="1.5" x="3" y="13" width="18" height="8" rx="2"/>
-        <line stroke="#C586C0" stroke-width="1" x1="7" y1="5" x2="17" y2="5"/>
-        <line stroke="#C586C0" stroke-width="1" x1="7" y1="8" x2="13" y2="8"/>
-        <line stroke="#C586C0" stroke-width="1" x1="7" y1="16" x2="17" y2="16"/>
-        <line stroke="#C586C0" stroke-width="1" x1="7" y1="19" x2="13" y2="19"/>
-        <line stroke="#C586C0" stroke-width="1.5" x1="12" y1="10" x2="12" y2="13"/>
+        <g transform="translate(0, 0) scale(0.55)">
+            <ellipse cx="12" cy="6" rx="8" ry="3" fill="#1e1e1e"/>
+            <rect x="4" y="6" width="16" height="12" fill="#1e1e1e"/>
+            <ellipse cx="12" cy="18" rx="8" ry="3" fill="#1e1e1e"/>
+            <ellipse cx="12" cy="6" rx="8" ry="3" fill="#C586C0" opacity="0.25"/>
+            <ellipse cx="12" cy="6" rx="8" ry="3" fill="none" stroke="#C586C0" stroke-width="2.2"/>
+            <path d="M4 6 v12" stroke="#C586C0" stroke-width="2.2" fill="none"/>
+            <path d="M20 6 v12" stroke="#C586C0" stroke-width="2.2" fill="none"/>
+            <ellipse cx="12" cy="18" rx="8" ry="3" fill="#C586C0" opacity="0.15"/>
+            <path d="M4 18 a8 3 0 0 0 16 0" stroke="#C586C0" stroke-width="2.2" fill="none"/>
+        </g>
+        <g transform="translate(6, 3) scale(0.55)">
+            <ellipse cx="12" cy="6" rx="8" ry="3" fill="#1e1e1e"/>
+            <rect x="4" y="6" width="16" height="12" fill="#1e1e1e"/>
+            <ellipse cx="12" cy="18" rx="8" ry="3" fill="#1e1e1e"/>
+            <ellipse cx="12" cy="6" rx="8" ry="3" fill="#C586C0" opacity="0.25"/>
+            <ellipse cx="12" cy="6" rx="8" ry="3" fill="none" stroke="#C586C0" stroke-width="2.2"/>
+            <path d="M4 6 v12" stroke="#C586C0" stroke-width="2.2" fill="none"/>
+            <path d="M20 6 v12" stroke="#C586C0" stroke-width="2.2" fill="none"/>
+            <ellipse cx="12" cy="18" rx="8" ry="3" fill="#C586C0" opacity="0.15"/>
+            <path d="M4 18 a8 3 0 0 0 16 0" stroke="#C586C0" stroke-width="2.2" fill="none"/>
+        </g>
+        <g transform="translate(3, 10) scale(0.55)">
+            <ellipse cx="12" cy="6" rx="8" ry="3" fill="#1e1e1e"/>
+            <rect x="4" y="6" width="16" height="12" fill="#1e1e1e"/>
+            <ellipse cx="12" cy="18" rx="8" ry="3" fill="#1e1e1e"/>
+            <ellipse cx="12" cy="6" rx="8" ry="3" fill="#C586C0" opacity="0.25"/>
+            <ellipse cx="12" cy="6" rx="8" ry="3" fill="none" stroke="#C586C0" stroke-width="2.2"/>
+            <path d="M4 6 v12" stroke="#C586C0" stroke-width="2.2" fill="none"/>
+            <path d="M20 6 v12" stroke="#C586C0" stroke-width="2.2" fill="none"/>
+            <ellipse cx="12" cy="18" rx="8" ry="3" fill="#C586C0" opacity="0.15"/>
+            <path d="M4 18 a8 3 0 0 0 16 0" stroke="#C586C0" stroke-width="2.2" fill="none"/>
+        </g>
     `
 }
 

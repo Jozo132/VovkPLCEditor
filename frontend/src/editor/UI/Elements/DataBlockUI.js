@@ -62,12 +62,13 @@ export default class DataBlockUI {
         frame.appendChild(div)
 
         const db = this._getDB()
-        const title = db ? `DB${db.id} — ${db.name || 'DataBlock'}` : `DB${dbNumber}`
+        const badge = `DB${db ? db.id : dbNumber}`
+        const title = db ? `${db.name || 'DataBlock'}` : `DataBlock`
 
         div.innerHTML = /*HTML*/`
             <div class="plc-editor-top">
                 <div class="plc-editor-header">
-                    <h2 style="margin-top: 0px; margin-bottom: 3px;">${this._escapeHTML(title)}</h2>
+                    <h2 style="margin-top: 0px; margin-bottom: 3px;"><span class="plc-db-badge">${badge}</span>${this._escapeHTML(title)}</h2>
                     <p>Data Block Definition</p>
                     <button class="plc-btn monitor-btn" data-monitor-toggle="true" title="Toggle Live Monitoring">
                         <span class="plc-icon plc-icon-monitor"></span>
@@ -267,7 +268,7 @@ export default class DataBlockUI {
         const db = this._getDB()
         if (!db) return
         const h2 = this.header?.querySelector('h2')
-        if (h2) h2.textContent = `DB${db.id} — ${db.name || 'DataBlock'}`
+        if (h2) h2.innerHTML = `<span class="plc-db-badge">DB${db.id}</span>${this._escapeHTML(db.name || 'DataBlock')}`
     }
 
     // ── Rendering ──
@@ -490,7 +491,7 @@ export default class DataBlockUI {
             td.textContent = String(data)
             td.style.color = this._live_color_on
         } else {
-            td.textContent = '—'
+            td.textContent = '-'
             td.style.color = this._live_color_off
         }
     }

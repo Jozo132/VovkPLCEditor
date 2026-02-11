@@ -1,5 +1,26 @@
 /* DataBlocks UI Styles */
 
+/* DB badge in window header */
+.plc-db-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 16px;
+    font-weight: 600;
+    font-family: Consolas, monospace;
+    color: #C586C0;
+    background: rgba(197, 134, 192, 0.12);
+    border: 1px solid rgba(197, 134, 192, 0.3);
+    border-radius: 4px;
+    padding: 2px 7px;
+    margin-right: 8px;
+    line-height: 1.4;
+    white-space: nowrap;
+    user-select: none;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
+}
+
 /* DataBlock section headers (DB1, DB2, etc.) */
 .datablocks-table tbody tr.db-section-header {
     background-color: #1e1e1e;
