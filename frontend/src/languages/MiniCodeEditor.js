@@ -1641,15 +1641,37 @@ export class MiniCodeEditor {
                     }
                 }
             } else {
-                // Legacy behavior
-                const pref = /[A-Za-z_]\w*$/.exec(ta.value.slice(0, i))?.[0] || ''
+                // Context-aware word-based autocomplete
+                const pref = /[A-Za-z_][\w.]*$/.exec(ta.value.slice(0, i))?.[0] || ''
                 if (!force && !pref) return hide()
-                const raw = wordSrc(pref)
-                list = raw
+                ctx.prefix = pref
+                // Extract previous token for context-aware filtering
+                const lineBeforePref = (ctx.lineText || '').slice(0, (ctx.lineText || '').length - pref.length).trimEnd()
+                const prevMatch = lineBeforePref.match(/(?:[A-Za-z_][\w.]*|:=|<>|<=|>=|==|!=|&&|\|\||[^\s])$/)
+                ctx.prevToken = prevMatch ? prevMatch[0] : ''
+                const wCtx = lang.wordContext ? lang.wordContext(ctx) : null
+                const filteredWords = wCtx && 'keywords' in wCtx ? wCtx.keywords : (wordSrc(pref) || [])
+                const showSymbols = wCtx ? (wCtx.showSymbols !== false) : true
+                const kwType = wCtx?.keywordType || 'Keyword'
+                list = filteredWords
                     .filter(w => w.toUpperCase().startsWith(pref.toUpperCase()))
                     .slice(0, 15)
-                    .map(w => ({text: w, type: '', kind: 'kw'}))
-                ctx.prefix = pref
+                    .map(w => ({text: w, type: kwType, kind: kwType === 'Type' ? 'dt' : 'kw'}))
+                // Include symbols and datablock fields when context allows
+                if (showSymbols) {
+                    const syms = symbolSrc('symbol') || []
+                    const symItems = syms
+                        .filter(s => {
+                            const name = typeof s === 'string' ? s : s.name
+                            return name.toLowerCase().startsWith(pref.toLowerCase())
+                        })
+                        .map(s => {
+                            const name = typeof s === 'string' ? s : s.name
+                            const type = typeof s === 'string' ? 'Variable' : (s.type || 'Variable')
+                            return { text: name, type, kind: 'var' }
+                        })
+                    list = list.concat(symItems)
+                }
             }
 
             // Show Hint
@@ -2102,6 +2124,19 @@ MiniCodeEditor.registerLanguage('st', {
         'TRUE', 'FALSE', 'AND', 'OR', 'XOR', 'NOT', 'MOD',
         'TON', 'TOF', 'TP', 'CTU', 'CTD', 'CTUD', 'R_TRIG', 'F_TRIG',
     ],
+    wordContext(ctx) {
+        const prev = (ctx.prevToken || '').toUpperCase()
+        const types = ['BOOL','BYTE','WORD','DWORD','LWORD','SINT','INT','DINT','LINT','USINT','UINT','UDINT','ULINT','REAL','LREAL','TIME','DATE','TOD','DT','STRING','WSTRING','ARRAY','STRUCT','END_STRUCT']
+        const expr = ['NOT','TRUE','FALSE','TON','TOF','TP','CTU','CTD','CTUD','R_TRIG','F_TRIG']
+        const stmt = ['IF','FOR','WHILE','REPEAT','CASE','RETURN','EXIT']
+        const cont = ['THEN','ELSE','ELSIF','END_IF','AND','OR','XOR','MOD','DO','TO','BY','OF','END_FOR','END_WHILE','END_REPEAT','END_CASE']
+        if (prev === ':') return { keywords: types, showSymbols: false, keywordType: 'Type' }
+        if (['IF','ELSIF','WHILE','UNTIL','CASE',':=','(','[','AND','OR','XOR','NOT','MOD','+','-','*','/','=','<>','<','>','<=','>=','TO','BY','RETURN'].includes(prev))
+            return { keywords: expr, showSymbols: true }
+        if (['THEN','ELSE','DO',';','END_IF','END_FOR','END_WHILE','END_REPEAT','END_CASE','END_FUNCTION','END_FUNCTION_BLOCK','END_PROGRAM','END_VAR',''].includes(prev))
+            return { keywords: stmt, showSymbols: true }
+        return { keywords: cont, showSymbols: false }
+    },
 })
 
 /* PLCScript (TypeScript/ES7 subset with PLC extensions) */
@@ -2195,6 +2230,16 @@ MiniCodeEditor.registerLanguage('plcscript', {
         'u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'u64', 'i64', 'f32', 'f64', 'bool', 'void',
         'auto', 'true', 'false',
     ],
+    wordContext(ctx) {
+        const prev = (ctx.prevToken || '').toLowerCase()
+        const types = ['u8','i8','u16','i16','u32','i32','u64','i64','f32','f64','bool','void','auto']
+        const stmt = ['let','const','function','if','else','while','for','return','break','continue']
+        if (prev === ':') return { keywords: types, showSymbols: false, keywordType: 'Type' }
+        if (['=','==','!=','<','>','<=','>=','+','-','*','/','%','&&','||','!','(','[','if','while','return','else'].includes(prev))
+            return { keywords: ['true','false'], showSymbols: true }
+        if (['{','}',';',''].includes(prev)) return { keywords: stmt, showSymbols: true }
+        return { keywords: [], showSymbols: false }
+    },
 })
 
 /* JavaScript */
@@ -2440,6 +2485,10 @@ MiniCodeEditor.registerLanguage('stl', {
         // Other
         'NETWORK', 'NOP',
     ],
+    wordContext(ctx) {
+        if (ctx.argIndex === 0) return { showSymbols: false }
+        return { keywords: [], showSymbols: true }
+    },
 })
 
 /* JSON */

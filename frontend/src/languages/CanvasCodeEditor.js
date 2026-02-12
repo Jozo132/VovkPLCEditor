@@ -1760,9 +1760,9 @@ export class CanvasCodeEditor {
         const line = this._lines[cursor.line] || ''
         const lineText = line.slice(0, cursor.col)
         
-        // Extract the word prefix at cursor (include dots for definition-based languages like ASM)
+        // Extract the word prefix at cursor (include dots for DB references and definition-based languages)
         const lang = this._languageRules
-        const prefixRegex = lang?.definitions ? /[A-Za-z_][\w.]*$/ : /[A-Za-z_]\w*$/
+        const prefixRegex = /[A-Za-z_][\w.]*$/
         const prefixMatch = prefixRegex.exec(lineText)
         const prefix = prefixMatch ? prefixMatch[0] : ''
         
@@ -1771,14 +1771,19 @@ export class CanvasCodeEditor {
         const trailingSpace = /\s$/.test(lineText)
         const tokens = trimmed.split(/[\s,]+/).filter(t => t)
         
-        if (!trimmed) return { cmd: null, argIndex: 0, prefix: '', lineText }
+        // Extract the token immediately before the prefix (for context-aware autocomplete)
+        const beforePrefix = lineText.slice(0, lineText.length - prefix.length).trimEnd()
+        const prevTokenMatch = beforePrefix.match(/(?:[A-Za-z_][\w.]*|:=|<>|<=|>=|==|!=|&&|\|\||[^\s])$/)
+        const prevToken = prevTokenMatch ? prevTokenMatch[0] : ''
+        
+        if (!trimmed) return { cmd: null, argIndex: 0, prefix: '', lineText, prevToken: '' }
         
         let argIndex = tokens.length - 1
         if (trailingSpace) {
             argIndex++
         }
         
-        return { cmd: tokens[0], argIndex, prefix, lineText }
+        return { cmd: tokens[0], argIndex, prefix, lineText, prevToken }
     }
     
     _triggerAutocomplete(force = false) {
@@ -1884,19 +1889,41 @@ export class CanvasCodeEditor {
                 }
             }
         } else if (lang.words) {
-            // Simple word-based autocomplete
+            // Context-aware word-based autocomplete
             if (!force && !ctx.prefix) return this._hideAutocomplete()
             // Suppress autocomplete after declaration keywords (e.g. 'let ', 'const ', 'function ')
             if (lang.declarationKeywords && ctx.argIndex >= 1) {
-                const prevToken = ctx.lineText.trimStart().split(/[\s,]+/).filter(t => t)[0]
-                if (prevToken && lang.declarationKeywords.includes(prevToken.toLowerCase())) {
+                const firstToken = ctx.lineText.trimStart().split(/[\s,]+/).filter(t => t)[0]
+                if (firstToken && lang.declarationKeywords.includes(firstToken.toLowerCase())) {
                     return this._hideAutocomplete()
                 }
             }
-            list = lang.words
+            // Context-aware keyword filtering
+            const wCtx = lang.wordContext ? lang.wordContext(ctx) : null
+            const filteredWords = wCtx && 'keywords' in wCtx ? wCtx.keywords : lang.words
+            const showSymbols = wCtx ? (wCtx.showSymbols !== false) : true
+            const kwType = wCtx?.keywordType || 'Keyword'
+            
+            list = filteredWords
                 .filter(w => w.toLowerCase().startsWith(ctx.prefix.toLowerCase()))
                 .slice(0, 15)
-                .map(w => ({ text: w, type: '', kind: 'kw' }))
+                .map(w => ({ text: w, type: kwType, kind: kwType === 'Type' ? 'dt' : 'kw' }))
+            
+            // Also include symbols and datablock fields when context allows
+            if (showSymbols && this._symbolProvider) {
+                const syms = this._symbolProvider('symbol') || []
+                const symItems = syms
+                    .filter(s => {
+                        const name = typeof s === 'string' ? s : s.name
+                        return name.toLowerCase().startsWith(ctx.prefix.toLowerCase())
+                    })
+                    .map(s => {
+                        const name = typeof s === 'string' ? s : s.name
+                        const type = typeof s === 'string' ? 'Variable' : (s.type || 'Variable')
+                        return { text: name, type, kind: 'var' }
+                    })
+                list = list.concat(symItems)
+            }
         }
         
         // Custom autocomplete provider (additive)
@@ -4931,6 +4958,12 @@ CanvasCodeEditor.registerLanguage('stl', {
         'AND', 'ANDN', 'OR', 'ORN', 'XOR', 'XORN',
         'NETWORK', 'NOP',
     ],
+    wordContext(ctx) {
+        // argIndex 0 = typing instruction → show keywords only
+        if (ctx.argIndex === 0) return { showSymbols: false }
+        // After instruction: show operands (symbols, DB fields) only
+        return { keywords: [], showSymbols: true }
+    },
 })
 
 // Structured Text (IEC 61131-3)
@@ -4963,6 +4996,23 @@ CanvasCodeEditor.registerLanguage('st', {
         'TRUE', 'FALSE', 'AND', 'OR', 'XOR', 'NOT', 'MOD',
         'TON', 'TOF', 'TP', 'CTU', 'CTD', 'CTUD', 'R_TRIG', 'F_TRIG',
     ],
+    wordContext(ctx) {
+        const prev = (ctx.prevToken || '').toUpperCase()
+        const types = ['BOOL','BYTE','WORD','DWORD','LWORD','SINT','INT','DINT','LINT','USINT','UINT','UDINT','ULINT','REAL','LREAL','TIME','DATE','TOD','DT','STRING','WSTRING','ARRAY','STRUCT','END_STRUCT']
+        const expr = ['NOT','TRUE','FALSE','TON','TOF','TP','CTU','CTD','CTUD','R_TRIG','F_TRIG']
+        const stmt = ['IF','FOR','WHILE','REPEAT','CASE','RETURN','EXIT']
+        const cont = ['THEN','ELSE','ELSIF','END_IF','AND','OR','XOR','MOD','DO','TO','BY','OF','END_FOR','END_WHILE','END_REPEAT','END_CASE']
+        // Type context: after ':'
+        if (prev === ':') return { keywords: types, showSymbols: false, keywordType: 'Type' }
+        // Expression context: need an operand
+        if (['IF','ELSIF','WHILE','UNTIL','CASE',':=','(','[','AND','OR','XOR','NOT','MOD','+','-','*','/','=','<>','<','>','<=','>=','TO','BY','RETURN'].includes(prev))
+            return { keywords: expr, showSymbols: true }
+        // Statement context: beginning of a new statement
+        if (['THEN','ELSE','DO',';','END_IF','END_FOR','END_WHILE','END_REPEAT','END_CASE','END_FUNCTION','END_FUNCTION_BLOCK','END_PROGRAM','END_VAR',''].includes(prev))
+            return { keywords: stmt, showSymbols: true }
+        // Default: after variable/expression → show continuation keywords
+        return { keywords: cont, showSymbols: false }
+    },
 })
 
 // PLCScript
@@ -5088,6 +5138,20 @@ CanvasCodeEditor.registerLanguage('plcscript', {
         'auto', 'str8', 'str16', 'true', 'false',
     ],
     declarationKeywords: ['let', 'const', 'function'],
+    wordContext(ctx) {
+        const prev = (ctx.prevToken || '').toLowerCase()
+        const types = ['u8','i8','u16','i16','u32','i32','u64','i64','f32','f64','bool','void','auto','str8','str16']
+        const stmt = ['let','const','function','if','else','while','for','return','break','continue']
+        // Type context: after ':'
+        if (prev === ':') return { keywords: types, showSymbols: false, keywordType: 'Type' }
+        // Expression context
+        if (['=','==','!=','<','>','<=','>=','+','-','*','/','%','&&','||','!','(','[','if','while','return','else'].includes(prev))
+            return { keywords: ['true','false'], showSymbols: true }
+        // Statement context
+        if (['{','}',';',''].includes(prev)) return { keywords: stmt, showSymbols: true }
+        // Default: after value/expression → no suggestions
+        return { keywords: [], showSymbols: false }
+    },
 })
 
 export default CanvasCodeEditor

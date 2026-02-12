@@ -269,10 +269,30 @@ export const stRenderer = {
                     })
                 },
                 symbolProvider: type => {
-                    if (!editor.project || !editor.project.symbols) return []
-                    let symbols = editor.project.symbols
-                    if (type === 'bit_symbol') symbols = symbols.filter(s => s.type === 'bit')
-                    return symbols.map(s => ({name: s.name, type: s.type}))
+                    if (!editor.project) return []
+                    let items = []
+
+                    // Add symbols
+                    const symbols = editor.project.symbols || []
+                    if (type === 'bit_symbol') {
+                        items = symbols.filter(s => s.type === 'bit').map(s => ({name: s.name, type: s.type}))
+                    } else {
+                        items = symbols.map(s => ({name: s.name, type: s.type}))
+                    }
+
+                    // Add datablock fields (DB<n>.<field> and <alias>.<field>)
+                    const datablocks = editor.project.datablocks || []
+                    for (const db of datablocks) {
+                        items.push({ name: `DB${db.id}`, type: 'DataBlock' })
+                        if (db.name) items.push({ name: db.name, type: 'DataBlock' })
+                        for (const field of (db.fields || [])) {
+                            const fieldType = (field.type || 'BYTE').toUpperCase()
+                            items.push({ name: `DB${db.id}.${field.name}`, type: fieldType })
+                            if (db.name) items.push({ name: `${db.name}.${field.name}`, type: fieldType })
+                        }
+                    }
+
+                    return items
                 },
                 hoverProvider: word => {
                     if (!word) return null
