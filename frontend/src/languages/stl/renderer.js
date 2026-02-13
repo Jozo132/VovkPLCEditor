@@ -417,7 +417,7 @@ export const stlRenderer = {
                 language: 'stl',
                 font: '14px Consolas, monospace',
                 readOnly: !!editor.edit_locked,
-                onPreviewAction: (entry, action) => handlePreviewAction(entry, action),
+                onPreviewAction: (entry, action, inlineValue) => handlePreviewAction(entry, action, inlineValue),
                 onPreviewContextMenu: (entry, event) => {
                     if (entry?.isTimerStorage) {
                         return // No menu for timer internal storage

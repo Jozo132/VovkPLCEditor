@@ -5,7 +5,9 @@
     "init": "git pull && git submodule update --init --recursive",
     "update": "git pull && git submodule update --remote --recursive",
     "explain": "node --no-warnings lib/VovkPLCRuntime/wasm/node-test/explain.js",
+    "analyze": "node --no-warnings lib/VovkPLCRuntime/wasm/node-test/analyze.js",
     "start": "node --experimental-strip-types ./backend/main.ts",
+    "host": "node --experimental-strip-types ./backend/main.ts --frontendonly",
     "build": "node ./build.js"
   },
   "keywords": [],

@@ -12,5 +12,8 @@
     "license": "GPL-3.0",
     "devDependencies": {
         "esbuild": "^0.25.1"
+    },
+    "dependencies": {
+        "socket.io-client": "^4.8.3"
     }
 }
