@@ -171,12 +171,12 @@ export const stlRenderer = {
                 block_container.style.height = calculatedHeight + 'px'
             }
 
-            const handlePreviewAction = async (entry, actionName) => {
+            const handlePreviewAction = async (entry, actionName, inlineValue) => {
                 // ============================================================
                 // LIVE PATCHING: Timer presets and embedded constants
                 // ============================================================
                 if (entry?.isTimerPT && entry?.bytecode_offset !== undefined && typeof entry.presetValue === 'number') {
-                    if (actionName !== 'edit') return
+                    if (actionName !== 'edit' && actionName !== 'edit-confirm') return
 
                     if (!editor.device_manager?.connected) {
                         new Popup({
@@ -202,101 +202,115 @@ export const stlRenderer = {
                         const isIecFormat = entry.originalName && entry.originalName.toUpperCase().startsWith('T#')
                         let currentInput = isIecFormat ? entry.originalName : entry.presetValue
 
-                        await Popup.form({
-                            title: isIecFormat ? `Edit ${entry.originalName}` : `Edit #${entry.presetValue}`,
-                            description: isIecFormat ? 'Enter new timer preset (e.g. T#5s, T#500ms)' : `Enter new timer preset (milliseconds)`,
-                            inputs: [{
-                                    type: isIecFormat ? 'text' : 'number',
-                                    name: 'value',
-                                    label: isIecFormat ? 'Preset' : 'Preset (ms)',
-                                    value: currentInput,
-                                },
-                                {
-                                    type: 'text',
-                                    name: 'error',
-                                    label: ' ',
-                                    readonly: true,
-                                    value: '',
-                                    margin: '0',
-                                }
-                            ],
-                            buttons: [{text: 'Write', value: 'confirm'}, {text: 'Cancel', value: 'cancel'}],
-                            verify: async (states) => {
-                                states.error.value = ''
-                                states.value.clearError()
+                        // Helper: parse and patch timer value from a string input
+                        const parseAndPatchTimer = async (inputStr) => {
+                            const strVal = String(inputStr).trim()
+                            if (!strVal) throw new Error("Value cannot be empty")
 
-                                let newValue = 0
-                                let newToken = ''
-                                const inputValue = states.value.value
+                            let newValue = 0
+                            let newToken = ''
 
-                                try {
-                                    const strVal = String(inputValue).trim()
-                                    if (!strVal) throw new Error("Value cannot be empty")
-
-                                    if (isIecFormat) {
-                                        if (strVal.toUpperCase().startsWith('T#')) {
-                                            if (!/^T#(\d+(?:ms|s|m|h|d))+$/i.test(strVal)) throw new Error("Invalid format.")
-                                            const content = strVal.substring(2)
-                                            const partRegex = /(\d+)(ms|s|m|h|d)/gi
-                                            let totalMs = 0
-                                            let pMatch
-                                            while ((pMatch = partRegex.exec(content))) {
-                                                const val = parseInt(pMatch[1], 10)
-                                                const unit = pMatch[2].toLowerCase()
-                                                if (unit === 's') totalMs += val * 1000
-                                                else if (unit === 'm') totalMs += val * 60000
-                                                else if (unit === 'h') totalMs += val * 3600000
-                                                else if (unit === 'd') totalMs += val * 86400000
-                                                else totalMs += val
-                                            }
-                                            newValue = totalMs
-                                            newToken = strVal
-                                        } else {
-                                            const simple = parseInt(strVal, 10)
-                                            if (isNaN(simple)) throw new Error("Invalid format")
-                                            newValue = simple
-                                            newToken = `#${newValue}`
-                                        }
-                                    } else {
-                                        newValue = parseInt(strVal, 10)
-                                        newToken = `#${newValue}`
+                            if (isIecFormat) {
+                                if (strVal.toUpperCase().startsWith('T#')) {
+                                    if (!/^T#(\d+(?:ms|s|m|h|d))+$/i.test(strVal)) {
+                                        throw new Error("Invalid format. Use e.g. T#5s, T#500ms")
                                     }
-
-                                    if (isNaN(newValue) || newValue < 0 || newValue > 4294967295) throw new Error("Value out of valid range")
-
-                                    const patchResult = await patcher.patchConstant(entry.bytecode_offset, newValue)
-
-                                    if (patchResult.success) {
-                                        // Update source code localized
-                                        if (entry.start !== undefined && entry.end !== undefined) {
-                                            block.code = block.code.substring(0, entry.start) + newToken + block.code.substring(entry.end)
-                                        }
-                                        
-                                        // Force UI refresh
-                                        const textEditor = block.props?.text_editor
-                                        if (textEditor?.setValue) {
-                                            block.cached_checksum = null // Invalidate cache
-                                            block.cached_timer_refs = null
-                                            textEditor.setValue(block.code)
-                                        }
-                                        
-                                        if (editor.project_manager?.checkAndSave) editor.project_manager.checkAndSave()
-                                        
-                                        // Trigger recompile to update maps
-                                        setTimeout(async () => {
-                                            if (editor.window_manager?.handleCompile) await editor.window_manager.handleCompile({silent: true})
-                                        }, 100)
-                                        return true
-                                    } else {
-                                        throw new Error(`Write Failed: ${patchResult.message}`)
+                                    const content = strVal.substring(2)
+                                    const partRegex = /(\d+)(ms|s|m|h|d)/gi
+                                    let totalMs = 0
+                                    let hasMatch = false
+                                    let pMatch
+                                    while ((pMatch = partRegex.exec(content))) {
+                                        hasMatch = true
+                                        const val = parseInt(pMatch[1], 10)
+                                        const unit = pMatch[2].toLowerCase()
+                                        if (unit === 's') totalMs += val * 1000
+                                        else if (unit === 'm') totalMs += val * 60000
+                                        else if (unit === 'h') totalMs += val * 3600000
+                                        else if (unit === 'd') totalMs += val * 86400000
+                                        else totalMs += val
                                     }
-                                } catch (e) {
-                                    states.error.value = e.message
-                                    states.value.setError()
-                                    return false
+                                    newValue = hasMatch ? totalMs : (() => { const s = parseInt(content, 10); if (isNaN(s)) throw new Error("Invalid T# format"); return s })()
+                                    newToken = strVal
+                                } else if (strVal.startsWith('#')) {
+                                    newValue = parseInt(strVal.substring(1), 10)
+                                    newToken = strVal
+                                } else {
+                                    newValue = parseInt(strVal, 10)
+                                    if (isNaN(newValue)) throw new Error("Invalid time format")
+                                    newToken = `#${newValue}`
                                 }
+                            } else {
+                                newValue = parseInt(strVal, 10)
+                                newToken = `#${newValue}`
                             }
-                        })
+
+                            if (isNaN(newValue) || newValue < 0 || newValue > 4294967295) {
+                                throw new Error("Value out of valid range")
+                            }
+
+                            const patchResult = await patcher.patchConstant(entry.bytecode_offset, newValue)
+                            if (!patchResult.success) throw new Error(`Write Failed: ${patchResult.message}`)
+
+                            // Update source code to match patched bytecode
+                            if (entry.start !== undefined && entry.end !== undefined) {
+                                block.code = block.code.substring(0, entry.start) + newToken + block.code.substring(entry.end)
+                            }
+
+                            // Force UI refresh
+                            const textEditor = block.props?.text_editor
+                            if (textEditor?.setValue) {
+                                block.cached_checksum = null
+                                block.cached_timer_refs = null
+                                textEditor.setValue(block.code)
+                            }
+
+                            if (editor.project_manager?.checkAndSave) editor.project_manager.checkAndSave()
+
+                            // Trigger recompile to update maps
+                            setTimeout(async () => {
+                                if (editor.window_manager?.handleCompile) await editor.window_manager.handleCompile({silent: true})
+                            }, 100)
+                        }
+
+                        if (actionName === 'edit-confirm' && inlineValue !== undefined) {
+                            // Inline edit — patch directly with the value from the overlay input
+                            await parseAndPatchTimer(inlineValue)
+                        } else {
+                            // Popup form edit
+                            await Popup.form({
+                                title: isIecFormat ? `Edit ${entry.originalName}` : `Edit #${entry.presetValue}`,
+                                description: isIecFormat ? 'Enter new timer preset (e.g. T#5s, T#500ms)' : `Enter new timer preset (milliseconds)`,
+                                inputs: [{
+                                        type: isIecFormat ? 'text' : 'number',
+                                        name: 'value',
+                                        label: isIecFormat ? 'Preset' : 'Preset (ms)',
+                                        value: currentInput,
+                                    },
+                                    {
+                                        type: 'text',
+                                        name: 'error',
+                                        label: ' ',
+                                        readonly: true,
+                                        value: '',
+                                        margin: '0',
+                                    }
+                                ],
+                                buttons: [{text: 'Write', value: 'confirm'}, {text: 'Cancel', value: 'cancel'}],
+                                verify: async (states) => {
+                                    states.error.value = ''
+                                    states.value.clearError()
+                                    try {
+                                        await parseAndPatchTimer(states.value.value)
+                                        return true
+                                    } catch (e) {
+                                        states.error.value = e.message
+                                        states.value.setError()
+                                        return false
+                                    }
+                                }
+                            })
+                        }
                     } catch (err) {
                         new Popup({title: 'Error', description: err.message, buttons: [{text: 'OK', value: 'ok'}]})
                     }
@@ -474,25 +488,24 @@ export const stlRenderer = {
                          editor._ensureAsmCache(block, cache.signature, cache.map, cache.details)
                     }
                     const cachedTimerRefs = block.cached_timer_refs || []
-                    
-                    // Helper to find cached ref overlapping this range
-                    const findCachedRef = (start, end) => {
-                         // Simple strict overlap check
-                         return cachedTimerRefs.find(r => r.start <= end && r.end >= start)
-                    }
 
-                    // Match timer constant presets with patchable constants from LivePatcher
-                    if (editor.program_patcher?.patchableConstants && cachedTimerRefs.length > 0) {
-                        const patchableMap = new Map()
+                    // Build patchable map (timer_address -> constant) for address-based lookup
+                    // Hoisted so it can be used both for cachedTimerRef enrichment and STL entry creation
+                    const patchableByTimerAddr = new Map()
+                    if (editor.program_patcher?.patchableConstants) {
                         for (const [offset, constant] of editor.program_patcher.patchableConstants) {
                             if (constant.flags & 0x10 && constant.timer_address !== undefined) {
-                                patchableMap.set(constant.timer_address, constant)
+                                patchableByTimerAddr.set(constant.timer_address, constant)
                             }
                         }
+                    }
+
+                    // Enrich cachedTimerRefs with bytecode offsets from patchable constants
+                    if (patchableByTimerAddr.size > 0 && cachedTimerRefs.length > 0) {
                         for (const timerRef of cachedTimerRefs) {
                             if (timerRef.isTimerPT && !timerRef.isPresetAddress && typeof timerRef.presetValue === 'number') {
                                 if (timerRef.storageAddress !== -1) {
-                                    const patchable = patchableMap.get(timerRef.storageAddress)
+                                    const patchable = patchableByTimerAddr.get(timerRef.storageAddress)
                                     if (patchable && patchable.current_value === timerRef.presetValue) {
                                         timerRef.bytecode_offset = patchable.bytecode_offset
                                         timerRef.patchable_type = patchable.operand_type
@@ -501,6 +514,28 @@ export const stlRenderer = {
                                 }
                             }
                         }
+                    }
+
+                    // Helper: resolve STL timer name (e.g. "T0") to absolute storage address
+                    const resolveTimerStorageAddr = (timerName) => {
+                        if (!timerName) return undefined
+                        const addrMatch = ADDRESS_REGEX.exec(timerName)
+                        if (addrMatch) {
+                            const typeChar = (addrMatch[1] || '').toUpperCase()
+                            const loc = ADDRESS_LOCATION_MAP[typeChar] || 'marker'
+                            const byteNum = parseInt(addrMatch[2] || addrMatch[4], 10)
+                            if (loc === 'timer') {
+                                const offsets = editor.project?.offsets || {}
+                                const baseOffset = offsets.timer?.offset || 0
+                                return baseOffset + (byteNum * 9)
+                            }
+                        }
+                        // Check symbols for custom timer names
+                        const sym = editor.project?.symbols?.find(s => s.name === timerName)
+                        if (sym && sym.location === 'timer' && sym.absoluteAddress !== undefined) {
+                            return sym.absoluteAddress
+                        }
+                        return undefined
                     }
 
                     const entries = []
@@ -516,21 +551,23 @@ export const stlRenderer = {
                             contentToScan = line.substring(0, commentIndex)
                         }
 
-                        // 1. Special Handling for TON instructions to capture Presets and Bit Status
-                        // Pattern: TON <Instance>, <Preset>
+                        // 1. Special Handling for Timer instructions to capture Presets and Bit Status
+                        // Pattern: TON/TOF/TP <Instance>, <Preset>
                         // Example: TON T0, T#250ms
-                        const tonRegex = /^\s*(TON)\s+([A-Za-z0-9_]+)\s*(?:,|\s)\s*([A-Za-z0-9_#]+)/i
-                        const tonMatch = tonRegex.exec(contentToScan)
+                        const timerInstrRegex = /^\s*(TON|TOF|TP)\s+([A-Za-z0-9_]+)\s*(?:,|\s)\s*([A-Za-z0-9_#]+)/i
+                        const tonMatch = timerInstrRegex.exec(contentToScan)
                         
                         let tonTimerName = null
                         let tonPresetValue = null
+                        let tonStorageAddr = undefined
 
                         if (tonMatch) {
-                            const instr = tonMatch[1] // "TON"
+                            const instr = tonMatch[1] // "TON", "TOF", or "TP"
                             const timerName = tonMatch[2]
                             const presetToken = tonMatch[3]
                             const colInstr = line.indexOf(instr)
                             tonTimerName = timerName
+                            tonStorageAddr = resolveTimerStorageAddr(timerName)
 
                             // Parse Preset if it is a constant
                             if (presetToken.toUpperCase().startsWith('T#')) {
@@ -564,7 +601,9 @@ export const stlRenderer = {
                                     type: 'bit',
                                     location: 'timer', // It is a timer
                                     isTimerOutput: true, // Mark as output bit
-                                    presetValue: tonPresetValue
+                                    presetValue: tonPresetValue,
+                                    absoluteAddress: tonStorageAddr, // Needed for u32 ET lookup
+                                    nonInteractive: true // Q bit is read-only
                                 })
                             }
                         }
@@ -600,7 +639,17 @@ export const stlRenderer = {
                                 if (totalMs > 0) {
                                     const absStart = currentOffset + column
                                     const absEnd = absStart + word.length
-                                    const cached = findCachedRef(absStart, absEnd)
+
+                                    // Look up patchable constant by timer storage address (not text position)
+                                    // Text positions differ between STL and compiled PLCASM, so position-based
+                                    // matching would always fail. Address-based matching is reliable.
+                                    let patchInfo = null
+                                    if (tonStorageAddr !== undefined) {
+                                        const patchable = patchableByTimerAddr.get(tonStorageAddr)
+                                        if (patchable && patchable.current_value === totalMs) {
+                                            patchInfo = patchable
+                                        }
+                                    }
 
                                     entries.push({
                                         start: absStart,
@@ -611,9 +660,10 @@ export const stlRenderer = {
                                         originalName: word,
                                         isTimerPT: true,
                                         presetValue: totalMs,
-                                        bytecode_offset: cached?.bytecode_offset, 
-                                        timer_address: cached?.timer_address,
-                                        patchable_type: cached?.patchable_type
+                                        bytecode_offset: patchInfo?.bytecode_offset, 
+                                        timer_address: patchInfo?.timer_address,
+                                        patchable_type: patchInfo?.operand_type,
+                                        storageAddress: tonStorageAddr
                                     })
                                 }
                                 continue
@@ -654,7 +704,8 @@ export const stlRenderer = {
                                     type: inferredType === 'bit' ? 'bit' : symbol.type,
                                     location: symbol.location || 'marker',
                                     isTonInstance: isTonInstance,
-                                    presetValue: isTonInstance ? tonPresetValue : undefined
+                                    presetValue: isTonInstance ? tonPresetValue : undefined,
+                                    nonInteractive: isTonInstance // Timer elapsed time is read-only
                                 })
                                 continue
                             }
@@ -698,7 +749,8 @@ export const stlRenderer = {
                                     location: loc,
                                     isTonInstance: isTonInstance,
                                     presetValue: isTonInstance ? tonPresetValue : undefined,
-                                    absoluteAddress: absoluteAddress
+                                    absoluteAddress: absoluteAddress,
+                                    nonInteractive: isTonInstance // Timer elapsed time is read-only
                                 })
                             }
                         }
@@ -767,11 +819,20 @@ export const stlRenderer = {
 
                     // Timer/Counter output handling
                     if (entry.location === 'timer') {
+                         // For isTimerOutput, look up u32 elapsed time by absoluteAddress
+                         // (the default name-based lookup may return a byte/bit value)
+                         if (entry.isTimerOutput && entry.absoluteAddress !== undefined) {
+                             const timerLiveEntry = [...editor.live_symbol_values.values()].find(
+                                 l => l.absoluteAddress === entry.absoluteAddress && (l.type === 'u32' || l.type === 'dint')
+                             )
+                             if (timerLiveEntry) liveEntry = timerLiveEntry
+                         }
+
                          const et = typeof liveEntry.value === 'number' ? liveEntry.value : 0
                          const pt = typeof entry.presetValue === 'number' ? entry.presetValue : 0
 
                          if (entry.isTimerOutput) {
-                             // TON Instruction Pill: Show ON/OFF
+                             // TON/TOF/TP Instruction Pill: Show ON/OFF
                              const isOn = (pt > 0 && et >= pt)
                              previewText = isOn ? 'ON' : 'OFF'
                              className = `${isOn ? 'on' : 'off'} bit`

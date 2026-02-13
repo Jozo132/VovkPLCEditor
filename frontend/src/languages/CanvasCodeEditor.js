@@ -636,6 +636,9 @@ export class CanvasCodeEditor {
         // Double-click on pill — for non-bit pills, open inline edit overlay
         const pillEntry = this._getPillAtMouse(e)
         if (pillEntry) {
+            // Skip interaction for non-interactive pills (e.g. timer elapsed time)
+            if (pillEntry.nonInteractive) return false
+
             e.preventDefault()
             e.stopPropagation()
             this._selectedPill = pillEntry
@@ -668,6 +671,15 @@ export class CanvasCodeEditor {
         const pill = this._selectedPill
         if (!pill) return
         
+        // Skip interaction for non-interactive pills
+        if (pill.nonInteractive) {
+            if (key === 'Escape') {
+                this._selectedPill = null
+                this._needsRender = true
+            }
+            return
+        }
+
         if (key === 'Escape') {
             this._selectedPill = null
             this._needsRender = true
@@ -726,6 +738,9 @@ export class CanvasCodeEditor {
         // Check for pill click — single click selects the pill, deselects text
         const pillEntry = this._getPillAtMouse(e)
         if (pillEntry) {
+            // Skip selection for non-interactive pills
+            if (pillEntry.nonInteractive) return
+
             e.preventDefault()
             e.stopPropagation()
             this._selectedPill = pillEntry
@@ -1273,7 +1288,8 @@ export class CanvasCodeEditor {
         inp.style.height = `${rect.height + 4}px`
         inp.style.font = `${rect.fontSize}px Consolas, monospace`
         inp.style.display = 'block'
-        inp.value = rect.text
+        // Use the source-code token (e.g. T#15s) when available, otherwise display text
+        inp.value = entry.originalName || rect.text
         this._pillInputEntry = entry
         
         // Focus and select all text
