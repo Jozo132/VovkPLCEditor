@@ -33,6 +33,9 @@ export default class SocketSerialConnection extends ConnectionBase {
     }
 
     async connect(portPathOrOptions = null) {
+        // Reset command queue state on new connection
+        this._clearCommandQueue()
+        
         const options = { baudRate: this.baudrate }
         if (typeof portPathOrOptions === 'string') {
             options.path = portPathOrOptions
@@ -46,7 +49,18 @@ export default class SocketSerialConnection extends ConnectionBase {
 
     async disconnect() {
         this._clearCommandQueue()
+        
+        // Unsubscribe from monitoring before disconnecting
+        if (this.serial?.isSubscribed?.()) {
+            try {
+                await this.serial.unsubscribeMemory()
+            } catch {
+                // Ignore errors
+            }
+        }
+        
         await this.serial.end()
+        this.onMemoryData = null
     }
 
     /**
@@ -56,7 +70,7 @@ export default class SocketSerialConnection extends ConnectionBase {
     async listPorts() {
         // Temporarily connect socket if not connected
         if (!this.serial.socket?.connected) {
-            const { io } = await import('socket.io-client')
+            const { io } = await import('/socket.io/socket.io.esm.min.js')
             const serverUrl = window.location.origin
             const tempSocket = io(`${serverUrl}/serial`, {
                 transports: ['websocket', 'polling'],
@@ -120,9 +134,10 @@ export default class SocketSerialConnection extends ConnectionBase {
     async downloadProgram(bytecode) {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.programDownload(bytecode)
-            await this.writeChunked(command + "\n")
-
-            await this._readResponseLine(12000)
+            // For program download, temporarily pause monitoring using atomic command wrapper
+            // Send entire command through atomic channel to ensure clean send/receive cycle
+            const combinedData = command + "\n"
+            const line = await this.serial.command(combinedData, 30000)
 
             // Flush remaining data
             await new Promise(resolve => setTimeout(resolve, 100))
@@ -130,7 +145,7 @@ export default class SocketSerialConnection extends ConnectionBase {
                 this.serial.readAll()
                 await new Promise(resolve => setTimeout(resolve, 50))
             }
-        }, { label: 'downloadProgram', timeoutMs: 12000 })
+        }, { label: 'downloadProgram', timeoutMs: 30000 })
     }
 
     async writeChunked(data, chunkSize = 64, delay = 5) {
@@ -144,9 +159,8 @@ export default class SocketSerialConnection extends ConnectionBase {
     async uploadProgram() {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.programUpload()
-            await this.serial.write(command + "\n")
-
-            const line = await this._readResponseLine(12000)
+            // Use atomic command to avoid conflicts with monitoring
+            const line = await this.serial.command(command + "\n", 30000)
             let raw = line.trim()
             if (raw.startsWith('OK')) {
                 raw = raw.substring(2).trim()
@@ -154,15 +168,14 @@ export default class SocketSerialConnection extends ConnectionBase {
             const hex = this.plc.parseHex(raw)
             const buffer = new Uint8Array(hex)
             return buffer
-        }, { label: 'uploadProgram', timeoutMs: 12000 })
+        }, { label: 'uploadProgram', timeoutMs: 30000 })
     }
 
     async readMemory(address, size) {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.memoryRead(address, size)
-            await this.serial.write(command + "\n")
-
-            const line = await this._readResponseLine(8000)
+            // Use atomic command to avoid conflicts with monitoring
+            const line = await this.serial.command(command + "\n", 8000)
             let raw = line.trim()
             if (raw.startsWith('OK')) {
                 raw = raw.substring(2).trim()
@@ -176,16 +189,16 @@ export default class SocketSerialConnection extends ConnectionBase {
     async writeMemory(address, data) {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.memoryWrite(address, data)
-            await this.serial.write(command + "\n")
-            await this._readResponseLine()
+            // Use atomic command to avoid conflicts with monitoring
+            await this.serial.command(command + "\n", 2000)
         }, { label: 'writeMemory' })
     }
 
     async formatMemory(address, size, value) {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.memoryFormat(address, size, value)
-            await this.serial.write(command + "\n")
-            await this._readResponseLine()
+            // Use atomic command to avoid conflicts with monitoring
+            await this.serial.command(command + "\n", 2000)
         }, { label: 'formatMemory' })
     }
 
@@ -196,8 +209,8 @@ export default class SocketSerialConnection extends ConnectionBase {
     async writeMemoryAreaMasked(address, data, mask) {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.memoryWriteMask(address, data, mask)
-            await this.serial.write(command + "\n")
-            await this._readResponseLine()
+            // Use atomic command to avoid conflicts with monitoring
+            await this.serial.command(command + "\n", 2000)
         }, { label: 'writeMemoryAreaMasked' })
     }
 
@@ -209,65 +222,41 @@ export default class SocketSerialConnection extends ConnectionBase {
     async configureTCOffsets(timerOffset, counterOffset) {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.tcConfig(timerOffset, counterOffset)
-            await this.serial.write(command + "\n")
-            await this._readResponseLine()
+            // Use atomic command to avoid conflicts with monitoring
+            await this.serial.command(command + "\n", 2000)
         }, { label: 'configureTCOffsets' })
     }
 
     async getInfo(initial = false) {
         return this._enqueueCommand(async () => {
             if (initial) {
-                await this.serial.write('?')
-                await this._waitForReply(5000)
-                while (this.serial.available()) {
-                    this.serial.readAll()
-                    await this._waitForReply(100)
+                // Send initial query to wake up device (using atomic command)
+                try {
+                    await this.serial.command('?\n', 2000)
+                } catch {
+                    // Ignore timeout - device may not respond to '?'
                 }
             }
             const command = "PI"
             const cmdHex = this.plc.stringToHex(command)
             const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
             if (this.debug) console.log("Sending info command:", command + checksum.toUpperCase())
-            await this.serial.write(command + checksum.toUpperCase() + "\n")
-
-            const available = await this._waitForReply(5000)
-            if (!available) throw new Error("No response from device")
-
-            let accumulated = ''
+            
+            // Use atomic command method to avoid conflicts with monitoring loop
+            const accumulated = await this.serial.command(command + checksum.toUpperCase() + "\n", 8000)
+            
             let infoLine = null
-            const startTime = Date.now()
-            const maxWaitTime = 8000
+            const bracketStart = accumulated.indexOf('[')
+            if (bracketStart >= 0) {
+                const bracketEnd = accumulated.indexOf(']', bracketStart)
+                if (bracketEnd >= 0) {
+                    let lineStart = accumulated.lastIndexOf('\n', bracketStart)
+                    lineStart = lineStart >= 0 ? lineStart + 1 : 0
+                    let lineEnd = accumulated.indexOf('\n', bracketEnd)
+                    lineEnd = lineEnd >= 0 ? lineEnd : accumulated.length
 
-            while (Date.now() - startTime < maxWaitTime) {
-                if (!this.serial.isOpen) throw new Error('Connection closed')
-
-                const hasData = await this._waitForReply(300)
-                if (hasData) {
-                    const chunk = this.serial.readAll()
-                    if (chunk) {
-                        accumulated += chunk
-                        if (this.debug) console.log("Accumulated chunk:", chunk, "Total:", accumulated.length)
-                    }
-                }
-
-                const bracketStart = accumulated.indexOf('[')
-                if (bracketStart >= 0) {
-                    const bracketEnd = accumulated.indexOf(']', bracketStart)
-                    if (bracketEnd >= 0) {
-                        let lineStart = accumulated.lastIndexOf('\n', bracketStart)
-                        lineStart = lineStart >= 0 ? lineStart + 1 : 0
-                        let lineEnd = accumulated.indexOf('\n', bracketEnd)
-                        lineEnd = lineEnd >= 0 ? lineEnd : accumulated.length
-
-                        infoLine = accumulated.substring(lineStart, lineEnd).trim()
-                        if (this.debug) console.log("Found complete info line:", infoLine)
-                        await new Promise(r => setTimeout(r, 50))
-                        break
-                    }
-                }
-
-                if (!hasData && Date.now() - startTime > 2000 && accumulated.length === 0) {
-                    break
+                    infoLine = accumulated.substring(lineStart, lineEnd).trim()
+                    if (this.debug) console.log("Found complete info line:", infoLine)
                 }
             }
 
@@ -367,49 +356,37 @@ export default class SocketSerialConnection extends ConnectionBase {
     }
 
     async getHealth() {
-        return this._enqueueCommand(async () => {
-            const command = "PH"
-            const cmdHex = this.plc.stringToHex(command)
-            const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
-            await this.serial.write(command + checksum.toUpperCase() + "\n")
-
-            const line = await this._readResponseLine()
-            let raw = line.trim()
-            if (!raw) throw new Error("Invalid health response")
-            if (!raw.startsWith('PH')) {
-                const idx = raw.indexOf('PH')
-                if (idx >= 0) raw = raw.slice(idx)
+        // Use backend's atomic get-health command to avoid race conditions with monitoring
+        return new Promise((resolve, reject) => {
+            if (!this.serial?.socket?.connected) {
+                reject(new Error('Not connected'))
+                return
             }
-            if (raw.startsWith('PH')) raw = raw.slice(2)
-            const hex = raw.replace(/[^0-9a-fA-F]/g, '')
-            if (hex.length < 48) throw new Error("Invalid health response")
-            const parseU32 = (offset) => parseInt(hex.slice(offset, offset + 8), 16) >>> 0
-            return {
-                last_cycle_time_us: parseU32(0),
-                min_cycle_time_us: parseU32(8),
-                max_cycle_time_us: parseU32(16),
-                ram_free: parseU32(24),
-                min_ram_free: parseU32(32),
-                max_ram_free: parseU32(40),
-                total_ram_size: parseU32(48),
-                last_period_us: parseU32(56),
-                min_period_us: parseU32(64),
-                max_period_us: parseU32(72),
-                last_jitter_us: parseU32(80),
-                min_jitter_us: parseU32(88),
-                max_jitter_us: parseU32(96),
-            }
-        }, { label: 'getHealth' })
+            this.serial.socket.emit('get-health', { path: this.serial.portPath }, (result) => {
+                if (result.ok) {
+                    resolve(result.health)
+                } else {
+                    reject(new Error(result.error || 'Failed to get health'))
+                }
+            })
+        })
     }
 
     async resetHealth() {
-        return this._enqueueCommand(async () => {
-            const command = "RH"
-            const cmdHex = this.plc.stringToHex(command)
-            const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
-            await this.serial.write(command + checksum.toUpperCase() + "\n")
-            await this._readResponseLine()
-        }, { label: 'resetHealth' })
+        // Use backend's atomic reset-health command to avoid race conditions with monitoring
+        return new Promise((resolve, reject) => {
+            if (!this.serial?.socket?.connected) {
+                reject(new Error('Not connected'))
+                return
+            }
+            this.serial.socket.emit('reset-health', { path: this.serial.portPath }, (result) => {
+                if (result.ok) {
+                    resolve()
+                } else {
+                    reject(new Error(result.error || 'Failed to reset health'))
+                }
+            })
+        })
     }
 
     async getSymbolList() {
@@ -417,9 +394,9 @@ export default class SocketSerialConnection extends ConnectionBase {
             const command = "SL"
             const cmdHex = this.plc.stringToHex(command)
             const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
-            await this.serial.write(command + checksum.toUpperCase() + "\n")
-
-            const line = await this._readResponseLine(8000)
+            
+            // Use atomic command method to avoid conflicts with monitoring loop
+            const line = await this.serial.command(command + checksum.toUpperCase() + "\n", 8000)
             let raw = line.trim()
             if (!raw) return []
 
@@ -462,9 +439,9 @@ export default class SocketSerialConnection extends ConnectionBase {
             const command = "TI"
             const cmdHex = this.plc.stringToHex(command)
             const checksum = this.plc.crc8(this.plc.parseHex(cmdHex)).toString(16).padStart(2, '0')
-            await this.serial.write(command + checksum.toUpperCase() + "\n")
-
-            const line = await this._readResponseLine(8000)
+            
+            // Use atomic command method to avoid conflicts with monitoring loop
+            const line = await this.serial.command(command + checksum.toUpperCase() + "\n", 8000)
             let raw = line.trim()
             if (!raw) return []
 
@@ -513,9 +490,9 @@ export default class SocketSerialConnection extends ConnectionBase {
     async getDataBlockInfo() {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.dbInfo()
-            await this.serial.write(command + "\n")
-
-            const line = await this._readResponseLine(5000)
+            
+            // Use atomic command method to avoid conflicts with monitoring loop
+            const line = await this.serial.command(command + "\n", 5000)
             const raw = line.trim()
             if (!raw || !raw.startsWith('DA')) {
                 return { slots: 0, active: 0, table_offset: 0, free_space: 0, lowest_address: 0, entries: [] }
@@ -580,6 +557,51 @@ export default class SocketSerialConnection extends ConnectionBase {
         })
     }
 
+    // ─── Memory Monitoring Subscriptions ────────────────────────────────────────
+    
+    /**
+     * Whether this connection supports subscription-based monitoring
+     * (backend handles the polling loop instead of frontend)
+     */
+    supportsSubscriptions = true
+
+    /** @type {((results: Array<{address: number, size: number, data: number[]}>) => void) | null} */
+    onMemoryData = null
+
+    /**
+     * Subscribe to memory monitoring
+     * Backend will continuously read these memory regions and push data via Socket.IO
+     * @param {Array<{address: number, size: number}>} regions - Memory regions to monitor
+     * @param {number} [intervalMs=100] - Backend polling interval
+     * @returns {Promise<void>}
+     */
+    async subscribeMemory(regions, intervalMs = 100) {
+        // Forward callback to socket
+        this.serial.onMemoryData = (results) => {
+            if (this.onMemoryData) {
+                this.onMemoryData(results)
+            }
+        }
+        await this.serial.subscribeMemory(regions, intervalMs)
+    }
+
+    /**
+     * Unsubscribe from memory monitoring
+     * @returns {Promise<void>}
+     */
+    async unsubscribeMemory() {
+        this.serial.onMemoryData = null
+        await this.serial.unsubscribeMemory()
+    }
+
+    /**
+     * Check if currently subscribed to memory monitoring
+     * @returns {boolean}
+     */
+    isSubscribed() {
+        return this.serial.isSubscribed()
+    }
+
     async _drainCommandQueue() {
         if (this._commandRunning) return
         this._commandRunning = true
@@ -614,6 +636,8 @@ export default class SocketSerialConnection extends ConnectionBase {
     }
 
     _clearCommandQueue() {
+        // Reset running flag - crucial for reconnect to work
+        this._commandRunning = false
         if (!this._commandQueue.length) return
         const err = new Error('Serial command queue cleared')
         while (this._commandQueue.length) {

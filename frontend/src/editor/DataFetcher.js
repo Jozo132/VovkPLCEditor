@@ -23,6 +23,9 @@ export default class DataFetcher {
     /** @type { number } */
     batch_index = 0
 
+    /** @type { number | null } */
+    _subscriptionRefreshTimer = null
+
     /** @param {import('../Editor.js').VovkPLCEditor} editor */
     constructor(editor) {
         this.editor = editor
@@ -46,6 +49,7 @@ export default class DataFetcher {
         if (!entry) {
             entry = { start, size, callbacks: new Set() }
             this.registry.set(key, entry)
+            this._scheduleSubscriptionRefresh()
         }
         entry.callbacks.add(callback)
         
@@ -68,6 +72,7 @@ export default class DataFetcher {
             entry.callbacks.delete(callback)
             if (entry.callbacks.size === 0) {
                 this.registry.delete(key)
+                this._scheduleSubscriptionRefresh()
             }
         }
         
@@ -82,20 +87,46 @@ export default class DataFetcher {
      * @param {string} id 
      */
     unregisterAll(id) {
+        let changed = false
         for (const [key, entry] of this.registry.entries()) {
             if (key.startsWith(`${id}:`)) {
                 this.registry.delete(key)
+                changed = true
             }
+        }
+        if (changed) {
+            this._scheduleSubscriptionRefresh()
         }
         if (this.registry.size === 0) {
             this.stop()
         }
     }
 
+    /**
+     * Schedule a subscription refresh (debounced to avoid rapid updates)
+     */
+    _scheduleSubscriptionRefresh() {
+        if (this._subscriptionRefreshTimer) {
+            clearTimeout(this._subscriptionRefreshTimer)
+        }
+        this._subscriptionRefreshTimer = setTimeout(() => {
+            this._subscriptionRefreshTimer = null
+            this._refreshSubscriptions()
+        }, 100)
+    }
+
     start() {
         if (this.timer) return
         this.fetching = true
-        this.timer = setInterval(() => this.tick(), this.interval)
+        
+        // Check if connection supports subscriptions (backend-driven monitoring)
+        const connection = this.editor.device_manager?.connection
+        if (connection?.supportsSubscriptions) {
+            this._startSubscriptionMode()
+        } else {
+            // Fallback to polling mode
+            this.timer = setInterval(() => this.tick(), this.interval)
+        }
     }
 
     stop() {
@@ -103,7 +134,133 @@ export default class DataFetcher {
             clearInterval(this.timer)
             this.timer = null
         }
+        
+        // Unsubscribe if in subscription mode
+        const connection = this.editor.device_manager?.connection
+        if (connection?.supportsSubscriptions && connection.isSubscribed?.()) {
+            connection.unsubscribeMemory?.().catch(() => {})
+        }
+        
         this.fetching = false
+    }
+
+    /**
+     * Start subscription-based monitoring (backend handles polling loop)
+     */
+    async _startSubscriptionMode() {
+        const connection = this.editor.device_manager?.connection
+        if (!connection || !connection.supportsSubscriptions) return
+
+        // Build regions from registry
+        const regions = this._buildSubscriptionRegions()
+        if (regions.length === 0) return
+
+        // Set up data handler
+        connection.onMemoryData = (results) => {
+            this._handleSubscriptionData(results)
+        }
+
+        try {
+            await connection.subscribeMemory(regions, this.interval)
+            console.log(`[DataFetcher] Subscribed to ${regions.length} memory regions`)
+        } catch (err) {
+            console.warn('[DataFetcher] Failed to subscribe, falling back to polling:', err)
+            // Fallback to polling
+            this.timer = setInterval(() => this.tick(), this.interval)
+        }
+    }
+
+    /**
+     * Build merged memory regions for subscription
+     */
+    _buildSubscriptionRegions() {
+        // Convert registry to flat list of ranges
+        const ranges = []
+        for (const entry of this.registry.values()) {
+            ranges.push({ start: entry.start, size: entry.size })
+        }
+        
+        if (ranges.length === 0) return []
+        
+        // Sort by start address
+        ranges.sort((a, b) => a.start - b.start)
+        
+        // Merge nearby ranges
+        const merged = []
+        let current = { address: ranges[0].start, size: ranges[0].size }
+        
+        for (let i = 1; i < ranges.length; i++) {
+            const range = ranges[i]
+            const gap = range.start - (current.address + current.size)
+            const projectedSize = (range.start + range.size) - current.address
+            
+            if (gap < 64 && projectedSize <= this.max_batch_size) {
+                // Merge
+                current.size = (range.start + range.size) - current.address
+            } else {
+                merged.push(current)
+                current = { address: range.start, size: range.size }
+            }
+        }
+        merged.push(current)
+        
+        return merged
+    }
+
+    /**
+     * Handle incoming subscription data from backend
+     * @param {Array<{address: number, size: number, data: number[]}>} results
+     */
+    _handleSubscriptionData(results) {
+        for (const result of results) {
+            const bytes = new Uint8Array(result.data)
+            
+            // Update cache
+            if (result.address < this.last_known_memory.length) {
+                const copyLen = Math.min(bytes.length, this.last_known_memory.length - result.address)
+                this.last_known_memory.set(bytes.subarray(0, copyLen), result.address)
+            }
+            
+            // Dispatch to registered callbacks
+            for (const entry of this.registry.values()) {
+                // Check if this result overlaps with the entry
+                const entryEnd = entry.start + entry.size
+                const resultEnd = result.address + result.size
+                
+                if (entry.start >= result.address && entryEnd <= resultEnd) {
+                    // Entry is fully contained in result
+                    const offset = entry.start - result.address
+                    const slice = bytes.subarray(offset, offset + entry.size)
+                    entry.callbacks.forEach(cb => {
+                        try {
+                            cb(slice)
+                        } catch (e) {
+                            console.warn('Callback error:', e)
+                        }
+                    })
+                }
+            }
+        }
+    }
+
+    /**
+     * Refresh subscriptions when registry changes
+     */
+    async _refreshSubscriptions() {
+        const connection = this.editor.device_manager?.connection
+        if (!connection?.supportsSubscriptions || !connection.isSubscribed?.()) return
+        
+        const regions = this._buildSubscriptionRegions()
+        if (regions.length === 0) {
+            await connection.unsubscribeMemory?.()
+            return
+        }
+        
+        try {
+            await connection.subscribeMemory(regions, this.interval)
+        } catch (err) {
+            console.warn('[DataFetcher] Failed to refresh subscriptions:', err)
+        }
     }
 
     /**

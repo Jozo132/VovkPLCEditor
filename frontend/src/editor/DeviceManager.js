@@ -23,12 +23,13 @@ export default class DeviceManager {
   devices = [
     { name: 'Simulation', key: 'simulation' },
     { name: 'Serial Port', key: 'serial', disabled: 'serial' in navigator ? '' : 'Serial not supported' },
+    // { name: 'Backend Serial', key: 'socket-serial' }, // Added dynamically based on server capabilities
     // { name: 'REST', key: 'rest' },
   ]
 
   initialize = () => {
     const editor = this.#editor
-    editor.window_manager.requestConnect = async (device) => {
+    editor.window_manager.requestConnect = async (device, extraOptions = {}) => {
       /** @type { ConnectionOptions | null } */
       let options = null
       if (device === 'simulation') {
@@ -40,6 +41,14 @@ export default class DeviceManager {
         options = {
           target: 'serial',
           baudrate: 115200
+        }
+      }
+      if (device === 'socket-serial') {
+        options = {
+          target: 'socket-serial',
+          baudrate: 115200,
+          portPath: extraOptions.portPath,
+          serverUrl: extraOptions.serverUrl,
         }
       }
       if (!options) {
@@ -97,7 +106,8 @@ export default class DeviceManager {
       const connectionOptions = this.options
       
       this.connection = await initializeConnection(connectionOptions, this.#editor)
-      this.connected = true
+      // Don't set connected = true yet - wait for getInfo to succeed
+      // This prevents monitoring from starting before connection is fully ready
       this.#intentionalDisconnect = false
       
       // Store serial port info for auto-reconnect
@@ -136,9 +146,11 @@ export default class DeviceManager {
           }
       };
 
-      this.#emitUpdate()
+      // Get device info BEFORE emitting update to prevent race with monitoring
       try {
         this.deviceInfo = await this.connection.getInfo(true)
+        // NOW we can set connected and emit update
+        this.connected = true
         this.#emitUpdate()
         if (this.options && this.options.debug) {
           console.log("Device info:", this.deviceInfo)

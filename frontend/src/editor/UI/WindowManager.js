@@ -114,6 +114,84 @@ export default class WindowManager {
         }
     }
 
+    // Socket Serial Polling Methods (for server-side serial via Socket.IO)
+    _startSocketSerialPolling = () => {
+        if (this.socketSerialPollingTimer) {
+            clearInterval(this.socketSerialPollingTimer)
+            this.socketSerialPollingTimer = null
+        }
+        
+        // Initial fetch
+        this._fetchSocketSerialPorts()
+        
+        // Poll for changes
+        this.socketSerialPollingTimer = setInterval(() => {
+            if (this.connectionMode === 'socket-serial') {
+                this._fetchSocketSerialPorts()
+            }
+        }, 2000)
+    }
+
+    _stopSocketSerialPolling = () => {
+        if (this.socketSerialPollingTimer) {
+            clearInterval(this.socketSerialPollingTimer)
+            this.socketSerialPollingTimer = null
+        }
+    }
+
+    _fetchSocketSerialPorts = async () => {
+        try {
+            // Use REST endpoint to list ports (avoids socket churn from polling)
+            const response = await fetch('/api/serial/ports')
+            if (!response.ok) throw new Error('Failed to fetch ports')
+            const data = await response.json()
+            if (data.ok) {
+                this._socketSerialPorts = data.ports || []
+            } else {
+                throw new Error(data.error || 'Unknown error')
+            }
+            this.updateDeviceDropdown()
+        } catch (err) {
+            console.warn('[WindowManager] Failed to fetch socket serial ports:', err)
+            this._socketSerialPorts = []
+        }
+    }
+
+    /**
+     * Fetch server capabilities and update UI based on available features
+     */
+    _fetchServerCapabilities = async () => {
+        try {
+            const response = await fetch('/api/capabilities')
+            if (!response.ok) {
+                this.serverCapabilities = null
+                return
+            }
+            this.serverCapabilities = await response.json()
+            
+            // Show/hide server serial option based on capabilities
+            if (this._serverSerialOption) {
+                if (this.serverCapabilities?.serial) {
+                    this._serverSerialOption.style.display = ''
+                    this._serverSerialOption.disabled = false
+                } else {
+                    this._serverSerialOption.style.display = 'none'
+                    this._serverSerialOption.disabled = true
+                }
+            }
+            
+            // If server serial is available and we're in socket-serial mode, start polling
+            if (this.serverCapabilities?.serial && this.connectionMode === 'socket-serial') {
+                this._startSocketSerialPolling()
+            }
+            
+            console.log('[WindowManager] Server capabilities:', this.serverCapabilities)
+        } catch (err) {
+            console.warn('[WindowManager] Failed to fetch server capabilities:', err)
+            this.serverCapabilities = null
+        }
+    }
+
     #editor
     /** @param {PLCEditor} editor */
     constructor(editor) {
@@ -175,7 +253,8 @@ export default class WindowManager {
                                     <div class="plc-connection-mode" style="display: flex; gap: 4px; margin-bottom: 4px;">
                                         <select class="plc-mode-select" style="flex: 1; height: 30px; font-size: 11px; background: #3c3c3c; border: 1px solid #3c3c3c; color: #f0f0f0;">
                                             <option value="simulation">Simulation</option>
-                                            <option value="serial">Serial/USB</option>
+                                            <option value="serial">USB/Serial Web</option>
+                                            <option value="socket-serial" class="plc-server-serial-option" style="display: none;">USB/Serial Server</option>
                                         </select>
                                     </div>
                                     
@@ -1265,16 +1344,31 @@ export default class WindowManager {
         this.simulationLabel = simulationLabel
         this.newDeviceBtn = newDeviceBtn
 
+        // Server capabilities (fetched asynchronously)
+        this.serverCapabilities = null
+        this._serverSerialOption = modeSelect.querySelector('.plc-server-serial-option')
+        
+        // Fetch server capabilities to enable/disable server serial option
+        this._fetchServerCapabilities()
+
         // Restore connection mode and device from project
         if (editor.project?.connectionMode) {
             this.connectionMode = editor.project.connectionMode
             modeSelect.value = this.connectionMode
+            // Update active_device to match restored connection mode
+            if (this.connectionMode === 'simulation') {
+                this.active_device = 'simulation'
+            } else if (this.connectionMode === 'serial') {
+                this.active_device = 'serial'
+            } else if (this.connectionMode === 'socket-serial') {
+                this.active_device = 'socket-serial'
+            }
             // Show/hide new device button based on mode
             if (newDeviceBtn) {
                 newDeviceBtn.style.display = 'none' // button moved to dropdown
             }
             if (this.deviceSelectContainer) {
-                this.deviceSelectContainer.style.display = this.connectionMode === 'serial' ? 'block' : 'none'
+                this.deviceSelectContainer.style.display = (this.connectionMode === 'serial' || this.connectionMode === 'socket-serial') ? 'block' : 'none'
             }
             if (this.simulationLabel) {
                 this.simulationLabel.style.display = this.connectionMode === 'simulation' ? 'flex' : 'none'
@@ -1298,8 +1392,8 @@ export default class WindowManager {
                         this.active_mode = 'edit'
                     }
 
-                    // Set device and connect
-                    this.active_device = 'serial'
+                    // Set device based on connection mode
+                    this.active_device = this.connectionMode === 'socket-serial' ? 'socket-serial' : 'serial'
                     await this.#on_device_online_click()
                     return
                 }
@@ -1342,6 +1436,14 @@ export default class WindowManager {
 
         modeSelect.addEventListener('change', () => {
             this.connectionMode = modeSelect.value
+            // Update active_device to match connection mode
+            if (this.connectionMode === 'simulation') {
+                this.active_device = 'simulation'
+            } else if (this.connectionMode === 'serial') {
+                this.active_device = 'serial'
+            } else if (this.connectionMode === 'socket-serial') {
+                this.active_device = 'socket-serial'
+            }
             // Save to project
             if (editor.project) {
                 editor.project.connectionMode = this.connectionMode
@@ -1357,24 +1459,35 @@ export default class WindowManager {
             }
 
             // Show/hide device dropdown container based on mode
+            const showDeviceDropdown = modeSelect.value === 'serial' || modeSelect.value === 'socket-serial'
             if (this.deviceSelectContainer) {
-                this.deviceSelectContainer.style.display = modeSelect.value === 'serial' ? 'block' : 'none'
+                this.deviceSelectContainer.style.display = showDeviceDropdown ? 'block' : 'none'
             }
             if (this.simulationLabel) {
                 this.simulationLabel.style.display = modeSelect.value === 'simulation' ? 'flex' : 'none'
             }
 
-            // Start/stop polling based on mode
+            // Start/stop polling based on mode (browser serial only)
             if (this.connectionMode === 'serial') {
                 this._startSerialPolling()
             } else {
                 this._stopSerialPolling()
+            }
+            
+            // Start socket serial polling if in socket-serial mode
+            if (this.connectionMode === 'socket-serial') {
+                this._startSocketSerialPolling()
+            } else {
+                this._stopSocketSerialPolling()
             }
         })
 
         // Start polling if serial mode is active
         if (this.connectionMode === 'serial') {
             this._startSerialPolling()
+        }
+        if (this.connectionMode === 'socket-serial') {
+            this._startSocketSerialPolling()
         }
 
         // New device button handler
@@ -1451,6 +1564,10 @@ export default class WindowManager {
                 } else if (selectedValue && selectedValue.toString().startsWith('_offline_')) {
                     // Legacy Offline device (should be handled by _usb_ now, but keeping for safety)
                     return
+                } else if (selectedValue && selectedValue.toString().startsWith('_socket_')) {
+                    // Server-side serial port via Socket.IO
+                    this.active_device = 'socket-serial'
+                    await this.#on_device_online_click()
                 } else if (selectedValue === '_none' || selectedValue === '_error') {
                     // Do nothing for disabled options
                     return
@@ -3046,6 +3163,8 @@ export default class WindowManager {
                     this.active_device = 'simulation'
                 } else if (this.connectionMode === 'serial') {
                     this.active_device = 'serial'
+                } else if (this.connectionMode === 'socket-serial') {
+                    this.active_device = 'socket-serial'
                 }
             }
         }
@@ -3056,7 +3175,41 @@ export default class WindowManager {
             const before = device_online_button.innerText
             // @ts-ignore
             device_online_button.innerText = '----------'
-            const connected = await this.requestConnect(this.active_device)
+            
+            // Build extra options for socket-serial mode
+            let extraOptions = {}
+            if (this.connectionMode === 'socket-serial' && this.selectedDeviceValue?.startsWith('_socket_')) {
+                const portPath = this.selectedDeviceValue.substring('_socket_'.length)
+                extraOptions = { portPath }
+            }
+            
+            // Setup ESC cancellation for connection
+            let connectionCancelled = false
+            this.showLoading('Connecting to device... (ESC to cancel)')
+            const escHandler = (e) => {
+                if (e.key === 'Escape' && !connectionCancelled) {
+                    connectionCancelled = true
+                    this.forceHideLoading()
+                    this.logToConsole('Connection cancelled', 'warning')
+                    editor.device_manager.disconnect()
+                }
+            }
+            document.addEventListener('keydown', escHandler)
+            
+            const connected = await this.requestConnect(this.active_device, extraOptions)
+            document.removeEventListener('keydown', escHandler)
+            this.forceHideLoading()
+            
+            // If cancelled, reset UI and return
+            if (connectionCancelled) {
+                device_online_button.removeAttribute('disabled')
+                device_online_button.innerText = '○'
+                device_online_button.title = 'Connect'
+                device_online_button.style.background = '#1fba5f'
+                device_online_button.style.color = '#fff'
+                return
+            }
+            
             if (!connected) {
                 const errorMsg = editor.device_manager.error || 'Failed to connect to device'
                 console.error('Failed to connect to device')
@@ -3086,7 +3239,7 @@ export default class WindowManager {
                 this._stopHealthPolling()
                 this._setHealthConnected(false)
                 // Update paired devices list to refresh connection status
-                if (this.connectionMode === 'serial') {
+                if (this.connectionMode === 'serial' || this.connectionMode === 'socket-serial') {
                     this.updateDeviceDropdown()
                 }
                 return
@@ -3585,10 +3738,23 @@ export default class WindowManager {
         let symbols = []
         let fetchError = null
         let dataSource = 'live'
+        let fetchCancelled = false
 
         if (isConnected && this.#editor.device_manager?.connection) {
-            // Show loading bar while fetching live data
-            this.showLoading('Fetching device info...')
+            // Show loading bar while fetching live data (cancellable with ESC)
+            this.showLoading('Fetching device info... (ESC to cancel)')
+            
+            // Setup ESC cancellation
+            let aborted = false
+            const escHandler = (e) => {
+                if (e.key === 'Escape') {
+                    aborted = true
+                    fetchCancelled = true
+                    this.forceHideLoading()
+                    this.logToConsole('Device info fetch cancelled', 'warning')
+                }
+            }
+            document.addEventListener('keydown', escHandler)
             
             // Fetch live data from connected device
             try {
@@ -3597,12 +3763,24 @@ export default class WindowManager {
                     dm.getTransportInfo?.() || Promise.resolve([]),
                     dm.getSymbolList?.() || Promise.resolve([])
                 ])
-                transports = results[0].status === 'fulfilled' ? results[0].value || [] : []
-                symbols = results[1].status === 'fulfilled' ? results[1].value || [] : []
+                if (!aborted) {
+                    transports = results[0].status === 'fulfilled' ? results[0].value || [] : []
+                    symbols = results[1].status === 'fulfilled' ? results[1].value || [] : []
+                }
             } catch (err) {
-                fetchError = err.message || 'Failed to fetch device data'
+                if (!aborted) {
+                    fetchError = err.message || 'Failed to fetch device data'
+                }
             } finally {
-                this.hideLoading()
+                document.removeEventListener('keydown', escHandler)
+                if (!aborted) {
+                    this.hideLoading()
+                }
+            }
+            
+            // If cancelled, return early
+            if (fetchCancelled) {
+                return
             }
         } else if (storedDevice) {
             // Use stored data
@@ -4836,6 +5014,14 @@ export default class WindowManager {
         // Restore connection mode and device selection
         if (project.connectionMode) {
             this.connectionMode = project.connectionMode
+            // Update active_device to match connection mode
+            if (this.connectionMode === 'simulation') {
+                this.active_device = 'simulation'
+            } else if (this.connectionMode === 'serial') {
+                this.active_device = 'serial'
+            } else if (this.connectionMode === 'socket-serial') {
+                this.active_device = 'socket-serial'
+            }
             if (this.modeSelect) {
                 this.modeSelect.value = this.connectionMode
             }
@@ -4843,7 +5029,7 @@ export default class WindowManager {
                 this.newDeviceBtn.style.display = 'none' // Moved to dropdown
             }
             if (this.deviceSelectContainer) {
-                this.deviceSelectContainer.style.display = this.connectionMode === 'serial' ? 'block' : 'none'
+                this.deviceSelectContainer.style.display = (this.connectionMode === 'serial' || this.connectionMode === 'socket-serial') ? 'block' : 'none'
             }
             if (this.simulationLabel) {
                 this.simulationLabel.style.display = this.connectionMode === 'simulation' ? 'flex' : 'none'
@@ -4852,8 +5038,13 @@ export default class WindowManager {
             // Ensure polling state matches mode
             if (this.connectionMode === 'serial') {
                 if (!this.serialDevicePollingTimer) this._startSerialPolling()
+                this._stopSocketSerialPolling()
+            } else if (this.connectionMode === 'socket-serial') {
+                this._stopSerialPolling()
+                if (!this.socketSerialPollingTimer) this._startSocketSerialPolling()
             } else {
-                if (this.serialDevicePollingTimer) this._stopSerialPolling()
+                this._stopSerialPolling()
+                this._stopSocketSerialPolling()
             }
         }
 
@@ -6110,6 +6301,60 @@ export default class WindowManager {
                     })
                 }
             }
+        } else if (mode === 'socket-serial') {
+            // Server-side serial via Socket.IO
+            const ports = this._socketSerialPorts || []
+            
+            if (ports.length === 0) {
+                newOptions.push({
+                    type: 'option',
+                    value: '_none',
+                    label: 'No server serial ports',
+                    subtitle: 'Connect devices to server',
+                    disabled: true,
+                })
+                selectedValueToSet = '_none'
+            } else {
+                // Check if reconnecting - disable all options if so
+                const isReconnecting = this.device_online_button && this.device_online_button.title === 'Cancel reconnect'
+                
+                ports.forEach((port, index) => {
+                    const isConnected = this.#editor.device_manager?.connected && 
+                        this.#editor.device_manager?.options?.target === 'socket-serial' &&
+                        this.#editor.device_manager?.options?.portPath === port.path
+                    
+                    let label = port.path
+                    let subtitle = null
+                    
+                    if (port.manufacturer) {
+                        label = port.manufacturer
+                        subtitle = port.path
+                    } else if (port.vendorId && port.productId) {
+                        subtitle = `VID:${port.vendorId} PID:${port.productId}`
+                    }
+                    
+                    const value = `_socket_${port.path}`
+                    
+                    newOptions.push({
+                        type: 'option',
+                        value,
+                        label,
+                        subtitle,
+                        disabled: isReconnecting,
+                        isConnected,
+                        isOffline: false,
+                        isAvailable: true,
+                        portPath: port.path,
+                    })
+                    
+                    if (isConnected) selectedValueToSet = value
+                    else if (this.selectedDeviceValue === value) selectedValueToSet = value
+                })
+                
+                if (!selectedValueToSet && newOptions.length > 0) {
+                    selectedValueToSet = newOptions[0].value
+                }
+            }
         }
 
         // Cache Check
@@ -6216,14 +6461,40 @@ export default class WindowManager {
             // Connect to the selected port
             this.device_online_button.setAttribute('disabled', 'disabled')
             this.device_online_button.innerText = '----------'
-            this.showLoading('Connecting to device...')
+            this.showLoading('Connecting to device... (ESC to cancel)')
 
             const dm = this.#editor.device_manager
+            
+            // Setup ESC cancellation
+            let connectionCancelled = false
+            const escHandler = (e) => {
+                if (e.key === 'Escape' && !connectionCancelled) {
+                    connectionCancelled = true
+                    this.forceHideLoading()
+                    this.logToConsole('Connection cancelled', 'warning')
+                    dm.disconnect()
+                }
+            }
+            document.addEventListener('keydown', escHandler)
+
             await dm.connect({
                 target: 'serial',
                 baudrate: 115200,
                 port: port,
             })
+            
+            document.removeEventListener('keydown', escHandler)
+            this.forceHideLoading()
+            
+            // If cancelled, reset UI and return
+            if (connectionCancelled) {
+                this.device_online_button.removeAttribute('disabled')
+                this.device_online_button.innerText = '○'
+                this.device_online_button.title = 'Connect'
+                this.device_online_button.style.background = '#1fba5f'
+                this.device_online_button.style.color = '#fff'
+                return
+            }
 
             if (dm.connected) {
                 this.active_mode = 'online'

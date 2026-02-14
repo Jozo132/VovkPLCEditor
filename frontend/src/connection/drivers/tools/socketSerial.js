@@ -9,7 +9,7 @@
  * actual serial I/O happens server-side.
  */
 
-import { io } from 'socket.io-client'
+import { io } from '/socket.io/socket.io.esm.min.js'
 
 export default class SocketSerial {
     constructor(maxBufferLength = 32 * 1024, debug = false) {
@@ -166,6 +166,15 @@ export default class SocketSerial {
         if (!this.isOpen || !this.socket) return
         this._closing = true
 
+        // Unsubscribe from monitoring first
+        if (this._subscribed) {
+            try {
+                await this.unsubscribeMemory()
+            } catch {
+                // Ignore unsubscribe errors
+            }
+        }
+
         try {
             if (this.socket.connected && this.portPath) {
                 await this._emit('close', { path: this.portPath })
@@ -181,6 +190,7 @@ export default class SocketSerial {
         this.portPath = ''
         this._readBuffer = []
         this._closing = false
+        this._subscribed = false
     }
 
     /**
@@ -263,6 +273,101 @@ export default class SocketSerial {
         if (!result.ok) {
             throw new Error(result.error || 'Write failed')
         }
+    }
+
+    /**
+     * Send a command and wait for response (atomic operation, works alongside monitoring).
+     * This acquires a mutex on the server, clears the buffer, sends the command,
+     * waits for a line response, then releases the mutex.
+     * @param {string} command - Command to send (include newline if needed)
+     * @param {number} [timeoutMs=5000] - Timeout in milliseconds
+     * @returns {Promise<string>} Raw response string
+     */
+    async command(command, timeoutMs = 5000) {
+        if (!this.isOpen || !this.socket?.connected) {
+            throw new Error('Cannot send command: serial port is not open')
+        }
+
+        const result = await this._emit('serial-command', { 
+            path: this.portPath, 
+            command,
+            timeoutMs
+        })
+        if (!result.ok) {
+            throw new Error(result.error || 'Command failed')
+        }
+        return result.response || ''
+    }
+
+    // ─── Memory Monitoring Subscriptions ────────────────────────────────────────
+
+    /** @type {((results: Array<{address: number, size: number, data: number[]}>) => void) | null} */
+    onMemoryData = null
+
+    /** @type {boolean} */
+    _subscribed = false
+
+    /**
+     * Subscribe to memory monitoring
+     * Backend will continuously read these memory regions and emit data
+     * @param {Array<{address: number, size: number}>} regions - Memory regions to monitor
+     * @param {number} [intervalMs=100] - Polling interval in milliseconds
+     * @returns {Promise<void>}
+     */
+    async subscribeMemory(regions, intervalMs = 100) {
+        if (!this.isOpen || !this.socket?.connected) {
+            throw new Error('Cannot subscribe: serial port is not open')
+        }
+
+        // Remove old listener if exists
+        this.socket.off('memory-data')
+
+        // Set up listener for memory data
+        this.socket.on('memory-data', (msg) => {
+            if (this.onMemoryData && msg.results) {
+                this.onMemoryData(msg.results)
+            }
+        })
+
+        const result = await this._emit('subscribe-monitor', {
+            path: this.portPath,
+            regions,
+            intervalMs
+        })
+
+        if (!result.ok) {
+            throw new Error(result.error || 'Failed to subscribe to memory monitoring')
+        }
+
+        this._subscribed = true
+        if (this.debug) console.log(`[SocketSerial] Subscribed to ${regions.length} memory regions`)
+    }
+
+    /**
+     * Unsubscribe from memory monitoring
+     * @returns {Promise<void>}
+     */
+    async unsubscribeMemory() {
+        if (!this.socket?.connected) return
+
+        this.socket.off('memory-data')
+        this._subscribed = false
+
+        try {
+            await this._emit('unsubscribe-monitor')
+        } catch {
+            // Ignore errors during unsubscribe
+        }
+
+        if (this.debug) console.log('[SocketSerial] Unsubscribed from memory monitoring')
+    }
+
+    /**
+     * Check if currently subscribed to memory monitoring
+     * @returns {boolean}
+     */
+    isSubscribed() {
+        return this._subscribed
     }
 
     /**
