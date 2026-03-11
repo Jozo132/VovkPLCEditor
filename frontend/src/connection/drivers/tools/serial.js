@@ -36,6 +36,8 @@ export default class SerialCLASS {
      *     stopBits?: 1 | 2,
      *     parity?: 'none' | 'even' | 'odd',
      *     flowControl?: 'hardware' | 'none',
+     *     dataTerminalReady?: boolean,
+     *     requestToSend?: boolean,
      *     port?: SerialPort
      * }} [openOptions] - Options for opening the serial port.
      * @return {Promise<void>}
@@ -47,6 +49,12 @@ export default class SerialCLASS {
         if (typeof openOptions.stopBits === 'undefined') openOptions.stopBits = 1;
         if (typeof openOptions.parity === 'undefined') openOptions.parity = "none";
         if (typeof openOptions.flowControl === 'undefined') openOptions.flowControl = "none";
+        if (typeof openOptions.dataTerminalReady === 'undefined') openOptions.dataTerminalReady = false;
+        if (typeof openOptions.requestToSend === 'undefined') openOptions.requestToSend = false;
+
+        // Extract signal options (DTR/RTS) - these may or may not be supported in port.open()
+        const dataTerminalReady = openOptions.dataTerminalReady;
+        const requestToSend = openOptions.requestToSend;
 
         // Ensure Web Serial API is supported
         if (!('serial' in navigator)) {
@@ -66,9 +74,12 @@ export default class SerialCLASS {
             }
             // Open the port with given options (baudRate is required)
             if (!this.port.connected || !this.port.readable || !this.port.writable) {
-                if (this.debug) console.log(`Requesting serial port with options:`, openOptions);
+                // Remove non-standard options before passing to port.open()
+                const portOpenOptions = { ...openOptions };
+                delete portOpenOptions.port;
+                if (this.debug) console.log(`Requesting serial port with options:`, portOpenOptions);
                 // Add timeout for port.open() - some devices can hang here
-                const openPromise = this.port.open(openOptions);
+                const openPromise = this.port.open(portOpenOptions);
                 const openTimeout = new Promise((_, reject) => {
                     setTimeout(() => reject(new Error('Port open timeout - device may be unresponsive')), 10000);
                 });
@@ -76,6 +87,14 @@ export default class SerialCLASS {
             }
             this.isOpen = true;
             this._fatalErrorHandled = false; // Reset for new connection
+
+            // Ensure DTR/RTS signals are set (fallback for Chrome < 112 where
+            // dataTerminalReady/requestToSend in open() options are ignored)
+            try {
+                await this.port.setSignals({ dataTerminalReady, requestToSend });
+            } catch (e) {
+                if (this.debug) console.warn('Failed to set DTR/RTS signals:', e.message);
+            }
 
             // Handle hardware disconnect
             const onDisconnect = () => {
