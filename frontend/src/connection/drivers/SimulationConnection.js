@@ -102,6 +102,10 @@ export default class SimulationConnection extends ConnectionBase {
     }
 
     async downloadProgram(bytecode) {
+        const offsets = ensureOffsets(this.editor.project.offsets)
+        const setOffsets = this.plc.wasm_exports?.setRuntimeOffsetsEx
+        if (typeof setOffsets !== 'function') throw new Error('Simulator timer/counter configuration is unavailable')
+        setOffsets(offsets.system.offset, offsets.input.offset, offsets.output.offset, offsets.marker.offset, offsets.timer.offset, offsets.counter.offset)
         // Use downloadBytecodeHex which writes hex directly to WASM memory,
         // bypassing streamIn/streamRead which stops at null bytes (0x00).
         if (this.plc.downloadBytecodeHex) {

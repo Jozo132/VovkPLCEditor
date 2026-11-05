@@ -346,7 +346,7 @@ export default class SerialCLASS {
      * @return {Promise<void>}
      */
     async write(data) {
-        if (this.debug) console.log('Serial write:', data);
+        if (this.debug) console.log('Serial write:', typeof data === 'string' && data.startsWith('WC') ? '[WiFi credentials redacted]' : data);
         
         // Use a mutex to prevent concurrent writes from trying to lock the stream simultaneously
         const currentWrite = this._writeMutex.then(async () => {

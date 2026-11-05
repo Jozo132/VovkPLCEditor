@@ -1,13 +1,16 @@
 /**
  * @file NetworkManager.ts
  * @description Manages TCP socket connections to PLC devices on the local network.
- * Provides scan (via port probing), connect, disconnect, read, and write operations.
+ * Provides broadcast discovery, TCP probing, connect, disconnect, read, and write operations.
  * Each connection maintains a read buffer identical to SerialManager's model so the
  * frontend SocketNetworkConnection driver can use the same command-response pattern.
  */
 
 import net from 'node:net'
 import dgram from 'node:dgram'
+import { randomBytes } from 'node:crypto'
+import { networkInterfaces } from 'node:os'
+import { buildProgramInfoCommand } from './plc-protocol.ts'
 
 export interface NetworkTarget {
     host: string
@@ -20,6 +23,7 @@ export interface ScanResult {
     port: number
     reachable: boolean
     responseTime?: number
+    info?: string
 }
 
 interface ManagedConnection {
@@ -32,7 +36,55 @@ interface ManagedConnection {
 
 export default class NetworkManager {
     private connections: Map<string, ManagedConnection> = new Map()
+    private connecting: Set<string> = new Set()
     private maxBufferSize = 32 * 1024
+    private discoverySession = randomBytes(16).toString('hex')
+    private discoverySequence = 0
+
+    async discoverPlcs(localAddress: string, port = 19617, timeoutMs = 1500): Promise<Array<{ host: string, port: number, uid: string, info: string }>> {
+        if (net.isIP(localAddress) !== 4) throw new Error('Invalid local IPv4 address')
+        if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid discovery port')
+        if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 5000) throw new Error('Invalid discovery timeout')
+        const iface = Object.values(networkInterfaces()).flat().find(address => address?.family === 'IPv4' && address.address === localAddress)
+        if (!iface) throw new Error('Network interface is unavailable')
+        const ip = localAddress.split('.').map(Number)
+        const mask = iface.netmask.split('.').map(Number)
+        const broadcast = ip.map((octet, index) => octet | (255 ^ mask[index])).join('.')
+        const request = { magic: 'VOVKPLC_DISCOVER', version: 1, session: this.discoverySession, id: ++this.discoverySequence, nonce: randomBytes(16).toString('hex') }
+        const results = new Map<string, { host: string, port: number, uid: string, info: string }>()
+        return new Promise((resolve, reject) => {
+            const socket = dgram.createSocket('udp4')
+            let finished = false
+            const finish = (error?: Error) => {
+                if (finished) return
+                finished = true
+                clearTimeout(timer)
+                try { socket.close() } catch {}
+                if (error) reject(error)
+                else resolve([...results.values()])
+            }
+            const timer = setTimeout(() => finish(), timeoutMs)
+            socket.on('error', finish)
+            socket.on('message', (message, remote) => {
+                if (message.length > 4096) return
+                try {
+                    const reply = JSON.parse(message.toString('utf8'))
+                    if (reply.magic !== 'VOVKPLC_DEVICE' || reply.version !== 1 || reply.session !== request.session || reply.id !== request.id || reply.nonce !== request.nonce) return
+                    if (typeof reply.uid !== 'string' || !/^[a-zA-Z0-9._:-]{1,128}$/.test(reply.uid)) return
+                    if (!Number.isInteger(reply.port) || reply.port < 1 || reply.port > 65535) return
+                    if (typeof reply.info !== 'string' || !/^\[VovkPLCRuntime,[^\]\r\n]*\]$/.test(reply.info) || reply.info.slice(1, -1).split(',').length < 15) return
+                    const result = { host: remote.address, port: reply.port, uid: reply.uid, info: reply.info }
+                    results.set(`${reply.uid}:${remote.address}:${reply.port}`, result)
+                } catch {}
+            })
+            socket.bind(0, localAddress, () => {
+                try {
+                    socket.setBroadcast(true)
+                    socket.send(Buffer.from(JSON.stringify(request)), port, broadcast, error => { if (error) finish(error) })
+                } catch (error) { finish(error as Error) }
+            })
+        })
+    }
 
     private connectionKey(host: string, port: number): string {
         return `${host}:${port}`
@@ -48,11 +100,15 @@ export default class NetworkManager {
         startHost: number = 1,
         endHost: number = 254,
         timeoutMs: number = 500,
-        onProgress?: (scanned: number, total: number) => void
+        onProgress?: (scanned: number, total: number) => void,
+        localAddress?: string
     ): Promise<ScanResult[]> {
         // Extract the base subnet (e.g., "192.168.1" from "192.168.1.0")
         const parts = baseIp.split('.')
-        if (parts.length !== 4) throw new Error('Invalid base IP address')
+        if (net.isIP(baseIp) !== 4) throw new Error('Invalid IPv4 address')
+        if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port')
+        if (!Number.isInteger(startHost) || !Number.isInteger(endHost) || startHost < 1 || endHost > 254 || startHost > endHost) throw new Error('Invalid host range')
+        if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 5000) throw new Error('Invalid probe timeout')
         const subnet = parts.slice(0, 3).join('.')
 
         const total = endHost - startHost + 1
@@ -65,7 +121,7 @@ export default class NetworkManager {
             const batch: Promise<ScanResult>[] = []
             for (let j = i; j < i + batchSize && j <= endHost; j++) {
                 const host = `${subnet}.${j}`
-                batch.push(this.probeHost(host, port, timeoutMs))
+                batch.push(this.probeHost(host, port, timeoutMs, localAddress))
             }
             const batchResults = await Promise.all(batch)
             for (const result of batchResults) {
@@ -81,35 +137,37 @@ export default class NetworkManager {
     /**
      * Probe a single host:port with TCP connect
      */
-    private probeHost(host: string, port: number, timeoutMs: number): Promise<ScanResult> {
+    probeHost(host: string, port: number, timeoutMs: number = 1000, localAddress?: string): Promise<ScanResult> {
+        if (net.isIP(host) !== 4) throw new Error('Invalid IPv4 address')
+        if (localAddress && net.isIP(localAddress) !== 4) throw new Error('Invalid local IPv4 address')
+        if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port')
+        if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 5000) throw new Error('Invalid probe timeout')
         return new Promise((resolve) => {
             const start = Date.now()
             const socket = new net.Socket()
+            let response = ''
+            let finished = false
 
-            const cleanup = () => {
+            const finish = (info?: string) => {
+                if (finished) return
+                finished = true
+                clearTimeout(timer)
                 socket.removeAllListeners()
                 socket.destroy()
+                resolve(info ? { host, port, reachable: true, responseTime: Date.now() - start, info } : { host, port, reachable: false })
             }
 
-            socket.setTimeout(timeoutMs)
-
-            socket.on('connect', () => {
-                const responseTime = Date.now() - start
-                cleanup()
-                resolve({ host, port, reachable: true, responseTime })
+            const timer = setTimeout(() => finish(), timeoutMs)
+            socket.on('connect', () => socket.write(`${buildProgramInfoCommand()}\n`))
+            socket.on('data', chunk => {
+                response += chunk.toString('utf8')
+                if (response.length > 8192) return finish()
+                const match = response.match(/\[VovkPLCRuntime,[^\]\r\n]*\]/)
+                if (match && match[0].slice(1, -1).split(',').length >= 15) finish(match[0])
             })
-
-            socket.on('timeout', () => {
-                cleanup()
-                resolve({ host, port, reachable: false })
-            })
-
-            socket.on('error', () => {
-                cleanup()
-                resolve({ host, port, reachable: false })
-            })
-
-            socket.connect(port, host)
+            socket.on('error', () => finish())
+            socket.on('close', () => finish())
+            socket.connect({ port, host, localAddress })
         })
     }
 
@@ -125,12 +183,15 @@ export default class NetworkManager {
         }
     ): Promise<string> {
         const { host, port } = target
+        if (net.isIP(host) !== 4) throw new Error('Invalid IPv4 address')
+        if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port')
         const key = this.connectionKey(host, port)
 
-        if (this.connections.has(key)) {
+        if (this.connections.has(key) || this.connecting.has(key)) {
             throw new Error(`Already connected to ${key}`)
         }
 
+        this.connecting.add(key)
         return new Promise<string>((resolve, reject) => {
             const socket = new net.Socket()
             const timeoutMs = 10000
@@ -155,17 +216,12 @@ export default class NetworkManager {
             })
 
             socket.on('data', (chunk: Buffer) => {
-                for (let i = 0; i < chunk.length; i++) {
-                    managed.readBuffer.push(chunk[i])
-                    if (managed.readBuffer.length > managed.maxBufferSize) {
-                        managed.readBuffer.shift()
-                    }
-                }
+                managed.readBuffer = managed.readBuffer.concat(Array.from(chunk)).slice(-managed.maxBufferSize)
                 callbacks?.onData?.(key, Array.from(chunk))
             })
 
             socket.on('close', () => {
-                this.connections.delete(key)
+                if (this.connections.get(key) === managed) this.connections.delete(key)
                 callbacks?.onClose?.(key)
             })
 
@@ -180,7 +236,7 @@ export default class NetworkManager {
             })
 
             socket.connect(port, host)
-        })
+        }).finally(() => this.connecting.delete(key))
     }
 
     /**
@@ -193,16 +249,16 @@ export default class NetworkManager {
         }
 
         return new Promise<void>((resolve) => {
-            managed.socket.once('close', () => {
-                this.connections.delete(key)
+            const finish = () => {
+                clearTimeout(timer)
+                if (this.connections.get(key) === managed) this.connections.delete(key)
                 resolve()
+            }
+            const timer = setTimeout(finish, 2000)
+            managed.socket.once('close', () => {
+                finish()
             })
             managed.socket.destroy()
-            // Safety timeout in case close event doesn't fire
-            setTimeout(() => {
-                this.connections.delete(key)
-                resolve()
-            }, 2000)
         })
     }
 

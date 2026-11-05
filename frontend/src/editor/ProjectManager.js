@@ -496,6 +496,10 @@ export default class ProjectManager {
     const runtime = this.#editor.runtime
     if (!runtime) throw new Error('Runtime not initialized')
 
+    const offsets = ensureOffsets(this.#editor.project.offsets)
+    this.#editor.project.offsets = offsets
+    await runtime.setRuntimeOffsets(offsets.system.offset, offsets.input.offset, offsets.output.offset, offsets.marker.offset)
+
     // Build the VOVKPLCPROJECT text format
     const projectText = this.buildProjectText()
 
@@ -518,6 +522,12 @@ export default class ProjectManager {
 
         // Extract T/C offsets from compiler-computed memory_map and update project offsets
         const memoryMap = result.output?.memory_map || {}
+        for (const [area, key] of [['S', 'system'], ['X', 'input'], ['Y', 'output'], ['M', 'marker']]) {
+            const layout = memoryMap[area]
+            if (!layout || layout[0] !== offsets[key].offset || layout[1] !== offsets[key].size) {
+                throw new Error(`Project ${area} memory layout does not match the compiler map; check Device > Parameters`)
+            }
+        }
         if (this.#editor.project) {
             const offsets = this.#editor.project.offsets
             if (memoryMap['T']) {

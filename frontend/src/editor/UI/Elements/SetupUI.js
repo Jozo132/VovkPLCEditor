@@ -16,6 +16,7 @@ export default class SetupUI {
     monitoringActive = false
     monitor_buttons = []
     monitoringAvailable = false
+    activeTab = 'deploy'
 
     /** @param { import("../../Editor.js").VovkPLCEditor } master */
     constructor(master) {
@@ -102,10 +103,14 @@ export default class SetupUI {
 
         const lockSettings = this.locked
         this.div.innerHTML = /*HTML*/`
+            <div class="device-tabs" role="tablist" aria-label="Device views">
+                ${[['deploy', 'Deploy'], ['network', 'Network'], ['parameters', 'Parameters']].map(([id, label]) => `
+                    <button type="button" class="device-tab ${this.activeTab === id ? 'active' : ''}" id="device-tab-${id}" role="tab" aria-selected="${this.activeTab === id}" aria-controls="device-panel-${id}" tabindex="${this.activeTab === id ? '0' : '-1'}" data-device-tab="${id}">${label}</button>
+                `).join('')}
+            </div>
             <div class="plc-editor-top">
                 <div class="plc-editor-header">
-                    <h2 style="margin-top: 0px; margin-bottom: 3px;">Device Configuration</h2>
-                    <p>System Settings and Memory Map</p>
+                    <h2 style="margin-top: 0px; margin-bottom: 3px;">Device</h2>
                     <button class="plc-btn monitor-btn" data-monitor-toggle="true" title="Toggle Live Monitoring">
                         <span class="plc-icon plc-icon-monitor"></span>
                     </button>
@@ -114,7 +119,7 @@ export default class SetupUI {
             <div class="plc-editor-body setup-body">
                 
                 <!-- Main Configuration Card -->
-                <div class="setup-card">
+                <div class="setup-card" id="device-panel-deploy" role="tabpanel" aria-labelledby="device-tab-deploy" data-device-panel="deploy" ${this.activeTab !== 'deploy' ? 'hidden' : ''}>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                         <h3 style="margin:0; color: #fff; font-size: 15px;">Configuration & Status</h3>
                         <div id="setup-device-status-badge" style="padding: 2px 8px; border-radius: 3px; font-weight: bold; font-size: 10px; letter-spacing: 0.5px; ${connected ? 'background: #0e639c; color: #fff;' : 'background: #3a1d1d; color: #f48771; border: 1px solid #5a1d1d;'}">
@@ -169,8 +174,21 @@ export default class SetupUI {
                     </div>
                 </div>
 
+                <div class="setup-card" id="device-panel-network" role="tabpanel" aria-labelledby="device-tab-network" data-device-panel="network" ${this.activeTab !== 'network' ? 'hidden' : ''} style="border-top: 3px solid #3c3c3c;">
+                    <h4 style="color: #fff; font-size: 13px; margin: 0 0 15px;">Device WiFi</h4>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button id="wifi-load" class="plc-btn setup-btn" ${!connected ? 'disabled' : ''}>Load WiFi</button>
+                        <button id="wifi-scan" class="plc-btn setup-btn" ${!connected ? 'disabled' : ''}>Scan networks</button>
+                    </div>
+                    <p id="wifi-connection" style="color: #ccc;">Device IP: -</p>
+                    <p id="wifi-status" role="status" style="color: #aaa;"></p>
+                    <datalist id="wifi-scan-results"></datalist>
+                    <div id="wifi-scan-list" style="color: #bbb;"></div>
+                    <div id="wifi-networks"></div>
+                </div>
+
                 <!-- Memory Map -->
-                <div class="setup-card" style="border-top: 3px solid #3c3c3c;">
+                <div class="setup-card" id="device-panel-parameters" role="tabpanel" aria-labelledby="device-tab-parameters" data-device-panel="parameters" ${this.activeTab !== 'parameters' ? 'hidden' : ''} style="border-top: 3px solid #3c3c3c;">
                     <h4 style="color: #fff; font-size: 13px; margin: 0 0 15px 0; font-weight: 600;">Memory Map Settings</h4>
                     <table class="setup-comparison-table">
                         <thead>
@@ -284,8 +302,203 @@ export default class SetupUI {
         `
     }
 
+    bindWiFiEvents() {
+        const wifiStatus = this.div.querySelector('#wifi-status')
+        const wifiConnection = this.div.querySelector('#wifi-connection')
+        const wifiNetworks = this.div.querySelector('#wifi-networks')
+        const wifiLoad = /** @type {HTMLButtonElement | null} */ (this.div.querySelector('#wifi-load'))
+        const wifiScan = /** @type {HTMLButtonElement | null} */ (this.div.querySelector('#wifi-scan'))
+        const list = this.div.querySelector('#wifi-scan-results')
+        const visibleList = this.div.querySelector('#wifi-scan-list')
+        const connection = this.master.device_manager?.connection
+        if (!wifiStatus || !wifiConnection || !wifiNetworks || !wifiLoad || !wifiScan || !list || !visibleList || !connection || !this.master.device_manager.connected) return
+        let rows = []
+        const hasDrafts = (except = -1) => rows.some((row, index) => index !== except && (row.ssid.value !== row.network.ssid || row.password.value || row.replace.checked))
+        const updateWiFi = async () => {
+            const status = await connection.getWiFiStatus()
+            wifiConnection.textContent = status.connectedSlot >= 0 ? `Connected: ${status.networks[status.connectedSlot]?.ssid || ''} | Device IP: ${status.ip || '-'}` : 'Not connected | Device IP: -'
+            wifiNetworks.replaceChildren()
+            wifiNetworks.dataset.loaded = 'true'
+            rows = []
+            let draggedIndex = null
+            const showRows = () => {
+                let last = -1
+                rows.forEach((row, index) => { if (row.ssid.value || row.network.ssid) last = index })
+                rows.forEach((row, index) => { row.element.hidden = index > Math.min(last + 1, rows.length - 1) })
+            }
+            const runAction = async (action, except = -1) => {
+                if (hasDrafts(except)) {
+                    wifiStatus.textContent = 'Save or discard network edits before continuing.'
+                    return
+                }
+                wifiNetworks.inert = true
+                try {
+                    await action()
+                    await updateWiFi()
+                    wifiStatus.textContent = ''
+                } catch (error) {
+                    wifiStatus.textContent = error instanceof Error ? error.message : String(error)
+                } finally { wifiNetworks.inert = false }
+            }
+            status.networks.forEach((network, index) => {
+                const row = document.createElement('div')
+                row.className = 'wifi-network-row'
+                const handle = document.createElement('span')
+                handle.className = 'wifi-drag-handle'
+                handle.innerHTML = '&#8942;&#8942;'
+                handle.title = 'Drag to reorder priority'
+                handle.setAttribute('aria-hidden', 'true')
+                handle.draggable = !!network.ssid
+                handle.ondragstart = (event) => {
+                    if (hasDrafts()) { event.preventDefault(); wifiStatus.textContent = 'Save or discard network edits before reordering.'; return }
+                    draggedIndex = index
+                    event.dataTransfer.setData('text/plain', String(index))
+                    event.dataTransfer.effectAllowed = 'move'
+                }
+                handle.ondragend = () => { draggedIndex = null; row.classList.remove('wifi-drag-over') }
+                row.ondragover = (event) => {
+                    if (draggedIndex !== null && network.ssid && draggedIndex !== index) {
+                        event.preventDefault()
+                        event.dataTransfer.dropEffect = 'move'
+                        row.classList.add('wifi-drag-over')
+                    }
+                }
+                row.ondragleave = () => row.classList.remove('wifi-drag-over')
+                row.ondrop = (event) => {
+                    event.preventDefault()
+                    row.classList.remove('wifi-drag-over')
+                    const from = draggedIndex
+                    draggedIndex = null
+                    if (from !== null && network.ssid && from !== index) runAction(() => connection.moveWiFi(from, index))
+                }
+                const label = document.createElement('label')
+                label.textContent = `Priority ${index + 1}`
+                const ssid = document.createElement('input')
+                ssid.className = 'tc-input'
+                ssid.placeholder = 'Network name'
+                ssid.value = network.ssid
+                ssid.setAttribute('list', 'wifi-scan-results')
+                ssid.setAttribute('aria-label', `Priority ${index + 1} network name`)
+                const password = document.createElement('input')
+                password.className = 'tc-input'
+                password.type = 'password'
+                password.autocomplete = 'new-password'
+                password.placeholder = network.hasPassword ? 'Password saved' : 'Password'
+                password.setAttribute('aria-label', `Priority ${index + 1} password`)
+                const replaceLabel = document.createElement('label')
+                const replace = document.createElement('input')
+                replace.type = 'checkbox'
+                replaceLabel.append(replace, ' Replace password')
+                ssid.oninput = showRows
+                password.oninput = () => { if (password.value) replace.checked = true }
+                const save = document.createElement('button')
+                save.className = 'plc-btn setup-btn'
+                save.textContent = 'Save'
+                save.onclick = () => {
+                    if (!ssid.value) { wifiStatus.textContent = 'Enter a network name or use Forget to remove a saved network.'; return }
+                    return runAction(async () => {
+                        const changed = ssid.value !== network.ssid
+                        await connection.configureWiFi(index, ssid.value, password.value, replace.checked || changed || !ssid.value)
+                        password.value = ''
+                        replace.checked = false
+                    }, index)
+                }
+                row.append(handle, label, ssid, password, replaceLabel, save)
+                if (network.ssid) {
+                    const previous = document.createElement('button')
+                    previous.className = 'plc-btn wifi-icon-btn'
+                    previous.innerHTML = '&#8593;'
+                    previous.title = `Move priority ${index + 1} up`
+                    previous.setAttribute('aria-label', previous.title)
+                    previous.disabled = index === 0 || !status.networks[index - 1].ssid
+                    previous.onclick = () => runAction(() => connection.moveWiFi(index, index - 1))
+                    const next = document.createElement('button')
+                    next.className = 'plc-btn wifi-icon-btn'
+                    next.innerHTML = '&#8595;'
+                    next.title = `Move priority ${index + 1} down`
+                    next.setAttribute('aria-label', next.title)
+                    next.disabled = index === status.networks.length - 1 || !status.networks[index + 1].ssid
+                    next.onclick = () => runAction(() => connection.moveWiFi(index, index + 1))
+                    const forget = document.createElement('button')
+                    forget.className = 'plc-btn setup-btn'
+                    forget.textContent = 'Forget'
+                    forget.setAttribute('aria-label', `Forget priority ${index + 1}`)
+                    forget.onclick = async () => {
+                        if (hasDrafts()) { wifiStatus.textContent = 'Save or discard network edits before continuing.'; return }
+                        const confirmed = await Popup.confirm({ title: 'Forget network', description: 'Remove this network and its saved password from the device?', confirm_text: 'Forget', cancel_text: 'Cancel' })
+                        if (confirmed) await runAction(() => connection.forgetWiFi(index))
+                    }
+                    row.append(previous, next, forget)
+                }
+                rows.push({ element: row, ssid, password, replace, network })
+                wifiNetworks.append(row)
+            })
+            showRows()
+        }
+        if (wifiLoad) wifiLoad.onclick = async () => {
+            if (hasDrafts()) {
+                wifiStatus.textContent = 'Save or discard network edits before reloading.'
+                return
+            }
+            wifiLoad.disabled = true
+            try { await updateWiFi(); wifiStatus.textContent = '' } catch (error) { wifiStatus.textContent = error instanceof Error ? error.message : String(error) }
+            finally { wifiLoad.disabled = false }
+        }
+        if (wifiScan) wifiScan.onclick = async () => {
+            wifiScan.disabled = true
+            wifiStatus.textContent = 'Scanning...'
+            try {
+                const networks = await connection.scanWiFi()
+                list.replaceChildren()
+                visibleList.replaceChildren()
+                networks.forEach(network => {
+                    const option = document.createElement('option')
+                    option.value = network.ssid
+                    option.label = `${network.rssi} dBm${network.secured ? ' - secured' : ' - open'}`
+                    list.append(option)
+                    const item = document.createElement('div')
+                    item.textContent = `${network.ssid || '(hidden network)'}  |  ${network.rssi} dBm  |  ${network.secured ? 'Secured' : 'Open'}`
+                    visibleList.append(item)
+                })
+                wifiStatus.textContent = `Found ${networks.length} networks`
+            } catch (error) { wifiStatus.textContent = error instanceof Error ? error.message : String(error) }
+            finally { wifiScan.disabled = false }
+        }
+    }
+
     bindEvents() {
         const project = this.master.project
+        this.bindWiFiEvents()
+        const tabs = Array.from(this.div.querySelectorAll('[data-device-tab]'))
+        const selectTab = (tab) => {
+            this.activeTab = tab.dataset.deviceTab
+            tabs.forEach(item => {
+                const selected = item === tab
+                item.classList.toggle('active', selected)
+                item.setAttribute('aria-selected', String(selected))
+                item.tabIndex = selected ? 0 : -1
+            })
+            this.div.querySelectorAll('[data-device-panel]').forEach(panel => {
+                panel.hidden = panel.dataset.devicePanel !== this.activeTab
+            })
+            if (this.activeTab === 'network' && !this.div.querySelector('#wifi-networks')?.dataset.loaded) this.div.querySelector('#wifi-load')?.click()
+        }
+        tabs.forEach((tab, index) => {
+            tab.onclick = () => selectTab(tab)
+            tab.onkeydown = (event) => {
+                let next = index
+                if (event.key === 'ArrowRight') next = (index + 1) % tabs.length
+                else if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length
+                else if (event.key === 'Home') next = 0
+                else if (event.key === 'End') next = tabs.length - 1
+                else return
+                event.preventDefault()
+                selectTab(tabs[next])
+                tabs[next].focus()
+            }
+        })
+
+        if (this.activeTab === 'network' && this.master.device_manager?.connected) this.div.querySelector('#wifi-load')?.click()
 
         const offsetInputs = this.div.querySelectorAll('.setup-offset-input')
         offsetInputs.forEach(input => {

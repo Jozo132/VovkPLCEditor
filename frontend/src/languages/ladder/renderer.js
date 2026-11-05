@@ -1419,14 +1419,16 @@ const parseAddressToSymbol = (addressStr) => {
     'C': 'counter',
     'T': 'timer',
     'X': 'input',
+    'I': 'input',
     'Y': 'output',
+    'Q': 'output',
     'S': 'system',
     'M': 'marker'
   }
 
   // Pattern 1: Typed address - Letter + Type + Number (e.g., MW14, MD0, MB5, MR8)
   // Type suffixes: B=byte, W=word(2), D=dword(4), R=real(4)
-  const typedMatch = trimmed.match(/^([cCtTxXyYsSmM])([bBwWdDrR])([0-9]+)$/i)
+  const typedMatch = trimmed.match(/^([cCtTxXyYsSmMiIqQ])([bBwWdDrR])([0-9]+)$/i)
   if (typedMatch) {
     const code = typedMatch[1].toUpperCase()
     const typeCode = typedMatch[2].toUpperCase()
@@ -1454,7 +1456,7 @@ const parseAddressToSymbol = (addressStr) => {
   }
 
   // Pattern 2: Simple address - Letter + Number (e.g., X0.0, Y0, M100.2)
-  const simpleMatch = trimmed.match(/^([cCtTxXyYsSmM])([0-9]+(?:\.[0-9]+)?)$/i)
+  const simpleMatch = trimmed.match(/^([cCtTxXyYsSmMiIqQ])([0-9]+(?:\.[0-9]+)?)$/i)
   if (simpleMatch) {
     const code = simpleMatch[1].toUpperCase()
     const valStr = simpleMatch[2]
@@ -2105,7 +2107,8 @@ const draw_function_block = (editor, like, ctx, block) => {
           const locationKey = parsedSymbol.location === 'memory' ? 'marker' : parsedSymbol.location
           const baseOffset = offsets[locationKey]?.offset || 0
           const byteAddr = Math.floor(parsedSymbol.address)
-          const absoluteAddr = baseOffset + byteAddr
+          const structSize = locationKey === 'timer' ? 9 : locationKey === 'counter' ? 5 : 1
+          const absoluteAddr = baseOffset + byteAddr * structSize
 
           // Determine actual type from block's dataType
           const effectiveType = dataType || parsedSymbol.type || 'i16'
@@ -5815,7 +5818,8 @@ function initializeLiveMonitoring(editor, ladder, canvas) {
       const baseOffset = offsets[locationKey]?.offset || 0
       const addrVal = parseFloat(String(symbol.address)) || 0
       const byteAddr = Math.floor(addrVal)
-      const absoluteAddr = baseOffset + byteAddr
+      const structSize = locationKey === 'timer' ? 9 : locationKey === 'counter' ? 5 : 1
+      const absoluteAddr = baseOffset + byteAddr * structSize
 
       // Determine size based on type
       const size = typeSizes[symbol.type || 'bit'] || 1
@@ -5873,7 +5877,9 @@ function initializeLiveMonitoring(editor, ladder, canvas) {
         if (b.in2) symbols.push(b.in2)
       }
     }
-    return symbols.sort().join('|')
+    const offsets = ensureOffsets(editor.project?.offsets || {})
+    const resolved = [...collectSymbolAddresses()].map(([address, entry]) => [address, entry.size, [...entry.symbols].sort()])
+    return JSON.stringify([symbols.sort(), offsets, resolved])
   }
 
   /**
@@ -6167,7 +6173,8 @@ async function showBlockProperties(editor, block, ladder, gridX, gridY) {
     const key = sym.location === 'memory' ? 'marker' : sym.location
     const baseOffset = offsets[key]?.offset || 0
     const byteAddr = Math.floor(sym.address)
-    return baseOffset + byteAddr
+    const structSize = key === 'timer' ? 9 : key === 'counter' ? 5 : 1
+    return baseOffset + byteAddr * structSize
   }
 
   const absoluteAddr = computeAbsoluteAddress(symbol)

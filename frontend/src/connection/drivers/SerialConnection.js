@@ -67,7 +67,8 @@ export default class SerialConnection extends ConnectionBase {
             await this.writeChunked(command + "\n");
 
             // Wait for response
-            await this._readResponseLine(12000);
+            const response = (await this._readResponseLine(12000)).trim();
+            if (response !== 'PROGRAM DOWNLOAD COMPLETE') throw new Error(`Program download failed: ${response}`);
 
             // Flush any remaining data in the buffer to prevent offset issues
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -156,7 +157,8 @@ export default class SerialConnection extends ConnectionBase {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.tcConfig(timerOffset, counterOffset);
             await this.serial.write(command + "\n");
-            await this._readResponseLine(); // Wait for OK
+            const response = (await this._readResponseLine()).trim();
+            if (response !== `OK TC CONFIG T=${timerOffset} C=${counterOffset}`) throw new Error(`Timer/counter configuration failed: ${response}`);
         }, { label: 'configureTCOffsets' });
     }
 
@@ -205,19 +207,11 @@ export default class SerialConnection extends ConnectionBase {
                 
                 // Check if we have a complete info line in accumulated data
                 // Look for a line that contains '[' and ends with ']' followed by newline or end
-                const bracketStart = accumulated.indexOf('[');
+                const bracketStart = accumulated.indexOf('[VovkPLCRuntime,');
                 if (bracketStart >= 0) {
                     const bracketEnd = accumulated.indexOf(']', bracketStart);
                     if (bracketEnd >= 0) {
-                        // Found complete bracketed content - extract the full line
-                        // Find the start of this line (after previous newline)
-                        let lineStart = accumulated.lastIndexOf('\n', bracketStart);
-                        lineStart = lineStart >= 0 ? lineStart + 1 : 0;
-                        // Find end of line (newline after bracket or end of string)
-                        let lineEnd = accumulated.indexOf('\n', bracketEnd);
-                        lineEnd = lineEnd >= 0 ? lineEnd : accumulated.length;
-                        
-                        infoLine = accumulated.substring(lineStart, lineEnd).trim();
+                        infoLine = accumulated.substring(bracketStart, bracketEnd + 1);
                         if (this.debug) console.log("Found complete info line:", infoLine);
                         // Give a bit more time for any trailing data
                         await new Promise(r => setTimeout(r, 50));
@@ -238,8 +232,7 @@ export default class SerialConnection extends ConnectionBase {
                 throw new Error("Invalid info response: no data or incomplete response");
             }
 
-            while (true) {
-                if (!raw) break
+            if (raw) {
                 if (raw.startsWith('PLC INFO - ')) {
                     if (this.debug) console.log("Device info:", raw);
                     const parts = raw.split('PLC INFO - ')
@@ -247,7 +240,7 @@ export default class SerialConnection extends ConnectionBase {
                     raw = parts.join('PLC INFO - ') // This should not happen, but just in case we will remove the first instance of 'PLC INFO - '
                 }
                 raw = raw.trim()
-                if (raw.startsWith("[") && raw.endsWith("]")) { // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,0,16,16,16,32,16,48,16,64,16,Simulator]'
+                if (raw.startsWith("[VovkPLCRuntime,") && raw.endsWith("]")) { // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,0,16,16,16,32,16,48,16,64,16,Simulator]'
                     const content = raw.substring(1, raw.length - 1)
                     const parts = content.split(",")
                     const base = {
@@ -376,7 +369,7 @@ export default class SerialConnection extends ConnectionBase {
                 }
             }
 
-            console.error(`Invalid info response:`, raw)
+            throw new Error('Invalid info response')
         }, { label: 'getInfo', timeoutMs: 12000 });
     }
 

@@ -49,10 +49,10 @@ const custom_item_html = ({ draggable, selected, type, badge }) => {
 /** @type {{ files: PLC_ProjectItem[], folders: string[] }} */
 const default_root_state = {
     files: [
-        // Setup moved to Settings menu
-        { id: 'symbols', type: 'symbols', name: 'symbols', path: '/', full_path: '/symbols', comment: 'Symbols Table', blocks: [] },
+        { id: 'setup', type: 'setup', name: 'Device', path: '/', full_path: '/setup', comment: 'Device', blocks: [] },
+        { id: 'symbols', type: 'symbols', name: 'Symbols', path: '/', full_path: '/symbols', comment: 'Symbols Table', blocks: [] },
         // Memory moved to Settings menu
-        { id: 'datablocks', type: 'datablocks', name: 'datablocks', path: '/', full_path: '/datablocks', comment: 'Data Blocks', blocks: [] },
+        { id: 'datablocks', type: 'datablocks', name: 'Datablocks', path: '/', full_path: '/datablocks', comment: 'Data Blocks', blocks: [] },
         { type: 'program', name: 'main', path: '/', full_path: '/main', comment: '', blocks: [] },
         // { type: 'custom', name: 'custom', path: '/', full_path: '/custom', comment: '', blocks: [] },
     ],
@@ -455,7 +455,7 @@ export default class NavigationTreeManager {
 
             const item = this.findItem(element)
             const full_path = item ? item.full_path : ''
-            const fixed = new Set(['/main', '/project', '/symbols', '/memory', '/datablocks'])
+            const fixed = new Set(['/main', '/project', '/setup', '/symbols', '/memory', '/datablocks'])
             const is_fixed = fixed.has(full_path)
 
             if (className === 'plc-navigation-folder') {
@@ -463,7 +463,7 @@ export default class NavigationTreeManager {
                 if (is_fixed) return ctx_fixed_folder
                 return ctx_edit_folder
             }
-            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-symbols' || className === 'plc-navigation-datablocks' || className === 'plc-navigation-datablock') {
+            if (className === 'plc-navigation-program' || className === 'plc-navigation-custom' || className === 'plc-navigation-setup' || className === 'plc-navigation-symbols' || className === 'plc-navigation-datablocks' || className === 'plc-navigation-datablock') {
                 if (connected) return ctx_online_program
                 if (full_path === '/main') return ctx_main_program
                 if (is_fixed) return ctx_fixed_program
@@ -888,7 +888,7 @@ export default class NavigationTreeManager {
             default_root_state.folders.forEach(path => this.createTreeItem({ path, recursive: true, fixed: true, redraw: false }))
 
             empty_folders.forEach(path => this.createTreeItem({ path, recursive: true, redraw: false }))
-            // Filter out setup and memory from project files (moved to Settings menu)
+            // Use the fixed setup item and keep memory in the Settings menu.
             files.filter(f => f.type !== 'setup' && f.full_path !== '/setup' && f.type !== 'memory' && f.full_path !== '/memory').forEach(item => this.createTreeItem({ item, recursive: true, redraw: false }))
 
             // Add individual DataBlock items to the tree based on their path

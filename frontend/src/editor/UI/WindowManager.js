@@ -1,7 +1,7 @@
 import {PLC_Project, PLCEditor} from '../../utils/types.js'
 import VOVKPLCEDITOR_VERSION_BUILD, {VOVKPLCEDITOR_VERSION} from '../BuildNumber.js'
 import {ElementSynthesisMany, getEventPath, isVisible, readTypedValue, evaluateNumericInput} from '../../utils/tools.js'
-import {ensureOffsets} from '../../utils/offsets.js'
+import {ensureOffsets, deviceLayoutMismatch} from '../../utils/offsets.js'
 import {Popup} from './Elements/components/popup.js'
 import NavigationTreeManager from './Elements/NavigationTreeManager.js'
 import WatchPanel from './Elements/WatchPanel.js'
@@ -157,6 +157,95 @@ export default class WindowManager {
         }
     }
 
+    _setupNetworkControls = workspace => {
+        const probe = workspace.querySelector('.plc-network-probe')
+        const scan = workspace.querySelector('.plc-network-scan')
+        const saved = this.#editor.project?.networkDevice || {}
+        this._networkHost.value = saved.host || ''
+        this._networkPort.value = saved.port || 2000
+        const save = () => {
+            if (!this.#editor.project) return
+            this.#editor.project.networkDevice = { host: this._networkHost.value.trim(), port: Number(this._networkPort.value) }
+            this.#editor.project_manager?.forceSave?.()
+        }
+        this._networkHost.addEventListener('change', save)
+        this._networkPort.addEventListener('change', save)
+        this._networkResults.addEventListener('change', () => {
+            this._networkHost.value = this._networkResults.value
+            this._networkPort.value = this._networkResults.selectedOptions[0]?.dataset.port || this._networkPort.value
+            save()
+        })
+        const request = async (endpoint, payload) => {
+            const response = await fetch(`/api/network/${endpoint}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            })
+            const data = await response.json()
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Network request failed')
+            return data
+        }
+        const run = async action => {
+            if (this.#editor.device_manager?.connected) {
+                this._networkStatus.textContent = 'Disconnect before probing or scanning.'
+                return
+            }
+            probe.disabled = true
+            scan.disabled = true
+            try { await action() } catch (error) { this._networkStatus.textContent = error.message }
+            finally { probe.disabled = false; scan.disabled = false }
+        }
+        probe.addEventListener('click', () => run(async () => {
+            this._networkStatus.textContent = 'Probing...'
+            const { result } = await request('probe', { host: this._networkHost.value.trim(), port: Number(this._networkPort.value) })
+            this._networkStatus.textContent = result.reachable ? `PLC found at ${result.host}:${result.port}` : 'No PLC response.'
+            if (result.reachable) save()
+        }))
+        scan.addEventListener('click', () => run(async () => {
+            const baseIp = this._networkInterface.value
+            if (!baseIp) throw new Error('No network interface available.')
+            this._networkStatus.textContent = 'Broadcasting discovery...'
+            this._networkResults.replaceChildren()
+            this._networkResults.style.display = 'none'
+            const { results } = await request('scan', { baseIp })
+            for (const result of results) {
+                const option = document.createElement('option')
+                option.value = result.host
+                option.dataset.port = String(result.port)
+                option.textContent = `${result.host}:${result.port} ${result.info.split(',').at(-1).replace(/\]$/, '')} (${result.uid})`
+                this._networkResults.appendChild(option)
+            }
+            if (results.length) {
+                this._networkResults.style.display = ''
+                this._networkHost.value = results[0].host
+                this._networkPort.value = results[0].port
+                save()
+            }
+            this._networkStatus.textContent = `${results.length} unverified PLC${results.length === 1 ? '' : 's'} found.`
+        }))
+    }
+
+    _updateNetworkControls = async () => {
+        if (!this._networkControls) return
+        const visible = this.connectionMode === 'ethernet'
+        this._networkControls.style.display = visible ? 'block' : 'none'
+        if (!visible || !this.serverCapabilities?.network) return
+        try {
+            const response = await fetch('/api/network/interfaces')
+            const data = await response.json()
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Cannot list network interfaces')
+            const selected = this._networkInterface.value
+            this._networkInterface.replaceChildren()
+            for (const iface of data.interfaces) {
+                const option = document.createElement('option')
+                option.value = iface.address
+                option.textContent = `${iface.name} (${iface.address})`
+                this._networkInterface.appendChild(option)
+            }
+            if (data.interfaces.some(iface => iface.address === selected)) this._networkInterface.value = selected
+        } catch (error) {
+            this._networkStatus.textContent = error.message
+        }
+    }
+
     /**
      * Fetch server capabilities and update UI based on available features
      */
@@ -178,6 +267,11 @@ export default class WindowManager {
                     this._serverSerialOption.style.display = 'none'
                     this._serverSerialOption.disabled = true
                 }
+            }
+            if (this._networkOption) {
+                this._networkOption.style.display = this.serverCapabilities?.network ? '' : 'none'
+                this._networkOption.disabled = !this.serverCapabilities?.network
+                this._updateNetworkControls()
             }
             
             // If server serial is available and we're in socket-serial mode, start polling
@@ -216,7 +310,7 @@ export default class WindowManager {
                     <div class="plc-menu-item" data-menu="settings">
                         <span class="plc-menu-label">Settings</span>
                         <div class="plc-menu-dropdown">
-                            <div class="plc-menu-option" data-action="setup"><span class="plc-icon plc-icon-setup" style="margin-right:8px;"></span>Device Setup</div>
+                            <div class="plc-menu-option" data-action="setup"><span class="plc-icon plc-icon-setup" style="margin-right:8px;"></span>Device</div>
                             <div class="plc-menu-option" data-action="memory"><span class="plc-icon plc-icon-memory" style="margin-right:8px;"></span>Memory Map</div>
                             <div class="plc-menu-separator"></div>
                             <div class="plc-menu-option" data-action="load-plc-config"><span class="plc-icon plc-icon-upload" style="margin-right:8px;"></span>Load PLC Configuration</div>
@@ -255,7 +349,19 @@ export default class WindowManager {
                                             <option value="simulation">Simulation</option>
                                             <option value="serial">USB/Serial Web</option>
                                             <option value="socket-serial" class="plc-server-serial-option" style="display: none;">USB/Serial Server</option>
+                                            <option value="ethernet" class="plc-network-option" style="display: none;">Ethernet</option>
                                         </select>
+                                    </div>
+                                    <div class="plc-network-controls" style="display:none; margin-bottom:4px;">
+                                        <select class="plc-network-interface" aria-label="Network interface" style="width:100%; height:28px; margin-bottom:4px; background:#3c3c3c; color:#f0f0f0;"></select>
+                                        <div style="display:flex; gap:4px; margin-bottom:4px;">
+                                            <input class="plc-network-host" aria-label="Device IPv4 address" placeholder="IPv4 address" style="min-width:0; flex:1; height:28px; background:#3c3c3c; color:#f0f0f0; border:1px solid #555; padding:0 6px;">
+                                            <input class="plc-network-port" aria-label="TCP port" type="number" min="1" max="65535" value="2000" style="width:65px; height:28px; background:#3c3c3c; color:#f0f0f0; border:1px solid #555; padding:0 4px;">
+                                            <button class="plc-network-probe" title="Probe device" aria-label="Probe device" style="width:28px; height:28px; background:#333; color:#ddd; border:1px solid #555; cursor:pointer;"><span class="codicon codicon-search"></span></button>
+                                            <button class="plc-network-scan" title="Broadcast discovery" aria-label="Scan interface subnet" style="width:28px; height:28px; background:#333; color:#ddd; border:1px solid #555; cursor:pointer;"><span class="codicon codicon-refresh"></span></button>
+                                        </div>
+                                        <select class="plc-network-results" aria-label="Discovered devices" style="display:none; width:100%; height:28px; background:#3c3c3c; color:#f0f0f0;"></select>
+                                        <div class="plc-network-status" role="status" style="font-size:11px; color:#aaa; margin-top:4px; overflow-wrap:anywhere;"></div>
                                     </div>
                                     
                                     <!-- New Device Button (for serial mode) -->
@@ -1347,6 +1453,14 @@ export default class WindowManager {
         // Server capabilities (fetched asynchronously)
         this.serverCapabilities = null
         this._serverSerialOption = modeSelect.querySelector('.plc-server-serial-option')
+        this._networkOption = modeSelect.querySelector('.plc-network-option')
+        this._networkControls = workspace.querySelector('.plc-network-controls')
+        this._networkHost = workspace.querySelector('.plc-network-host')
+        this._networkPort = workspace.querySelector('.plc-network-port')
+        this._networkInterface = workspace.querySelector('.plc-network-interface')
+        this._networkResults = workspace.querySelector('.plc-network-results')
+        this._networkStatus = workspace.querySelector('.plc-network-status')
+        this._setupNetworkControls(workspace)
         
         // Fetch server capabilities to enable/disable server serial option
         this._fetchServerCapabilities()
@@ -1362,6 +1476,8 @@ export default class WindowManager {
                 this.active_device = 'serial'
             } else if (this.connectionMode === 'socket-serial') {
                 this.active_device = 'socket-serial'
+            } else if (this.connectionMode === 'ethernet') {
+                this.active_device = 'ethernet'
             }
             // Show/hide new device button based on mode
             if (newDeviceBtn) {
@@ -1443,6 +1559,8 @@ export default class WindowManager {
                 this.active_device = 'serial'
             } else if (this.connectionMode === 'socket-serial') {
                 this.active_device = 'socket-serial'
+            } else if (this.connectionMode === 'ethernet') {
+                this.active_device = 'ethernet'
             }
             // Save to project
             if (editor.project) {
@@ -1452,6 +1570,7 @@ export default class WindowManager {
                 }
             }
             this.updateDeviceDropdown()
+            this._updateNetworkControls()
 
             // Show/hide new device button based on mode
             if (newDeviceBtn) {
@@ -1489,6 +1608,7 @@ export default class WindowManager {
         if (this.connectionMode === 'socket-serial') {
             this._startSocketSerialPolling()
         }
+        this._updateNetworkControls()
 
         // New device button handler
         if (newDeviceBtn) {
@@ -1567,6 +1687,9 @@ export default class WindowManager {
                 } else if (selectedValue && selectedValue.toString().startsWith('_socket_')) {
                     // Server-side serial port via Socket.IO
                     this.active_device = 'socket-serial'
+                    await this.#on_device_online_click()
+                } else if (selectedValue === '_ethernet') {
+                    this.active_device = 'ethernet'
                     await this.#on_device_online_click()
                 } else if (selectedValue === '_none' || selectedValue === '_error') {
                     // Do nothing for disabled options
@@ -2608,10 +2731,7 @@ export default class WindowManager {
             }
 
             // Store result for download
-            this.#editor.project.binary = (str => {
-                const matches = str.match(/.{1,2}/g) || []
-                return matches.map(hex => parseInt(hex, 16))
-            })(result.output)
+            this.#editor.project.binary = result.output ? this.#editor.runtime.parseHex(result.output) : []
 
             this.#editor.project.compiledBytecode = result.output
             this.#editor.project.compiledSize = result.size
@@ -2675,6 +2795,12 @@ export default class WindowManager {
                 this.#editor.project.compiledDatablocks = []
             }
 
+            if (this.#editor.device_manager?.connected && this.isMonitoringActive()) {
+                this._updateCodeMonitorRegistrations()
+                this.watch_panel?.refresh()
+                this.#editor.data_fetcher?.reset()
+            }
+
             // Auto-scan for patchable constants after successful compilation (always run, even in silent mode)
             if (this.#editor.program_patcher) {
                 try {
@@ -2732,8 +2858,25 @@ export default class WindowManager {
             return
         }
 
-        const deviceInfo = this.#editor.device_manager.deviceInfo
+        let deviceInfo = this.#editor.device_manager.deviceInfo
         const projectInfo = this.#editor.project.info
+
+        if (['serial', 'socket-serial', 'ethernet'].includes(this.#editor.device_manager.options?.target)) {
+            try {
+                deviceInfo = await this.#editor.device_manager.connection.getInfo()
+                this.#editor.device_manager.deviceInfo = deviceInfo
+            } catch (error) {
+                this.logToConsole(`Upload aborted: cannot read PLC configuration: ${error.message}`, 'error')
+                this.setConsoleTab('output')
+                return
+            }
+            const mismatch = deviceLayoutMismatch(this.#editor.project.offsets, deviceInfo)
+            if (mismatch) {
+                this.logToConsole(`Upload aborted: ${mismatch}. Load PLC Configuration or correct Device > Parameters.`, 'error')
+                this.setConsoleTab('output')
+                return
+            }
+        }
 
         if (deviceInfo && typeof deviceInfo === 'object' && projectInfo) {
             const mismatches = []
@@ -2876,27 +3019,17 @@ export default class WindowManager {
             this.logToConsole(`Uploading ${compiledSize} bytes to device...`, 'info')
             this.showLoading('Uploading program...')
             const startTime = performance.now()
+            const offsets = this.#editor.project?.offsets
+            if (['serial', 'socket-serial', 'ethernet'].includes(this.#editor.device_manager.options?.target)) {
+                if (!offsets || typeof this.#editor.device_manager.connection.configureTCOffsets !== 'function') throw new Error('Device timer/counter configuration is unavailable')
+                await this.#editor.device_manager.connection.configureTCOffsets(offsets.timer.offset, offsets.counter.offset)
+                this.logToConsole(`T/C offsets configured: T=${offsets.timer.offset}, C=${offsets.counter.offset}`, 'info')
+            }
             await this.#editor.device_manager.connection.downloadProgram(compiledBytecode)
             const endTime = performance.now()
             this.hideLoading()
             this.logToConsole('Program uploaded successfully.', 'success')
             this.logToConsole(`Upload took ${(endTime - startTime).toFixed(0)}ms`, 'info')
-
-            // Configure T/C offsets on the device using the values from compilation
-            // This ensures the device's timer/counter memory areas match the compiled bytecode
-            const offsets = this.#editor.project?.offsets
-            if (offsets && typeof this.#editor.device_manager.connection.configureTCOffsets === 'function') {
-                const timerOffset = offsets.timer?.offset ?? 0
-                const counterOffset = offsets.counter?.offset ?? 0
-                if (timerOffset > 0 || counterOffset > 0) {
-                    try {
-                        await this.#editor.device_manager.connection.configureTCOffsets(timerOffset, counterOffset)
-                        this.logToConsole(`T/C offsets configured: T=${timerOffset}, C=${counterOffset}`, 'info')
-                    } catch (tcErr) {
-                        console.warn('Failed to configure T/C offsets:', tcErr)
-                    }
-                }
-            }
 
             // Refresh device info after upload for general status
             try {
@@ -3165,6 +3298,8 @@ export default class WindowManager {
                     this.active_device = 'serial'
                 } else if (this.connectionMode === 'socket-serial') {
                     this.active_device = 'socket-serial'
+                } else if (this.connectionMode === 'ethernet') {
+                    this.active_device = 'ethernet'
                 }
             }
         }
@@ -3181,6 +3316,14 @@ export default class WindowManager {
             if (this.connectionMode === 'socket-serial' && this.selectedDeviceValue?.startsWith('_socket_')) {
                 const portPath = this.selectedDeviceValue.substring('_socket_'.length)
                 extraOptions = { portPath }
+            } else if (this.connectionMode === 'ethernet') {
+                extraOptions = { host: this._networkHost.value.trim(), port: Number(this._networkPort.value) }
+                if (!extraOptions.host || !Number.isInteger(extraOptions.port) || extraOptions.port < 1 || extraOptions.port > 65535) {
+                    this._networkStatus.textContent = 'Enter a valid IPv4 address and TCP port.'
+                    device_online_button.removeAttribute('disabled')
+                    device_online_button.innerText = before
+                    return
+                }
             }
             
             // Setup ESC cancellation for connection
@@ -3328,7 +3471,7 @@ export default class WindowManager {
                 }
 
                 const compiledBytecode = this.#editor.project?.binary
-                if (compiledBytecode) {
+                if (compileSuccess && compiledBytecode) {
                     // Delay 1: After Compile, Before Offsets
                     await new Promise(r => setTimeout(r, 200))
 
@@ -5011,6 +5154,11 @@ export default class WindowManager {
     openProject(project) {
         this.project = project
 
+        if (this._networkHost && this._networkPort) {
+            this._networkHost.value = project.networkDevice?.host || ''
+            this._networkPort.value = project.networkDevice?.port || 2000
+        }
+
         // Restore connection mode and device selection
         if (project.connectionMode) {
             this.connectionMode = project.connectionMode
@@ -5021,6 +5169,8 @@ export default class WindowManager {
                 this.active_device = 'serial'
             } else if (this.connectionMode === 'socket-serial') {
                 this.active_device = 'socket-serial'
+            } else if (this.connectionMode === 'ethernet') {
+                this.active_device = 'ethernet'
             }
             if (this.modeSelect) {
                 this.modeSelect.value = this.connectionMode
@@ -5034,6 +5184,7 @@ export default class WindowManager {
             if (this.simulationLabel) {
                 this.simulationLabel.style.display = this.connectionMode === 'simulation' ? 'flex' : 'none'
             }
+            this._updateNetworkControls()
 
             // Ensure polling state matches mode
             if (this.connectionMode === 'serial') {
@@ -5514,7 +5665,10 @@ export default class WindowManager {
             })
         })
 
-        if (!symbolEntries.length) return
+        if (!symbolEntries.length) {
+            this.data_fetcher.unregisterAll('code-monitor')
+            return
+        }
         const memoryLimitValue = Number(editor.device_manager?.deviceInfo?.memory)
         const memoryLimit = Number.isFinite(memoryLimitValue) && memoryLimitValue > 0 ? memoryLimitValue : null
 
@@ -5551,7 +5705,7 @@ export default class WindowManager {
                 return {absolute: symbol.absoluteAddress, bit: null, size}
             }
 
-            const locationKey = symbol?.location === 'memory' ? null : symbol?.location
+            const locationKey = symbol?.location === 'memory' ? 'marker' : symbol?.location
             const baseOffset = locationKey && offsets[locationKey] ? offsets[locationKey].offset || 0 : 0
             const addrVal = parseFloat(symbol?.address) || 0
             const explicitBit = typeof symbol?.bit === 'number' ? symbol.bit : null
@@ -5877,9 +6031,9 @@ export default class WindowManager {
         if (!existingProgram && isSpecialWindow) {
             let name = id
             let comment = 'Memory Map'
-            if (id === 'setup') { name = 'setup'; comment = 'Device Configuration' }
-            else if (id === 'symbols') { name = 'symbols'; comment = 'Symbols Table' }
-            else if (id === 'datablocks') { name = 'datablocks'; comment = 'Data Blocks' }
+            if (id === 'setup') { name = 'Device'; comment = 'Device' }
+            else if (id === 'symbols') { name = 'Symbols'; comment = 'Symbols Table' }
+            else if (id === 'datablocks') { name = 'Datablocks'; comment = 'Data Blocks' }
             else if (id.startsWith('db:')) {
                 const dbNum = parseInt(id.split(':')[1])
                 const db = (editor.project?.datablocks || []).find(d => d.id === dbNum)
@@ -6127,6 +6281,9 @@ export default class WindowManager {
                 isOffline: false,
             })
             selectedValueToSet = '_simulation'
+        } else if (mode === 'ethernet') {
+            newOptions.push({ type: 'option', value: '_ethernet', label: 'Ethernet', disabled: false })
+            selectedValueToSet = '_ethernet'
         } else if (mode === 'serial') {
             if (!('serial' in navigator)) {
                 newOptions.push({

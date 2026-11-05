@@ -2,6 +2,76 @@ export default class ConnectionBase {
     /** @type { (error: Error) => void } */
     onDisconnected = null
 
+    async _wifiCommand(command, payload = []) {
+        const serialConnection = /** @type {any} */ (this)
+        if (!serialConnection.serial || !serialConnection.plc || !serialConnection._enqueueCommand) throw new Error('WiFi configuration requires a serial connection')
+        const bytes = [...new TextEncoder().encode(command), ...payload]
+        const hex = (value) => value.toString(16).padStart(2, '0').toUpperCase()
+        const request = command + payload.map(hex).join('') + hex(serialConnection.plc.crc8(bytes)) + '\n'
+        return serialConnection._enqueueCommand(async () => {
+            const response = typeof serialConnection.serial.command === 'function'
+                ? await serialConnection.serial.command(request, 3000)
+                : (await serialConnection.serial.write(request), await serialConnection._readResponseLine(3000))
+            const line = response.trim()
+            if (line.startsWith('ERR') || line === 'Invalid checksum') throw new Error(line)
+            return line
+        }, { label: 'wifi', timeoutMs: 4000 })
+    }
+
+    async getWiFiStatus() {
+        const line = await this._wifiCommand('WG')
+        const fields = line.split(':')
+        if (fields.length !== 6 || fields[0] !== 'WG') throw new Error('WiFi management is not supported by this device')
+        const decode = (hex) => new TextDecoder().decode(Uint8Array.from(hex.match(/../g) || [], byte => parseInt(byte, 16)))
+        return {
+            connectedSlot: Number(fields[1]),
+            ip: fields[2],
+            networks: fields.slice(3).map(field => {
+                const [ssid, hasPassword] = field.split(',')
+                return { ssid: decode(ssid), hasPassword: hasPassword === '1' }
+            })
+        }
+    }
+
+    async configureWiFi(index, ssid, password, replacePassword) {
+        const encoder = new TextEncoder()
+        const name = encoder.encode(ssid)
+        const secret = encoder.encode(replacePassword ? password : '')
+        if (index < 0 || index > 2 || name.length > 32 || secret.length > 64 || ssid.includes('\0') || password.includes('\0')) throw new Error('Invalid WiFi network or password length')
+        const line = await this._wifiCommand('WC', [index, name.length, secret.length, replacePassword ? 1 : 0, ...name, ...secret])
+        if (line !== 'OK WIFI') throw new Error('Unexpected WiFi configuration response')
+    }
+
+    async moveWiFi(from, to) {
+        if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from > 2 || to < 0 || to > 2) throw new Error('Invalid WiFi priority')
+        const line = await this._wifiCommand('WM', [from, to])
+        if (line !== 'OK WIFI') throw new Error('Unexpected WiFi configuration response')
+    }
+
+    async forgetWiFi(index) {
+        if (!Number.isInteger(index) || index < 0 || index > 2) throw new Error('Invalid WiFi priority')
+        const line = await this._wifiCommand('WF', [index])
+        if (line !== 'OK WIFI') throw new Error('Unexpected WiFi configuration response')
+    }
+
+    async scanWiFi() {
+        const started = await this._wifiCommand('WS')
+        if (started !== 'OK WIFI SCAN') throw new Error('Could not start WiFi scan')
+        for (let attempt = 0; attempt < 30; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 500))
+            const fields = (await this._wifiCommand('WR')).split(':')
+            if (fields[0] !== 'WR') throw new Error('Unexpected WiFi scan response')
+            const count = Number(fields[1])
+            if (count === -1) continue
+            if (count < 0 || !Number.isInteger(count) || fields.length !== count + 2) throw new Error('WiFi scan failed')
+            return fields.slice(2).map(field => {
+                const [ssid, rssi, secured] = field.split(',')
+                return { ssid: new TextDecoder().decode(Uint8Array.from(ssid.match(/../g) || [], byte => parseInt(byte, 16))), rssi: Number(rssi), secured: secured === '1' }
+            })
+        }
+        throw new Error('WiFi scan timed out')
+    }
+
     /** @type { () => Promise<boolean> } */
     async connect() { throw new Error("connect() not implemented"); }
 

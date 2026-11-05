@@ -29,6 +29,7 @@ if (FRONTEND_ONLY) {
 import express from 'express'
 import bodyParser from 'body-parser'
 import { createServer } from 'node:http'
+import { networkInterfaces } from 'node:os'
 import { Server as SocketIOServer } from 'socket.io'
 
 // Only import device managers if not in frontend-only mode
@@ -163,6 +164,34 @@ app.get('/api/capabilities', (req, res) => {
         },
         version: '0.1.0',
     })
+})
+
+app.get('/api/network/interfaces', (req, res) => {
+    if (FRONTEND_ONLY) return res.status(503).json({ ok: false, error: 'Network access disabled' })
+    const interfaces = Object.entries(networkInterfaces()).flatMap(([name, addresses]) =>
+        (addresses || []).filter(address => address.family === 'IPv4' && !address.internal)
+            .map(address => ({ name, address: address.address, netmask: address.netmask })))
+    res.json({ ok: true, interfaces })
+})
+
+app.post('/api/network/probe', async (req, res) => {
+    if (FRONTEND_ONLY || !networkManager) return res.status(503).json({ ok: false, error: 'Network access disabled' })
+    try {
+        const result = await networkManager.probeHost(req.body.host, Number(req.body.port), 1500, req.body.localAddress || undefined)
+        res.json({ ok: true, result })
+    } catch (error: any) {
+        res.status(400).json({ ok: false, error: error.message })
+    }
+})
+
+app.post('/api/network/scan', async (req, res) => {
+    if (FRONTEND_ONLY || !networkManager) return res.status(503).json({ ok: false, error: 'Network access disabled' })
+    try {
+        const results = await networkManager.discoverPlcs(req.body.baseIp)
+        res.json({ ok: true, results })
+    } catch (error: any) {
+        res.status(400).json({ ok: false, error: error.message })
+    }
 })
 
 /**
@@ -719,20 +748,12 @@ serialNsp.on('connection', (socket) => {
 
 networkNsp.on('connection', (socket) => {
     console.log(`[Network] Client connected: ${socket.id}`)
+    const ownedConnections = new Set<string>()
 
     // --- Scan network for devices ---
-    socket.on('scan', async (options: { baseIp: string, port: number, startHost?: number, endHost?: number, timeoutMs?: number }, callback) => {
+    socket.on('scan', async (options: { baseIp: string, timeoutMs?: number }, callback) => {
         try {
-            const results = await networkManager.scanNetwork(
-                options.baseIp,
-                options.port,
-                options.startHost,
-                options.endHost,
-                options.timeoutMs,
-                (scanned, total) => {
-                    socket.emit('scan-progress', { scanned, total })
-                }
-            )
+            const results = await networkManager.discoverPlcs(options.baseIp, 19617, options.timeoutMs)
             callback({ ok: true, results })
         } catch (err: any) {
             callback({ ok: false, error: err.message })
@@ -740,14 +761,9 @@ networkNsp.on('connection', (socket) => {
     })
 
     // --- UDP broadcast discovery ---
-    socket.on('discover', async (options: { broadcastAddress: string, port: number, message: string, timeoutMs?: number }, callback) => {
+    socket.on('discover', async (options: { baseIp: string, timeoutMs?: number }, callback) => {
         try {
-            const results = await networkManager.udpDiscover(
-                options.broadcastAddress,
-                options.port,
-                options.message,
-                options.timeoutMs
-            )
+            const results = await networkManager.discoverPlcs(options.baseIp, 19617, options.timeoutMs)
             callback({ ok: true, results })
         } catch (err: any) {
             callback({ ok: false, error: err.message })
@@ -760,17 +776,23 @@ networkNsp.on('connection', (socket) => {
             const key = await networkManager.connect(
                 { host: options.host, port: options.port },
                 {
-                    onData: (connKey, data) => {
+                    onData: (connKey: string, data: number[]) => {
                         socket.emit('data', { key: connKey, data })
                     },
-                    onClose: (connKey, err) => {
+                    onClose: (connKey: string, err?: Error) => {
+                        ownedConnections.delete(connKey)
                         socket.emit('closed', { key: connKey, error: err?.message })
                     },
-                    onError: (connKey, err) => {
+                    onError: (connKey: string, err: Error) => {
                         socket.emit('error', { key: connKey, error: err.message })
                     },
                 }
             )
+            if (!socket.connected) {
+                await networkManager.disconnect(key)
+                return
+            }
+            ownedConnections.add(key)
             callback({ ok: true, key })
         } catch (err: any) {
             callback({ ok: false, error: err.message })
@@ -780,7 +802,9 @@ networkNsp.on('connection', (socket) => {
     // --- Disconnect from a device ---
     socket.on('disconnect-device', async (options: { key: string }, callback) => {
         try {
+            if (!ownedConnections.has(options.key)) throw new Error('Connection is not owned by this client')
             await networkManager.disconnect(options.key)
+            ownedConnections.delete(options.key)
             callback({ ok: true })
         } catch (err: any) {
             callback({ ok: false, error: err.message })
@@ -790,6 +814,7 @@ networkNsp.on('connection', (socket) => {
     // --- Write to a connected device ---
     socket.on('write', async (options: { key: string, data: string | number[] }, callback) => {
         try {
+            if (!ownedConnections.has(options.key)) throw new Error('Connection is not owned by this client')
             await networkManager.write(options.key, options.data)
             callback({ ok: true })
         } catch (err: any) {
@@ -800,6 +825,7 @@ networkNsp.on('connection', (socket) => {
     // --- Read buffered data from a connection ---
     socket.on('read', (options: { key: string, maxBytes?: number }, callback) => {
         try {
+            if (!ownedConnections.has(options.key)) throw new Error('Connection is not owned by this client')
             const data = networkManager.read(options.key, options.maxBytes)
             callback({ ok: true, data })
         } catch (err: any) {
@@ -810,6 +836,7 @@ networkNsp.on('connection', (socket) => {
     // --- Check available bytes ---
     socket.on('available', (options: { key: string }, callback) => {
         try {
+            if (!ownedConnections.has(options.key)) throw new Error('Connection is not owned by this client')
             const count = networkManager.availableBytes(options.key)
             callback({ ok: true, count })
         } catch (err: any) {
@@ -819,15 +846,17 @@ networkNsp.on('connection', (socket) => {
 
     // --- Check if connection is active ---
     socket.on('isConnected', (options: { key: string }, callback) => {
-        callback({ ok: true, isConnected: networkManager.isConnected(options.key) })
+        callback({ ok: true, isConnected: ownedConnections.has(options.key) && networkManager.isConnected(options.key) })
     })
 
     // --- Get list of active connections ---
     socket.on('activeConnections', (callback) => {
-        callback({ ok: true, connections: networkManager.getActiveConnections() })
+        callback({ ok: true, connections: [...ownedConnections] })
     })
 
     socket.on('disconnect', () => {
+        for (const key of ownedConnections) networkManager.disconnect(key).catch(() => {})
+        ownedConnections.clear()
         console.log(`[Network] Client disconnected: ${socket.id}`)
     })
 })

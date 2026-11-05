@@ -25,6 +25,22 @@
     min-height: 100px;
 }
 
+.wifi-network-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 10px 0;
+    padding: 4px 0;
+    border-top: 2px solid transparent;
+}
+
+.wifi-network-row[hidden] { display: none; }
+.wifi-network-row.wifi-drag-over { border-top-color: #4ec9b0; }
+.wifi-drag-handle { color: #aaa; cursor: grab; user-select: none; }
+.wifi-drag-handle:not([draggable="true"]) { visibility: hidden; }
+.wifi-icon-btn { width: 28px; height: 28px; padding: 0; }
+
 
 .TODO::after {
     content: "TODO";
@@ -263,6 +279,34 @@
 }
 
 /* Setup UI Styles */
+.device-tabs {
+    display: flex;
+    flex-shrink: 0;
+    overflow-x: auto;
+    background: #252526;
+    border-bottom: 1px solid #3c3c3c;
+}
+
+.device-tab {
+    padding: 9px 16px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: #aaa;
+    font: inherit;
+    cursor: pointer;
+}
+
+.device-tab:hover, .device-tab:focus-visible {
+    color: #fff;
+    background: #303031;
+}
+
+.device-tab.active {
+    color: #fff;
+    border-bottom-color: #4ec9b0;
+}
+
 .setup-body {
     padding: 20px;
     overflow: auto;

@@ -3,8 +3,9 @@ import SimulationConnection from "./drivers/SimulationConnection.js";
 import RestConnection from "./drivers/RestConnection.js";
 import SerialConnection from "./drivers/SerialConnection.js";
 import SocketSerialConnection from "./drivers/SocketSerialConnection.js";
+import SocketNetworkConnection from "./drivers/SocketNetworkConnection.js";
 
-/** @typedef { SimulationConnection | RestConnection | SerialConnection | SocketSerialConnection } ConnectionBase * @type { ConnectionBase } */
+/** @typedef { SimulationConnection | RestConnection | SerialConnection | SocketSerialConnection | SocketNetworkConnection } ConnectionBase * @type { ConnectionBase } */
 export let ConnectionBase
 
 /**
@@ -12,7 +13,8 @@ export let ConnectionBase
  * @typedef {{ target: 'rest', host?: string }} ConnectionOption_Rest
  * @typedef {{ target: 'serial', baudrate?: number, debug?: boolean, port?: any }} ConnectionOption_Serial
  * @typedef {{ target: 'socket-serial', baudrate?: number, debug?: boolean, portPath?: string, serverUrl?: string }} ConnectionOption_SocketSerial
- * @typedef { ConnectionOption_Simulation | ConnectionOption_Rest | ConnectionOption_Serial | ConnectionOption_SocketSerial } ConnectionOptions
+ * @typedef {{ target: 'ethernet', host: string, port: number, debug?: boolean, serverUrl?: string }} ConnectionOption_Ethernet
+ * @typedef { ConnectionOption_Simulation | ConnectionOption_Rest | ConnectionOption_Serial | ConnectionOption_SocketSerial | ConnectionOption_Ethernet } ConnectionOptions
  * @type { ConnectionOptions } */
 export let ConnectionOptions
 
@@ -57,6 +59,10 @@ export async function initializeConnection(options, editor) {
         const { baudrate, debug, portPath, serverUrl } = options;
         connection = new SocketSerialConnection(baudrate, debug);
         await connection.connect({ path: portPath, serverUrl });
+        return connection;
+    } else if (target === "ethernet") {
+        connection = new SocketNetworkConnection(options.debug);
+        await connection.connect(options);
         return connection;
     } else {
         throw new Error(`Unsupported connection target: ${target}`);

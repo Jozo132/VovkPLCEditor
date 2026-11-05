@@ -51,3 +51,14 @@ export const ensureOffsets = (offsets = {}) => {
 
     return normalized
 }
+
+export const deviceLayoutMismatch = (offsets, deviceInfo) => {
+    for (const key of ['system', 'input', 'output', 'marker']) {
+        const area = offsets?.[key]
+        const deviceOffset = deviceInfo?.[`${key}_offset`]
+        const deviceSize = deviceInfo?.[`${key}_size`]
+        if (!area || typeof deviceOffset !== 'number' || typeof deviceSize !== 'number' || !Number.isFinite(deviceOffset) || !Number.isFinite(deviceSize)) return `${key} layout is unavailable`
+        if (area.offset !== deviceOffset || area.size !== deviceSize) return `${key} project ${area.offset}/${area.size}, device ${deviceOffset}/${deviceSize}`
+    }
+    return null
+}

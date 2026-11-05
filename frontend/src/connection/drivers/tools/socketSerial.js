@@ -10,6 +10,7 @@
  */
 
 import { io } from '/socket.io/socket.io.esm.min.js'
+export { io }
 
 export default class SocketSerial {
     constructor(maxBufferLength = 32 * 1024, debug = false) {

@@ -51,6 +51,9 @@ export default class DeviceManager {
           serverUrl: extraOptions.serverUrl,
         }
       }
+      if (device === 'ethernet') {
+        options = { target: 'ethernet', host: extraOptions.host, port: extraOptions.port }
+      }
       if (!options) {
         console.error('No connection options provided')
         return false
@@ -161,7 +164,7 @@ export default class DeviceManager {
         this.error = ''
         
         // For physical devices, fetch and store transport info and symbols after valid PI response
-        if (this.options.target === 'serial' && this.#editor.project) {
+        if (['serial', 'socket-serial', 'ethernet'].includes(this.options.target) && this.#editor.project) {
           await this.#fetchAndStoreDeviceDetails()
         }
       } catch (err) {

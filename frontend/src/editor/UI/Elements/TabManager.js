@@ -29,9 +29,9 @@ export default class TabManager {
             let name = id
             let comment = 'Memory Map'
             let type = id
-            if (id === 'setup') { comment = 'Device Configuration' }
-            else if (id === 'symbols') { comment = 'Symbols Table' }
-            else if (id === 'datablocks') { comment = 'Data Blocks' }
+            if (id === 'setup') { name = 'Device'; comment = 'Device' }
+            else if (id === 'symbols') { name = 'Symbols'; comment = 'Symbols Table' }
+            else if (id === 'datablocks') { name = 'Datablocks'; comment = 'Data Blocks' }
             else if (id.startsWith('db:')) {
                 const dbNum = parseInt(id.split(':')[1])
                 const db = (this.#editor.project?.datablocks || []).find(d => d.id === dbNum)
@@ -120,9 +120,9 @@ export default class TabManager {
         if (!program && isSpecialWindow) {
             let name = id
             let comment = 'Memory Map'
-            if (id === 'setup') { comment = 'Device Configuration' }
-            else if (id === 'symbols') { comment = 'Symbols Table' }
-            else if (id === 'datablocks') { comment = 'Data Blocks' }
+            if (id === 'setup') { name = 'Device'; comment = 'Device' }
+            else if (id === 'symbols') { name = 'Symbols'; comment = 'Symbols Table' }
+            else if (id === 'datablocks') { name = 'Datablocks'; comment = 'Data Blocks' }
             else if (id.startsWith('db:')) {
                 const dbNum = parseInt(id.split(':')[1])
                 const db = (this.#editor.project?.datablocks || []).find(d => d.id === dbNum)

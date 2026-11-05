@@ -138,6 +138,7 @@ export default class SocketSerialConnection extends ConnectionBase {
             // Send entire command through atomic channel to ensure clean send/receive cycle
             const combinedData = command + "\n"
             const line = await this.serial.command(combinedData, 30000)
+            if (line.trim() !== 'PROGRAM DOWNLOAD COMPLETE') throw new Error(`Program download failed: ${line.trim()}`)
 
             // Flush remaining data
             await new Promise(resolve => setTimeout(resolve, 100))
@@ -222,8 +223,8 @@ export default class SocketSerialConnection extends ConnectionBase {
     async configureTCOffsets(timerOffset, counterOffset) {
         return this._enqueueCommand(async () => {
             const command = this.plc.buildCommand.tcConfig(timerOffset, counterOffset)
-            // Use atomic command to avoid conflicts with monitoring
-            await this.serial.command(command + "\n", 2000)
+            const response = (await this.serial.command(command + "\n", 2000)).trim()
+            if (response !== `OK TC CONFIG T=${timerOffset} C=${counterOffset}`) throw new Error(`Timer/counter configuration failed: ${response}`)
         }, { label: 'configureTCOffsets' })
     }
 
@@ -246,16 +247,11 @@ export default class SocketSerialConnection extends ConnectionBase {
             const accumulated = await this.serial.command(command + checksum.toUpperCase() + "\n", 8000)
             
             let infoLine = null
-            const bracketStart = accumulated.indexOf('[')
+            const bracketStart = accumulated.indexOf('[VovkPLCRuntime,')
             if (bracketStart >= 0) {
                 const bracketEnd = accumulated.indexOf(']', bracketStart)
                 if (bracketEnd >= 0) {
-                    let lineStart = accumulated.lastIndexOf('\n', bracketStart)
-                    lineStart = lineStart >= 0 ? lineStart + 1 : 0
-                    let lineEnd = accumulated.indexOf('\n', bracketEnd)
-                    lineEnd = lineEnd >= 0 ? lineEnd : accumulated.length
-
-                    infoLine = accumulated.substring(lineStart, lineEnd).trim()
+                    infoLine = accumulated.substring(bracketStart, bracketEnd + 1)
                     if (this.debug) console.log("Found complete info line:", infoLine)
                 }
             }
@@ -267,15 +263,14 @@ export default class SocketSerialConnection extends ConnectionBase {
             }
 
             // Parse the info response - identical logic to SerialConnection
-            while (true) {
-                if (!raw) break
+            if (raw) {
                 if (raw.startsWith('PLC INFO - ')) {
                     const parts = raw.split('PLC INFO - ')
                     parts.shift()
                     raw = parts.join('PLC INFO - ')
                 }
                 raw = raw.trim()
-                if (raw.startsWith("[") && raw.endsWith("]")) {
+                if (raw.startsWith("[VovkPLCRuntime,") && raw.endsWith("]")) {
                     const content = raw.substring(1, raw.length - 1)
                     const parts = content.split(",")
                     const base = {
@@ -351,7 +346,7 @@ export default class SocketSerialConnection extends ConnectionBase {
                 }
             }
 
-            console.error(`Invalid info response:`, raw)
+            throw new Error('Invalid info response')
         }, { label: 'getInfo', timeoutMs: 12000 })
     }
 

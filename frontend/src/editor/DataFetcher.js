@@ -321,7 +321,7 @@ export default class DataFetcher {
                 }
                 
                 // Pattern: Letter + Number (e.g., M100, M100.2)
-                const matchLetter = inputTrimmed.match(/^([cCxXyYsSmM])([0-9]+(?:\.[0-9]+)?)$/)
+                const matchLetter = inputTrimmed.match(/^([cCxXyYsSmMiIqQtT])([0-9]+(?:\.[0-9]+)?)$/)
                 if (matchLetter) {
                     const code = matchLetter[1].toUpperCase()
                     const valStr = matchLetter[2]
@@ -330,8 +330,8 @@ export default class DataFetcher {
                     let key = 'marker'
                     if (code === 'C') key = 'counter'
                     else if (code === 'T') key = 'timer'
-                    else if (code === 'X') key = 'input'
-                    else if (code === 'Y') key = 'output'
+                    else if (code === 'X' || code === 'I') key = 'input'
+                    else if (code === 'Y' || code === 'Q') key = 'output'
                     else if (code === 'S') key = 'system'
                     else if (code === 'M') key = 'marker'
                     
@@ -382,6 +382,7 @@ export default class DataFetcher {
         
         const baseOffset = getOffset(symbol.location)
         const addrVal = parseFloat(symbol.address) || 0
+        const structSize = symbol.location === 'timer' ? 9 : symbol.location === 'counter' ? 5 : 1
         
         // Handle bits
         let size = 1
@@ -390,11 +391,11 @@ export default class DataFetcher {
         
         if (type === 'bit' || type === 'bool') {
              const byte = Math.floor(addrVal)
-             bit = Math.round((addrVal - byte) * 10) // 100.2 -> 2
-             return { address: baseOffset + byte, size: 1, bit, type }
+             bit = typeof symbol.bit === 'number' ? symbol.bit : Math.round((addrVal - byte) * 10)
+             return { address: baseOffset + byte * structSize, size: 1, bit, type }
         } else {
              size = typeSizes[type] || 1
-             return { address: baseOffset + Math.floor(addrVal), size, bit: null, type }
+             return { address: baseOffset + Math.floor(addrVal) * structSize, size, bit: null, type }
         }
     }
 
